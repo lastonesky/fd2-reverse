@@ -35,4 +35,7 @@ void ui_status_panel(char *dst, int pitch, int rec);
 /* 0x2FACD */
 void ui_status_panel_at(int dst, int rec);
 
+/* 0x1E739 - fixed 70-tile gauge (tiles 23/24/25 filled, 29 empty, 30 end cap) */
+void ui_meter_fixed(int dst, int pitch, int count);
+
 #endif /* GAME_UI_METER_H */

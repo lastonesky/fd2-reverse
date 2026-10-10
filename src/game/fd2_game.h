@@ -35,6 +35,7 @@
 #include "map_scroll.h"
 #include "map_units.h"
 #include "map_window.h"
+#include "map_zoom.h"
 #include "menu_actions.h"
 #include "menu_select.h"
 #include "mosaic_reveal.h"

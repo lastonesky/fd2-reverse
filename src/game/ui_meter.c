@@ -96,3 +96,36 @@ void ui_status_panel_at(int dst, int rec)
 
     ui_status_panel((char *)(uintptr_t)(dst + off), 320, rec);
 }
+
+/* 0x1E739 - draw the fixed 70-tile gauge used over the map view.  A positive
+ * `count` draws the filled style (left cap 23, body 24 up to count-1, right cap
+ * 25) followed by empty tiles 29 up to position 69 and the end cap 30; a
+ * non-positive count draws the all-empty 29..29,30 bar.  Tiles come from the
+ * frame resource dword_53A81; the machine's odd total lengths (71 vs 70) are
+ * kept verbatim. */
+void ui_meter_fixed(int dst, int pitch, int count)
+{
+    const void *table = (const void *)dword_53A81;
+    int i;
+
+    if (count <= 0) {
+        for (i = 0; i < 69; ++i)
+            dlg_frame_tile((void *)(uintptr_t)(dst + i), pitch, table, 29);
+        dlg_frame_tile((void *)(uintptr_t)(dst + i), pitch, table, 30);
+        return;
+    }
+
+    dlg_frame_tile((void *)(uintptr_t)dst, pitch, table, 23);
+    for (i = 1; i < count; ++i)
+        dlg_frame_tile((void *)(uintptr_t)(dst + i), pitch, table, 24);
+    dlg_frame_tile((void *)(uintptr_t)(dst + i), pitch, table, 25);
+
+    if (count < 70) {
+        while (i < 69) {
+            ++i;
+            dlg_frame_tile((void *)(uintptr_t)(dst + i), pitch, table, 29);
+        }
+        ++i;
+        dlg_frame_tile((void *)(uintptr_t)(dst + i), pitch, table, 30);
+    }
+}

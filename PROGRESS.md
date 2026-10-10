@@ -637,10 +637,32 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 - **返回**：`0x2F4D4`/`0x30E9D` 的 eax 残留被调用点忽略，C 侧声明 `void`；`0x30E25` 返回索引，声明 `int`。
 - 无对拍器，标“已还原未验证”。
 
+### 22) 地图视图缩放 / 仪表帧缓冲助手簇（本轮，4 函数）
+
+本轮 closure-ready 头名的四个 u3 游戏函数（新模块 `map_zoom.c/.h` + 三个已还原模块追加）：
+
+| 原址 | 新名 | 模块 | 要点 |
+|---|---|---|---|
+| `0x1E739` | `ui_meter_fixed(dst,pitch,count)` | ui_meter.c | 固定宽仪表：正 count 画左帽 23 → 身 24 → 右帽 25 → 空格 29（到位置 69）→ 尾帽 30（位置 70）；count<=0 画全空 29..29 后尾帽 30（末位 69）。两个分支总长 71/70 的不一致原样保留。 |
+| `0x1F558` | `map_zoom_draw(x,y,zoom,cells)` | **map_zoom.c（新）** | 地图缩放过渡帧：定点中心 (x,y)、`zoom`/128 倍、13×8 格窗左上 = 中心 − (156·zoom, 96·zoom)/3072；清 `dword_53A49` 后在 +0x504 逐行按 `cells[row*64+col]` 最近邻放大 312×192（每 24 输出列进一格、每输出列源字节步进 `zoom`/128）。 |
+| `0x2282F` | `map_action_grow_y_cost` | map_action.c | `funcs_1541F[18]`：`dword_53EC4=0` → `rec_sub_table5(index,18)` → `map_action_grow_y(index,count,list)`。 |
+| `0x265EC` | `scene_map_view_draw` | scene_core.c | `scene_apply_state` 交互分支每帧重绘地图视图（0x26434/0x2647E）：`memmove(dword_53A5D→dword_53A49,0x25680)` → `rle2_blit(dword_53A49+0x1A20C, dword_53F5A, 456)` → `vm_run(dword_53A7D, dword_53F4A+495, dword_53A49+0x1ACC4,456,…)` → 记录格光标精灵 `dword_53A61[frame]`（frame 3→1）→ `gfx_copy_rows(0xA0504,320,dword_53A49+0x8088,456,312,192)`。 |
+
+- **入口定位**：`dword_53F56 = tbl_ptr(&fd2_data2[0x238D],31,dword_53C03,-31)`（同 scene_core 既有写法），其首字节 `v2` 与 `dword_53F4A` 共定 `byte_52363/52375[6*v2+dword_53F4A]` 的格坐标。
+
+**陷阱 / 伪代码伪影**：
+- **伪 callee（共享尾声）**：`0x1F558` 尾 `jmp 0x18888` 落进 `dlg_draw_number`(0x187D6) 体内尾声（`add esp,0x1C; pop×4; ret`）→ 普通 `return`；`function-map` 误列 `sub_187D6`。
+- **`__CFSHL__`**：`0x1F558` 的 `/128`（`sar/shl/sbb/sar` 惯用法）与 `/3072`、`%3072`（`idiv`）在 Hex-Rays 里被渲染成 `__CFSHL__`/`__CFSHR__`；两输入先归一到 `[0,3072)` 非负，C 侧用普通 `/`、`%`（int）。
+- **指针表 ABI**：`0x1F558` 的 `a4` 是调用方建的 64×64 个 32 位“源基址”表（`cells[row*64+col]`，指向 `dword_53A5D` 工作缓冲，行距固定 64），C 侧按 `const uint32_t *` 读并以 `(uintptr_t)` 还原为指针；建表方 `0x2000A`/`0x21548` 仍待还原（尾随 `memmove(0xA0000,dword_53A49,0xFA00)` 发布）。
+- **entry-18 两次**：`0x226EA`(entry17=x) 与 `0x2282F`(entry18=y) 机器码都 `push 0x12`（同扣 0x619FD 第 18 项），`0x22960`(entry19) `push 0x13`；原样保留（`map_action.h` 注释已更正）。
+- **返回值/别名约束**：`0x265EC` 尾声 eax 残留 `gfx_copy_rows`，三个调用点均不读，但 `fd2_funcs.h` 原型为 `int`，故 `scene_core.h` 以 `#define sub_265EC scene_map_view_draw` 保持 `int` 返回 0（沿用该头既有别名模式）。
+- **chkstk**：四者皆 `push size; call 0x3702F`，丢弃。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198**（本批 −3），已还原未验证 **115 → 118 → 122 → 125**（本批 +3）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194**（本批 −4），已还原未验证 **115 → 118 → 122 → 125 → 129**（本批 +4）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -655,8 +677,9 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 调用量排序下，`function-map.csv` 的闭包就绪头名是 `0x3645D`(u4)，但它是 CRT `read` 包装（尾调 `sub_3CF50`=`lseek`，
 库区不投资源，同 module-map §2）；`0x2E95B`(u3) 同样因需 CRT `fread`（`sub_373CA`）而暂跳。
 本轮 §21 已把同属 `sub_2CF30` 的 `0x2F4D4/30E25/30E9D`(u3/u2) 作为一簇拉出。
-当前闭包就绪的游戏函数头名：`0x1E739`(u3)、`0x1F558`(u3)、`0x2282F`(u3)、`0x265EC`(u3)，随后 u2 若干
-（`0x1C142/1C1C3`、`0x2B439/2B843`、`0x272D0`、`0x2F631/2F7B6` 等同 caller 对）。
+本轮 §22 已拉出当前 closure-ready 头名四个 u3：`0x1E739`/`0x1F558`/`0x2282F`/`0x265EC`。
+现闭包就绪的游戏函数头名：`0x1A7BD`/`0x1A7F1`(u2，同 caller `0x1A30B` 的暂存/释放对)、`0x1C142`/`0x1C1C3`(u2，同 caller `sub_1BFFE`/`sub_2872B`)、
+`0x2B439`/`0x2B843`(u2，同 caller `sub_2AF28`)、`0x1CB94`/`0x1CD17`/`0x1EC2A`/`0x272D0`/`0x2A0C2`/`0x2A694`/`0x2BF83`/`0x2F631`/`0x2FE14`(u2)。
 （`0x344B4` 已由 §16 连同其上游 `0x34366`/`0x33FAF` 整簇拉出；`0x2DF01/1FF79/1F73F` 已由 §14 拉出。）
 策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 结构反编译辅助）。
 （`0x2921A`＝地点菜单退场缩放（上批 §11 遗留）；`0x1B1E7`(地图队伍面板编排者，6 个 callee 已在 §12 还原）

@@ -18,10 +18,11 @@
  *                        the record's +76/+78 metrics by 15
  *   0x22C04  +25 table    clear bit 7 of record flag +5 (rec_flag_or80 writer)
  *
- *   0x226EA / 0x22960      the funcs_1541F entries 17/19: subtract the cost at
- *                         0x619FD entry 18/19 via rec_sub_table5, then run
- *                         0x22721 / 0x22997; the funcs_1541F entries 25 is
- *                         0x22C04 itself.
+ *   0x226EA / 0x2282F / 0x22960  the funcs_1541F entries 17/18/19: subtract the
+ *                         cost at 0x619FD entry 18/18/19 via rec_sub_table5
+ *                         (the x and y cost both charge entry 18 on the
+ *                         machine), then run 0x22721 / 0x22866 / 0x22997; the
+ *                         funcs_1541F entry 25 is 0x22C04 itself.
  *
  * ABI = cdecl, arguments decoded from the pushes (the offline disassembly is
  * the authority).  Record fields index the 80-byte table dword_53A45; the
@@ -60,6 +61,9 @@ int map_action_clear_flag(int a1, int count, const uint8_t *list);
 
 /* 0x226EA - charge the 0x619FD entry-18 cost, then run map_action_grow_x. */
 int map_action_grow_x_cost(int index, int count, const uint8_t *list);
+
+/* 0x2282F - charge the 0x619FD entry-18 cost, then run map_action_grow_y. */
+int map_action_grow_y_cost(int index, int count, const uint8_t *list);
 
 /* 0x22960 - charge the 0x619FD entry-19 cost, then run map_action_widen. */
 int map_action_widen_cost(int index, int count, const uint8_t *list);

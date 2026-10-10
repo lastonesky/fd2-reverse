@@ -179,6 +179,16 @@ int map_action_grow_x_cost(int index, int count, const uint8_t *list)
     return map_action_grow_x(index, count, list);
 }
 
+/* 0x2282F - funcs_1541F entry 18: charge the 0x619FD entry-18 cost, then
+ * grow-y the list (the machine code really does push 0x12 here, same entry as
+ * map_action_grow_x_cost's 0x226EA). */
+int map_action_grow_y_cost(int index, int count, const uint8_t *list)
+{
+    dword_53EC4 = 0;
+    rec_sub_table5(index, 18);
+    return map_action_grow_y(index, count, list);
+}
+
 /* 0x22960 - charge the 0x619FD entry-19 cost, then widen the list. */
 int map_action_widen_cost(int index, int count, const uint8_t *list)
 {

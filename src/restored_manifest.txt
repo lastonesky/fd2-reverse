@@ -468,3 +468,10 @@
 0x30E25 sub_30E25 game/figure_view.h
 0x2F4D4 sub_2F4D4 game/figure_view.h
 0x30E9D sub_30E9D game/figure_view.h
+
+# map view / zoom / gauge frame-buffer helpers (drivers 0x2000A, 0x21548 and the
+# map status overlay family 0x1E611/1E7F6/1E856 still pending)
+0x1E739 sub_1E739 game/ui_meter.h
+0x1F558 sub_1F558 game/map_zoom.h
+0x2282F sub_2282F game/map_action.h
+0x265EC sub_265EC game/scene_core.h

@@ -32,8 +32,17 @@ int scene_event_tick(void);
  * (machine code: `mov eax,1` vs `xor eax,eax` on dword_53F4A != 2). */
 int scene_apply_state(void);
 
+/* 0x265EC - redraw the scene's map view: restore the saved view buffer, blit
+ * the location panel, draw the current location name and the map cursor sprite
+ * at the record's cell, then publish the 312x192 window to the VGA staging page
+ * 0xA0504.  Called from scene_apply_state's interactive branch on every
+ * animation frame (dword_53F52); the machine leaves eax from gfx_copy_rows and
+ * the callers ignore it. */
+int scene_map_view_draw(void);
+
 #define sub_25EBB scenario_menu
 #define sub_117E7 scene_event_tick
 #define sub_26152 scene_apply_state
+#define sub_265EC scene_map_view_draw
 
 #endif /* FD2_GAME_SCENE_CORE_H */
