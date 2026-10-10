@@ -28,35 +28,39 @@
   `analysis/reloc_suspects.csv`，详见 uncertainties §3.7）。
 - 工具链事实：本机 bash 无 gcc，**WSL gcc 14.2** 可用；IDA MCP 断连待重建。
 
-## 0-D. P0 主状态机链：进行中（本轮）
+## 0-D. P0 主状态机链：**核心三件已还原（本轮完结）**
 
-**已还原（新）**：`src/game/scene_core.c/.h`
+**已还原（`src/game/scene_core.c/.h`）**
 
 | 原址 | 新名 | 内容 | 验证 |
 |---|---|---|---|
-| `0x25EBB` | `scenario_menu` | 新游戏/读档/存档选择（菜单→新游戏初始化／FD2.SAV 槽位循环→`sub_26152`） | 双 profile `-Werror` 编译通过；**未动态验证** |
-| `0x117E7` | `scene_event_tick` | 内层每 tick 事件：按键分派（行动者轮换/四方向步进/音效/确认→记录选择→两表 handler 调用） | 同上 |
+| `0x25EBB` | `scenario_menu` | 新游戏/读档/存档三分支；FD2.SAV 22987B → `util_deobfuscate` → 槽位循环（2600B 步长→队伍表 0xA00 + 9 字节头部）→ `scene_apply_state` | 双 profile `-Werror` 通过；**未动态验证** |
+| `0x117E7` | `scene_event_tick` | 内层每 tick：行动者轮换 / 四方向步进 / 确认→记录选择→`funcs_1197B[state]`+`funcs_1199C[0x51A8F]` | 同上 |
+| `0x26152` | `scene_apply_state` | 释放 5 个场景缓冲（含 IDA 短名 `p`/`buf`=0x53A55/0x53A61，已模块内别名化）→ 按队伍重载 FDICON → 分支 A（`byte_523E7[state]!=0`：地图流程）／分支 B（3 字节表 `{0x0B,0x3D,0x3E}` 选背景 + INT 16h AH=10h 扫描码交互循环 + tick 帧动画 + 热键表 `sub_4E809(state)[1]/[2]`） | 同上，**含离线反汇编逐条核对** |
 
-- 新增**原型覆盖机制**：`analysis/prototype_overrides.csv` + 生成器支持。已修：`sub_1F894`→`int(void)`、`sub_11AA8`→`int(void)`（调用点零压栈、伪代码 `a1` 为栈槽伪像）。
-- 生成器修复：字符串标签判据统一（`aRb_0`/`aFd2Sav_4` 曾误判为标量）。
-- 回归：`boot.c` 因清单跳过声明→补 `scene_core.h`；四模块（boot/res/scene_core）+生成源，双 profile `-Werror` 全绿。
-- `function-map.csv`：待还原 316→**314**，已还原未验证 7→**9**。
+- 新增**离线反汇编链路**（IDA 通道断连期间的关键手段）：`analysis/seg_cseg01.bin` +
+  `objdump -D -b binary -mi386 -Mintel --adjust-vma=0x26152` → 解决了伪代码 4 处歧义
+  （局部 3 字节表源自 0x52405、old-buffer 恒 0、`__PAIR64__`=两次字节比较、返回值 `dword_53F4A != 2`）。
+- 新增**原型覆盖机制**（`analysis/prototype_overrides.csv`）：`sub_1F894`/`sub_11AA8`→`int(void)`。
+- 生成器修复：字符串标签判据统一（影响 `aRb_0`/`aFd2Sav_4` 等）。
+- 回归：boot/res/scene_core + 生成源，**双 profile `-Werror` 全绿**；表覆盖已按“首个非法槽即表尾”重算。
+- `function-map.csv`：待还原 316→**313**，已还原未验证 7→**10**。
 
-**表覆盖（按“首个非法槽即表尾”重算，取代 uncertainties §2.4 的锚点法）**
+**表覆盖（真实表长）**
 
-| 表 | 表长(槽) | 去重 | 已验证 | 已还原 | 待还原 |
-|---|---|---|---|---|---|
-| `funcs_1197B` | 30 | 18 | **18** | 0 | 0 |
-| `funcs_1199C` | 90 | 90 | **90** | 0 | 0 |
-| `funcs_25E3A` | 30 | 28 | 18 | 0 | **10** |
-| `funcs_25E23` | 30* | ~25 | 6 | 0 | **24** |
-| `funcs_1541F` | 28 | 27 | 0 | 0 | **27** |
-| `funcs_30469` | 11 | 10 | 9 | 0 | **2**（`sub_2C67D`=fx[6] + `sub_10000` 占位桩） |
-| `funcs_37012` | 10 | 10 | 0 | 0 | **10** |
+| 表 | 表长 | 去重 | 已验证 | 待还原 |
+|---|---|---|---|---|
+| `funcs_1197B` | 30 | 18 | 18 | 0 |
+| `funcs_1199C` | 90 | 90 | 90 | 0 |
+| `funcs_25E3A` | 30 | 28 | 18 | **10** |
+| `funcs_25E23` | 30* | ~25 | 6 | **24** |
+| `funcs_1541F` | 28 | 27 | 0 | **27** |
+| `funcs_30469` | 11 | 10 | 9 | **2** |
+| `funcs_37012` | 10 | 10 | 0 | **10** |
 
-\* 首个非法槽规则给 30；RE_MAP 记 25 项 ⇒ 尾部几槽疑为邻接数据（待 IDA 复核）。
+\* 首个非法槽规则给 30；RE_MAP 记 25 项 ⇒ 尾部几槽疑为邻接数据（待核）。
 
-**下一批（P0 续）**：`sub_26152`(0x26152, 1178B，键盘 INT16/槽位选择/地图进入) → `funcs_25E23` 剩余 24 项（以 scene_state_* 已验证模板批量）→ `funcs_25E3A` 剩余 10 项。
+**下一批**：`funcs_25E23` 余 24 项（scene_state_* 模板批量）→ `funcs_25E3A` 余 10 项（`0x3231B/32D18/32E8C/32FB2/33049/336A0/33AF1/33C9D/33DBA/33E3C`）→ 启动 309 资产迁入。
 
 ---
 

@@ -24,7 +24,16 @@ int scenario_menu(void);
  *   0  = keep ticking, -1 = quit, >0 = back to the outer loop. */
 int scene_event_tick(void);
 
+/* 0x26152 - "apply state" card, called by scenario_menu after a load (and by
+ * main's dword_53ECC==2 path via sub_26152). Frees the scene buffers, reloads
+ * the FDICON icon set for the party, then either enters the map flow
+ * (byte_523E7[state] != 0) or runs the interactive scene-select loop with
+ * INT 16h AH=10h keystrokes. Returns: !=0 = accepted, 0 = cancelled
+ * (machine code: `mov eax,1` vs `xor eax,eax` on dword_53F4A != 2). */
+int scene_apply_state(void);
+
 #define sub_25EBB scenario_menu
 #define sub_117E7 scene_event_tick
+#define sub_26152 scene_apply_state
 
 #endif /* FD2_GAME_SCENE_CORE_H */

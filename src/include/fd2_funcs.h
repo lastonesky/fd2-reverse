@@ -337,7 +337,6 @@ int sub_25757(int, int, int);
 int sub_25977(int, int);
 int sub_25A96(int, int, int);
 int sub_25B45(int, int, int);
-int sub_26152(void);
 int sub_265EC(void);
 int sub_2670E(void);
 void sub_26996(void);

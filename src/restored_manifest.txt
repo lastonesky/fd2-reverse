@@ -13,3 +13,4 @@
 # P0 scene core
 0x25EBB sub_25EBB game/scene_core.h
 0x117E7 sub_117E7 game/scene_core.h
+0x26152 sub_26152 game/scene_core.h
