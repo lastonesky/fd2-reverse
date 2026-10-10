@@ -496,3 +496,8 @@
 # party-roster membership helpers (callees of the party-change screen 0x2AF28, still pending)
 0x2B439 sub_2B439 game/party_roster.h
 0x2B843 sub_2B843 game/party_roster.h
+
+# map-view record/unit sprite overlays (drivers 0x1CAC7 and the action router
+# 0x20C6F/0x21227 still pending; siblings of map.c's 0x1C2DA/0x1C4CC)
+0x1CB94 sub_1CB94 game/map_sprites.h
+0x1CD17 sub_1CD17 game/map_sprites.h

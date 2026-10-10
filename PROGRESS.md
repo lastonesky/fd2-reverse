@@ -756,10 +756,33 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 - **chkstk**：二者皆 `push size; call 0x3702F`，丢弃。
 - 无对拍器，标“已还原未验证”。
 
+### 28) 地图视口记录/单位精灵叠加 → `src/game/map_sprites.c/.h`（本轮，2 函数）
+
+`map.c` 的 0x1C2DA/0x1C4CC（队伍图标绘制族）的**同胞**，闭包就绪头名（均 u2、同族）：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1CB94` | `map_draw_record_layer(base,count,list,frame)` | `map_render_view(base+0x8088,456,13,8,ox,oy)` → 扫全表记录（`dword_53BEB`、步长 80），跳过 +5 bit0 置位者与视口外者；视口内记录：索引在 `list`（`count` 项）中者 → `rle2_blit_trans(dst, overlay, 456)`（overlay = 0x53AD1 动画库第 `frame` 帧；驱动 0x1CAC7 传 74/75 交替），否则按 kind 字节与 `dword_53C0B` 从 0x53A61 库取 `sprite24_plain`。单次合成，不循环。 |
+| `0x1CD17` | `map_blink_units(unused,colour,count,list)` | `guest_malloc(0x25680)` 存底图 → 10 帧：回存底图 → 逐个 `list` 记录按视口内坐标 `sprite24_ramp(spr,dst,456,byte_52006[colour],7-i%8)` 闪烁 → `gfx_copy_rows(0xA0504,320,view,456,312,192)`+`svc_wait_ticks(1)` → 末尾回存底图 + `guest_free`。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声**：`0x1CB94` 尾 `jmp 0x1317D` 是 `0x1300D` **体内**的共享尾声（`add esp,0xc; pop*4; ret`）⇒ 纯返回，IDA 的
+  `sub_1300D` 是**伪 callee**（同 map_action/map_cursor 已记录的同一尾声）。`0x1CD17` 尾 `jmp 0x1C4BC` 先压 `v14` 再进
+  共享尾声（该处 `call 0x3776E`=guest_free）⇒ 语义等价于 `guest_free(scratch); return;`。
+- **视口原点**：伪代码把 `0x53AA9`/`0x53AAD` 合成 `qword_53AA9`；机器分两次读 **32 位 dword**（`mov eax,ds:0x53aa9` /
+  `ds:0x53aad`）并用**有符号**边界比较。C 侧按 `(int)dword_53AA9` + `dword_53AAD` 与 `int` 比较还原。
+- **未初始化寄存器局部**：`0x1CB94` 伪代码的 `v16`/`v17`（ebp 系）实为形参 base 与第 4 参 frame（反汇编读 `[esp+0x20]`/`[esp+0x2c]`），C 侧直接用形参。
+- **常数**：`dst = view + 24*(x-ox) + 10944*(y-oy) - 0xAB0`（末项 2736 = 24×114）；精灵库索引 `12*kind + (dword_53C0B==3 ? 2 : dword_53C0B)`。
+- **表只读**：`0x1CD17` 的色基机器先拷 `0x52006` 起 30 字节到栈局部 `v13` 再索引（只读、无写），C 侧等价写 `byte_52006[colour]`。
+- **chkstk**：两者皆 `push size; call 0x3702F`，丢弃。
+- **归属**：新建模块。`map.c` 系**已验证**模块，按 playbook 不改动，仅在伞头加 `map_sprites.h`（字母序插在
+  `map_scroll.h` 与 `map_status.h` 之间）。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183**（本批 −2；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140**（本批 +2）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181**（本批 −2；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142**（本批 +2）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -781,8 +804,9 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 本轮 §25 已拉出 §21 `figure_view` 家族的另两个同胞 `0x2F631`/`0x2FE14`(u2)（驱动器 `0x2EBE1`/`0x2FB2C`）。
 本轮 §26 已拉出闭包就绪头名 `0x1A7BD`/`0x1A7F1`(u2，`0x1A30B` 的音效库加载/释放对)。
 本轮 §27 已拉出闭包就绪头名 `0x2B439`/`0x2B843`(u2，同 caller `sub_2AF28` 的队伍名册助手)。
-现闭包就绪的游戏函数头名：`0x1CB94`(u2，地图视口记录精灵)/`0x1CD17`(u2，地图单位帧闪烁)
-/`0x1EC2A`(u2，`map_status` 格坐标)/`0x272D0`/`0x2A0C2`/`0x2A694`(u2，名册行绘制)；
+本轮 §28 已拉出闭包就绪头名 `0x1CB94`/`0x1CD17`(u2，`map.c` 的 0x1C2DA/0x1C4CC 同族；地图视口记录精灵族现只剩调用者 `0x1CAC7` 与格坐标 `0x1EC2A`)。
+现闭包就绪的游戏函数头名：`0x1EC2A`(u2，格坐标/标记锚点)
+/`0x272D0`/`0x2A0C2`/`0x2A694`(u2，名册行绘制)/`0x1BFFE`(u2，物品盒；其私有助手 0x1C142/0x1C1C3 已还原)；
 另有多组同 caller 的小簇（均 u1）：`0x1C9DD`(sub_20C6F)、`0x22470`/`0x22547`/`0x22656`(sub_22253)、
 `0x2AC7D`/`0x2AE0E`/`0x2FB2C`(sub_2AA00)、`0x1E98C`/`0x1ECC7`(sub_1E856)、`0x1B1E7`(sub_19DF7)。
 
