@@ -1,0 +1,167 @@
+/* map_attack.c - the unit attack result helpers (original 0x1E98C + 0x1ECC7).
+ *
+ * Direct translation of the machine code at 0x1E98C/0x1ECC7; the offline
+ * disassembly (analysis/cseg01_disasm.txt) is authoritative.
+ *
+ *   - the Watcom stack probe (`push size; call 0x3702F`) is dropped (false
+ *     callee);
+ *   - 0x1E98C's tail `jmp 0x1317D` and 0x1ECC7's tail `jmp 0x111B2` are the
+ *     shared epilogues of other functions, i.e. plain returns here;
+ *   - Hex-Rays gives 0x1ECC7 the prototype `int(int)` and renders its second
+ *     argument as the frame-pointer-relative local `v31`.  The caller 0x1E856
+ *     pushes both `a2` then `a1` before the call (1E90A/1E90E) and the callee
+ *     reads [esp+0x50] as a2, so the real prototype is `int(int, int)`;
+ *   - the map_cell_info call fills an 8-byte stack buffer (the original passes
+ *     the [esp] scratch region); only out[5] (dword_53A69[tile].byte 1) is read;
+ *   - v30 (record +0x21) is a byte local in the machine code and its `+30`
+ *     wraps mod 256, so it stays a uint8_t here.
+ */
+#include "fd2_game.h"
+#include "map_attack.h"
+
+#include <stdint.h>
+
+/* item table accessor 0x4E8BC: base 0x602AD, stride 23 (dseg03). */
+static const uint8_t *item_entry(int index)
+{
+    return (const uint8_t *)tbl_ptr((void *)&fd2_data2[0x2AD], 23, index, 0);
+}
+
+/* 0x1E98C */
+void map_attack_sprite(int attacker, int defender)
+{
+    const uint8_t *r = (const uint8_t *)(uintptr_t)dword_53A45
+                       + 80u * (uint32_t)defender;
+    const uint8_t *eff =
+        item_entry(rec_field_byte(attacker, rec_slot_find(attacker, 0)));
+    const uint8_t *script =
+        (const uint8_t *)(uintptr_t)tbl_u32((const void *)&fd2_data2[0x1955],
+                                            eff[0]);
+    int count  = script[0];
+    int x      = 24 * (int)(r[0] - (uint32_t)dword_53AA9) + 4;
+    int y      = 24 * (int)(r[1] - (uint32_t)dword_53AAD);
+    int i;
+
+    for (i = 0; i < count; ++i) {
+        int sfx = script[2 * i + 2];
+
+        if (sfx != 255) {
+            if (byte_53C6B != 0)
+                svc_play_sfx((const void *)(uintptr_t)dword_53B0F, 4, 1);
+            else
+                svc_play_sfx((const void *)(uintptr_t)dword_53B0F, sfx, 1);
+        }
+        if (byte_53C6B == 0 && i == 0)
+            view_draw_unit_sprite(0xA0504, 320, defender, 2, 253);
+        else if (byte_53C6B == 0 && i == 1)
+            view_draw_unit_sprite(0xA0504, 320, defender, 0, 0);
+
+        {
+            void *saved = res_draw_subimage((const void *)(uintptr_t)dword_53AD1,
+                                            (void *)0xA0000, 320, x, y,
+                                            script[2 * i + 1]);
+            j___delay(80);
+            dlg_snap_restore(saved, (void *)0xA0000, 320);
+        }
+    }
+}
+
+/* 0x1ECC7 */
+int map_attack_resolve(int attacker, int defender)
+{
+    const uint8_t *v2 = (const uint8_t *)(uintptr_t)dword_53A45
+                        + 80u * (uint32_t)attacker;
+    uint8_t *v3 = (uint8_t *)(uintptr_t)dword_53A45
+                  + 80u * (uint32_t)defender;
+    uint8_t info[8];
+    const uint8_t *eff;
+    int v7, v24;
+    int v26, v27, v28, v22, v21, v20, v19, v29, v25;
+    uint8_t v30;
+    int v1, v23;
+
+    byte_53C6B = 1;
+    v26 = *(const uint16_t *)(const void *)(v2 + 0x48);
+    v27 = *(const uint16_t *)(const void *)(v3 + 0x4A);
+    v28 = *(const uint16_t *)(const void *)(v3 + 0x40);
+    v22 = *(const uint16_t *)(const void *)(v3 + 0x42);
+    v21 = *(const uint16_t *)(const void *)(v2 + 0x4C);
+    v20 = *(const uint16_t *)(const void *)(v3 + 0x4E);
+    v19 = v2[0x20] - 1;
+    v30 = v2[0x21];
+    v29 = v3[0x21];
+
+    eff = item_entry(rec_field_byte(attacker, rec_slot_find(attacker, 0)));
+    v7  = eff[9];
+    v24 = eff[10];
+
+    if (!rec_skip(attacker)) {
+        map_cell_info(v2[0], v2[1], info);
+        v26 += v26 * dword_51A12[info[5]] / 100;
+    }
+    if (!rec_skip(defender)) {
+        map_cell_info(v3[0], v3[1], info);
+        v27 += v27 * dword_51A2A[info[5]] / 100;
+    }
+
+    v25 = byte_524A8[v19];
+    if (v7 == 4) {
+        v25 += v24;
+    } else if (v7 == 2) {
+        if ((int)(util_rand() % 100) < v24) {
+            v3[0x25] = (uint8_t)(util_rand() % 4 + 2);
+            ev5_203BD(1, 32, 0);
+            j___delay(20);
+            pal_fade_add(0, 255, 0);
+            j___delay(40);
+            ev5_203BD(1, 32, 0);
+            j___delay(20);
+            pal_fade_add(0, 255, 0);
+        }
+    }
+
+    if ((int)(util_rand() % 100) < v21 - v20) {
+        byte_53C6B = 0;
+        if ((int)(util_rand() % 100) < v25) {
+            pal_fade_add(0, 255, 63);
+            j___delay(20);
+            pal_fade_add(0, 255, 0);
+            j___delay(40);
+            pal_fade_add(0, 255, 63);
+            j___delay(20);
+            pal_fade_add(0, 255, 0);
+            v27 /= 2;
+        }
+        v1 = 9 * (v26 - v27) / 10;
+        if (v1 < 0)
+            v1 = 0;
+        v23 = v1 / 9;
+        if (v1 / 9 != 0)
+            v1 += (int)(util_rand() % (uint32_t)v23);
+        v28 -= v1;
+        if (v28 < 0)
+            v28 = 0;
+    }
+
+    *(uint16_t *)(void *)(v3 + 0x40) = (uint16_t)v28;
+
+    if (v2[6] == 2) {
+        int v13 = v3[7];
+
+        if (v13 >= 0x44) {
+            const uint8_t *v14 =
+                (const uint8_t *)tbl_ptr((void *)&fd2_data2[0xAF9], 10,
+                                         v13 - 68, 0);
+            int v15;
+
+            if ((v2[0x20] > 8u && v2[0x20] < 0x19u) || v2[8] == 28)
+                v30 += 30;
+            v15 = v29 * (int)v14[9] / v30;
+            dword_53EC8 = (uint32_t)v15;
+            if (v28 != 0)
+                dword_53EC8 = (uint32_t)(v1 * v15 / v22);
+        }
+    }
+
+    return v28;
+}

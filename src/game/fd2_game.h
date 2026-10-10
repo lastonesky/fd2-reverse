@@ -31,6 +31,7 @@
 #include "map.h"
 #include "map_action.h"
 #include "map_ai.h"
+#include "map_attack.h"
 #include "map_cursor.h"
 #include "map_interact.h"
 #include "map_records.h"

@@ -1064,10 +1064,31 @@ callee——`0x2AE0E`/`0x2AC7D`/`0x2FB2C`——作为一簇（1350B，真闭包�
 - **chkstk**：三者皆 `push size; call 0x3702F`（不分配帧），丢弃。
 - **归属/别名**：新建 `item_menu`；被调方均以语义名调用（`msg_show_page`/`vm_run`/`res_load`/`figure_frame_run`…），无需 `#define` 别名（`sub_2FE14` 已按 figure_view.h 的 `figure_frame_run` 调用）。无对拍器，标"已还原未验证"。
 
+### 41) 攻击结算助手簇（本轮，2 函数）→ `src/game/map_attack.c/.h`（新建）
+
+本轮 closure-ready 游戏头名仍被 CRT/库包装 `0x3645D`(u4)/`0x2E95B`(u3，需 CRT `fread`)/`0x365DA`(u2)
+与巨型 CRT 数学库包装 `0x190AC`(u1) 占据；`0x1B1E7`(u1) 真闭包自身但**内层读未初始化**（`retaddr`/`v0`，§32 已记）暂跳。
+按"同 caller"聚类，取仍待还原的驱动器 `sub_1E856`(0x1E856，攻击血条收束动画) 的两个 callee——
+`0x1E98C`/`0x1ECC7`——作为一簇（1276B，真闭包＝自身，callee 全在册）。本批后 `sub_1E856` 的
+待还原 callee 由 2 归零（该驱动器已闭包就绪）。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1E98C` | `map_attack_sprite(attacker,defender)` | 攻击者的道具（`rec_slot_find(a1,0)`→`rec_field_byte`→`tbl_ptr(0x2AD,23)`）选出动画脚本 `tbl_u32(0x1955,eff[0])`：脚本首字节为帧数，每帧跳过 0xFF 的 SFX 索引（`byte_53C6B!=0` 时改用固定 4）、`res_draw_subimage(dword_53AD1,0xA0000,320,x,y,script[2i+1])`+`j___delay(80)`+`dlg_snap_restore`；`byte_53C6B==0` 且 `i==0/1` 时先 `view_draw_unit_sprite(0xA0504,320,a2,2,253 / 0,0)`。x/y 由 defender 记录 x/y（+0/+1）减视口原点 `0x53AA9`/`0x53AAD` 后 ×24。 |
+| `0x1ECC7` | `map_attack_resolve(attacker,defender)` | 取 attacker/defender 记录（`dword_53A45+80*idx`）的 +0x48/+0x4A/+0x40/+0x42/+0x4C/+0x4E 字与 +0x20/+0x21 字节；道具条目的 `[9]`(v7)/`[10]`(v24) 定性；`!rec_skip(rec)` 时 `map_cell_info` 取 `info[5]` 并按 `dword_51A12/51A2A` 加成 +0x48/+0x4A；`byte_524A8[rec[0x20]-1]` 起手，`v7==4` 加 v24，`v7==2` 时 RNG 命中则改 defender[0x25] 并闪屏（`ev5_203BD`/`pal_fade_add`）；主判定 `rng%100<v21-v20` 时置 `byte_53C6B=0`、二次闪屏、按 `9*(atk-def)/10`（+RNG）算伤害、`defender[+0x40]-=dmg`（下限 0），返回剩余 HP；`attacker[6]==2 && defender[7]>=0x44` 时按 `tbl_ptr(0xAF9,10,defender[7]-68)` 与 `v29/v30` 写经验 `dword_53EC8`。 |
+
+**陷阱 / 伪代码伪影**：
+- **`sub_1ECC7` 实参个数**：Hex-Rays 原型记 `int(int)` 并把第二参渲染成帧指针相对局部 `v31`（本函数无 `mov ebp,esp`）。调用点 `sub_1E856` 先压 a2 再压 a1（1E90A/1E90E），被调方读 `[esp+0x50]` 作 a2 ⇒ 真原型 `int(int,int)`；C 侧定为 2 参。
+- **v30 字节回绕**：`v30 = v2[0x21]` 在机器码里是字节槽，`add BYTE[esp+0x34],0x1e` 回绕 mod 256（`movzx` 读回），故 C 侧用 `uint8_t v30`。
+- **共享尾声**：`0x1E98C` 尾 `jmp 0x1317D`、`0x1ECC7` 尾 `jmp 0x111B2` 均落在他函数体内，是纯 epilogue（`0x1ECC7` 已先 `mov eax,[esp+0x2c]` 返回值）；C 侧作普通 `return`。`0x1ECC7` 返回剩余 HP（`v28`），调用方 `sub_1E856` 以之驱动血条。
+- **`0x1E98C` 返回值**：机器跳出时 eax 未定义，唯一调用方忽略，C 侧声明 `void`。
+- **chkstk**：两者皆 `push size; call 0x3702F`（不分配帧），丢弃（假 callee）。
+- **归属/别名**：新建 `map_attack`；被调方均以语义名调用（`rec_slot_find`/`rec_field_byte`/`rec_skip`/`tbl_ptr`/`tbl_u32`/`svc_play_sfx`/`view_draw_unit_sprite`/`res_draw_subimage`/`dlg_snap_restore`/`pal_fade_add`/`ev5_203BD`/`util_rand`/`map_cell_info`），无需 `#define` 别名。无对拍器，标"已还原未验证"。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → … → 160 → 159 → 157 → 154**（本批 −3），已还原未验证 **115 → … → 163 → 164 → 166 → 169**（本批 +3）。
+- `function-map.csv`：待还原 **208 → … → 159 → 157 → 154 → 152**（本批 −2），已还原未验证 **115 → … → 164 → 166 → 169 → 171**（本批 +2）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1121,6 +1142,9 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 本轮 §40 继而把同 caller（`sub_2AA00`）的三个 u1 callee `0x2AC7D`/`0x2AE0E`/`0x2FB2C` 拉出（新建 `item_menu`），
 故 `sub_2AA00` 已闭包就绪；下一游戏头名再回落至同 caller 对 `0x1E98C`/`0x1ECC7`（`sub_1E856`）与 u1 小簇
 `0x1D6C8`/`0x1D79C`/`0x1DEBE`/`0x1EB05`/`0x22AA8`/`0x24BDE`/`0x28632`/`0x2A07A`/`0x2F7B6` 等（分别闭簇其 caller）。
+本轮 §41 继而把这个同 caller（`sub_1E856`）对 `0x1E98C`/`0x1ECC7` 拉出（新建 `map_attack`），故 `sub_1E856` 已闭包就绪；
+下一游戏头名回落至 u1 小簇 `0x1D6C8`/`0x1D79C`/`0x1DEBE`/`0x1EB05`/`0x22AA8`/`0x24BDE`/`0x28632`/`0x2A07A`/`0x2F7B6` 等
+（分别闭簇其 caller），其间 `0x1B1E7`(u1) 因内层读未初始化暂跳。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交
