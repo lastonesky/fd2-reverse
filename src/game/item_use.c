@@ -43,6 +43,41 @@ int unit_heal(int rec, int amount)
     return fixed + random;
 }
 
+/* 0x1C8ED - heal record `rec` by word 0 of action `action`'s tbl_619FD entry
+ * (0x619FD / stride 7); returns the amount unit_heal added. */
+int unit_heal_by_action(int rec, int action)
+{
+    const uint8_t *act = (const uint8_t *)tbl_ptr((void *)&fd2_data2[0x19FD],
+                                                  7, action, 0);
+
+    return unit_heal(rec, *(const int16_t *)(const void *)act);
+}
+
+/* 0x1C9DD - the magic-point twin of unit_heal: add `amount` to the second
+ * pool at record+68 (90% fixed + up to 10% random, clamped at the max at
+ * +70) and book the experience in dword_53EC8, weighted by 40 * record+33 /
+ * max (no +30 bonus here).  Returns the amount added. */
+int unit_restore_mp(int rec, int amount)
+{
+    uint8_t *r = (uint8_t *)dword_53A45 + 80u * (uint32_t)rec;
+    int mp   = *(const uint16_t *)(const void *)(r + 68);
+    int max  = *(const uint16_t *)(const void *)(r + 70);
+    int fixed  = amount * 9 / 10;
+    int random = (int)((int32_t)util_rand() % 100) * amount / 1000;
+    int newmp  = mp + fixed + random;
+    int delta;
+
+    if (newmp > max)
+        newmp = max;
+    delta = newmp - mp;
+    *(uint16_t *)(void *)(r + 68) = (uint16_t)newmp;
+
+    if (r[7] < 0x4B && max != 0)
+        dword_53EC8 += (uint32_t)(40 * (int)r[33] * delta / max);
+
+    return fixed + random;
+}
+
 /* 0x1DA16 - blit record `rec`'s 24x24 sprite into the map bitmap at `dst`
  * (an absolute screen address).  Out-of-view records are dropped.  `mode` 0
  * is the plain sprite, 2 the constant-colour variant; `field` is the

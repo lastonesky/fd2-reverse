@@ -1021,10 +1021,30 @@ module-map §2 既定策略跳过。
 - **无符号 word**：`movzx word[esi]`/`word[esi+0x44]` 零扩展，C 侧按 `uint16_t` 读取。
 - **归属/别名**：追加至既有 `map_ai`；被调方均以语义名调用（`path_mark`/`map_reveal_reachable`/`map_ai_action_score`），无需新增 `#define` 别名。无对拍器，标“已还原未验证”。
 
+### 39) 治疗量/魔法点恢复簇（本轮，2 函数）→ `src/game/item_use.c/.h`（追加）
+
+本轮 closure-ready 游戏头名是 `0x1C8ED`/`0x1C9DD`(u1)——两者同簇（共用已还原的 `unit_heal`(0x1C916)），
+真闭包＝自身（callee：`sub_1C916`(item_use)/`sub_4E866`(tbl_ptr 0x619FD)/`sub_4EBE3`(util_rand)）。
+调用量更高的闭包头名 `0x3645D`(u4)/`0x2E95B`(u3)/`0x365DA`(u2) 仍是 CRT/库包装（read/fread/int386），
+`0x190AC`/`0x1B1E7`(u1) 真闭包 >8 函数，按 module-map §2 既定策略跳过。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1C8ED` | `unit_heal_by_action(rec,action)` | `act=tbl_619FD(action)`（0x619FD/stride7）；`unit_heal(rec, *(int16*)act)`——按行动条目首 16 位作治疗量。 |
+| `0x1C9DD` | `unit_restore_mp(rec,amount)` | 对 +68 池（上限 +70）做与 `unit_heal` 同形的恢复：`new=mp+9*amount/10+(rand%100)*amount/1000`，夹到 +70；`r[7]<0x4B` 时 `dword_53EC8 += 40*r[33]*(new-mp)/max`（无 +30 加成、无 r[32] 判定）；返回 fixed+random。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声**：`jmp 0x22BBE`（1C916 尾部，`add esp,4; pop ebp/edi/esi/ebx; ret`）是普通尾声；1C9DD 的 `jmp 0x1C9C7` 跳入 1C916 体内的 XP 记帐序列（`idiv [esp]` 用各自局部 max），C 侧展开为独立代码。
+- **签名**：`sub_1C8ED`/`sub_1C9DD` 机器均 `movsx`/无符号读取，原型记 `void(int,int)` 但实际返回 eax；C 侧按 `unit_heal` 惯例返回 int（调用方 21B18/20C6F 均忽略返回值）。
+- **`sub_3702F` chkstk**：`push 0x10`/`push 0x18; call 0x3702F`（不分配帧），丢弃。
+- **`max != 0` 守卫**：机器 `idiv [esp]`（[esp]=max）无显式零判定，与既有 `unit_heal` 一致加 `&& max != 0`（真实调用点 20C6F 已先判 `word[rec+70]!=0`），避免 C 侧除零。
+- **+68/+70 语义**：`box_status_draw`(0x17FC0) 将其绘为第二根量表、`ev5_25089` 令 `+68=+70`，判为魔法点池。
+- **归属/别名**：追加至 `item_use`；被调方均以语义名调用（`unit_heal`/`tbl_ptr`/`util_rand`），无需新增 `#define` 别名；`fd2_game.h` 已含 `item_use.h`。无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180 → 179 → 176 → 172 → 169 → 166 → 165 → 164 → 160 → 159**（本批 −1；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143 → 144 → 147 → 151 → 154 → 157 → 158 → 159 → 163 → 164**（本批 +1）。
+- `function-map.csv`：待还原 **208 → … → 160 → 159 → 157**（本批 −2），已还原未验证 **115 → … → 163 → 164 → 166**（本批 +2）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1071,7 +1091,10 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 本轮 §37 再把 closure-ready 头名 `0x15880`/`0x15DA2`(u1) 连同其 driver `0x1567E`(u2)/`0x15B77`(u1) 整体拉出
 （新建 `map_ai`），故该模块只剩行动目标挑选器 `0x1598A`(u3) 与决策驱动 `0x14EF0`(u6)；
 本轮 §38 继而把该头名 `0x1598A`(u3) 拉出（`map_ai` 追加），故 `map_ai` 只剩决策驱动 `0x14EF0`(u6)；
-游戏头名转为 `0x1c8ed`/`0x1c9dd`(u1，`sub_1C916`/`sub_4EBE3` 小簇)。
+游戏头名转为 `0x1c8ed`/`0x1c9dd`(u1，`sub_1C916`/`sub_4EBE3` 小簇)；
+本轮 §39 继而把这个头名对 `0x1C8ED`/`0x1C9DD` 拉出（`item_use` 追加），治疗族闭合。
+下一游戏头名转为 `0x2e95b`(u3，仍需 CRT `fread` `sub_373CA`，暂跳)，其后为同属 `sub_20C6F`/`sub_21B18`
+等地图驱动器及 u1 小簇（`0x1E98C`/`0x1ECC7`、`0x2AC7D`/`0x2AE0E`/`0x2FB2C`、`0x1B1E7`），均受各自 caller 闭包阻挡。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交
