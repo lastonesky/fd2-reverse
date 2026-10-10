@@ -270,15 +270,28 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
   20 行 `memset(p+320i+54281,74,104)` → 4 趟滑出 `dword_53F66` 的 4 张子图
   （除数 `mode==0?4-j:j+1`，基偏移表 `0x52408`={-39,-13,13,39}）→ `mode!=0` 保留末帧否则还原。
 
+### 6) 道具/治疗使用簇 → `src/game/item_use.c/.h`（本轮）
+
+- `0x13FD4` → `item_use`（u6）：滑出肖像 → 两次精灵闪烁（`view_draw_unit_sprite` + `gfx_copy_rows`）
+  → HP 加 `max/5`；入口要求“受伤且 +37/+38 为零”。
+- `0x22AF6` → `item_apply`：先 `map_draw_party_icons(_anim)`，再逐记录治疗 10（`unit_heal`+
+  `map_enqueue_status`+清字段+经验）或排入光标精灵。
+- `0x1C916` → `unit_heal`：加 `9·amount/10 + (rand%100)·amount/1000`，按 max 截断，
+  按 `40·rec[33]·heal/max` 记账 `dword_53EC8`；返回本次增量。
+- `0x1DA16` → `view_draw_unit_sprite`：地图格内 24×24 精灵（方向 +3、帧 +2、相位 `53C07/53C0B`），
+  越界丢弃；`mode` 0=plain / 2=const。
+- **ABI 注**：机器向 `0x4E127` 多压一个实参，但被调方从不读第 4 参（`[ebp+0x14]` 无引用）；
+  已对拍验证的 `sprite24_const` 只取 3 参，故 C 丢弃多余实参。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **276 → 262**，已还原未验证 **47 → 61**（+14）。
+- `function-map.csv`：待还原 **276 → 258**，已还原未验证 **47 → 65**（+18）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
 `0x115B6`(u9)、`0x14B78`(u8)、`0x1C75E`(u7，链 `0x1C81F`→`0x14121`→`0x14B78`)、
-`0x13FD4/14EF0/1B932/26EDA/27D33`(u6) ……
+`0x14EF0/1B932/26EDA/27D33/2E9A8`(u6) ……
 策略不变：**按 callee 簇整体拉出**（一个模块一次做完），并先剔除共享尾声造成的伪 callee。
 
 ---

@@ -1,0 +1,39 @@
+/* item_use.h - item / healing use effects (original 0x13FD4 .. 0x1DA16).
+ *
+ * The four routines that apply a healing item to a party record and play its
+ * short in-view animation:
+ *
+ *   0x1C916  unit_heal            add `amount` HP (90% fixed + up to 10%
+ *            random, clamped to the record's max at +66) and book the
+ *            experience in dword_53EC8; returns the amount added.
+ *   0x1DA16  view_draw_unit_sprite  blit a unit's 24x24 sprite into the map
+ *            bitmap at its cell (direction from record+3, frame from +2 and
+ *            the animation phase dword_53C07/0x53C0B); mode 0 = plain,
+ *            mode 2 = constant-colour.
+ *   0x22AF6  item_apply           run the party-icon draw, then for every
+ *            record in `list` heal 10 HP (or enqueue its cursor sprite when
+ *            the item field is empty), and refresh the view.
+ *   0x13FD4  item_use             the driver: glide the portrait, flash the
+ *            sprite, wait, then raise the record's HP by max/5.
+ *
+ * ABI = cdecl.  Record pointers index the 80-byte table dword_53A45.  Hand
+ * restored, compile-verified, no differential harness yet.  (The machine
+ * passes a fourth argument to 0x4E127 that the callee never reads; the
+ * verified sprite24_const takes three, so the extra argument is dropped.)
+ */
+#ifndef GAME_ITEM_USE_H
+#define GAME_ITEM_USE_H
+
+/* 0x1C916 */
+int unit_heal(int rec, int amount);
+
+/* 0x1DA16 */
+int view_draw_unit_sprite(int dst, int pitch, int rec, int mode, int field);
+
+/* 0x22AF6 */
+int item_apply(int a1, int a2, int count, const uint8_t *list, int field);
+
+/* 0x13FD4 */
+int item_use(int rec);
+
+#endif /* GAME_ITEM_USE_H */
