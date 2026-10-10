@@ -34,6 +34,7 @@
 #include "map_window.h"
 #include "menu_actions.h"
 #include "menu_select.h"
+#include "mosaic_reveal.h"
 #include "msg.h"
 #include "party_panel.h"
 #include "password.h"

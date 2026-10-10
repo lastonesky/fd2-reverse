@@ -439,3 +439,9 @@
 0x33FAF sub_33FAF game/password.h
 0x34366 sub_34366 game/password.h
 0x344B4 sub_344B4 game/password.h
+
+# party-portrait mosaic reveal transition (0x1A30B orchestrator still pending)
+0x4EB59 sub_4EB59 game/mosaic_reveal.h
+0x1F42D sub_1F42D game/mosaic_reveal.h
+0x1F1CC sub_1F1CC game/mosaic_reveal.h
+0x1F30A sub_1F30A game/mosaic_reveal.h

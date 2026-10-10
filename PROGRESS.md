@@ -470,18 +470,53 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 - **资源 98**：仅死段使用，本 C 仍载入并在收尾释放（保持分配序列一致）。
 - 无对拍器，标“已还原未验证”。
 
+### 17) 队伍肖像马赛克揭示过渡 → `src/game/mosaic_reveal.c/.h`（本轮，4 函数）
+
+地图上“角色加入 / 队伍变更”时的整屏过渡簇（编排者 `0x1A30B` 未还原，仅取其闭包就绪的
+三段：`0x1F42D` 头 + 两个 caller `0x1F1CC`/`0x1F30A` + 其私有块化 blit `0x4EB59`）：
+
+- `0x4EB59` → `mosaic_blit(block,dst,src)`：把 `src+0x504` 的 312×192 窗口按 `block×block`
+  栅格重采样写到 `dst+0x504`（`block==1` 即 1:1）；每格取格左上角源字节。行内每 `block` 列步进
+  `block`，每 `block` 行把源指针整体前移 `320*block`。机器用 16 位 `mul` 把 `320*block` 只留低 16 位
+  （本簇 1..17，不溢出）。仅被本簇两个 caller 使用（usage=2），是私有 helper。
+- `0x1F42D` → `reveal_slide_draw(offset,index)`：在 456 行距地图窗（`dword_53A49+0x8088`）里
+  保存左右两条肖像带背景 → 左带画子图 `index`（列 `85-offset`）、右带画子图 81（列 `165+offset`，
+  皆行 82）→ 把 312×192 窗口拷到 VGA 暂存页 `0xA0504`（`gfx_copy_rows`）→ `svc_wait_ticks(1)`
+  → `dlg_snap_restore` 还原两条带。即“两肖像沿水平方向分开”的一帧。
+- `0x1F1CC` → `reveal_mosaic_out(index)`：`guest_malloc(0xFA00)` 暂存屏 → 拷 `0xA0000` 屏幕
+  → 连续 `reveal_slide_draw(25*i,i=4..0)`、`(1)`、`(0)` 播放分带帧 → 存回 `dword_53A49`、清暂存
+  → 循环 `j=0..15`：`mosaic_blit(j+1,暂存,屏)`（1→16 渐粗）→ 在暂存上画子图 `index`/81 并释放
+  → `pal_fade_range(16,255,j)`（**渐暗**，`j` 即减色量）→ 拷回屏 → 等 1 tick → 释放、`kbd_flush`。
+- `0x1F30A` → `reveal_mosaic_in(index)`：清暂存 → 循环 `i=16..0`：`mosaic_blit(i+1,暂存,屏)`
+  （17→1 渐细）+ 画子图/释放 + `pal_fade_range(16,255,i)`（**渐亮**）+ 拷回屏 + 等 1 tick
+  → `map_render_view(dword_53A49+0x8088,456,13,8,dword_53AA9,dword_53AAD)` → `dlg_portraits_refresh`
+  → 再播 `reveal_slide_draw(25*j,j=0..4)`。
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声**：`0x1F42D` 尾 `jmp 0x184BA` 落进 `fb_slide_step` 尾声（`add esp,0xC; pop esi; pop ebx; ret`），
+  该 `add esp,0xC` 恰好清掉第二次 `dlg_snap_restore` 的 3 个实参（Watcom cdecl 调用者清栈），
+  机器上是普通 `return`，非调用/非依赖。
+- **chkstk**：四者皆 `push size; call 0x3702F`，丢弃。
+- **寄存器复用**：`0x1F30A` 尾部把 `esi`（原暂存指针，已 free）改作循环计数，C 侧用独立 `j`。
+- **伪 qword 视图**：`0x1F30A` 的 Hex-Rays 把相邻 `dword_53AA9/dword_53AAD` 并成 `qword_53AA9`，
+  机器按 32 位读（低位=ox、`dword_53AAD`=oy）；C 侧按 `map_scroll`/`ev4` 既有约定取 `(int)dword_53AA9`。
+- **块化读法**：Hex-Rays 未表出 `0x4EB59` 的“行指针复用+栅格重采样”结构，须以反汇编为准（行内只在
+  栅格边界步进、行间 `push/pop esi` 复用同一行）。
+- **语义归属**：`0x4EB59` 位于库区（funcmap zone=lib），但仅被本簇调用，故随簇归入本模块。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **220 → 217**，已还原未验证 **103 → 106**（+3）。
+- `function-map.csv`：待还原 **217 → 213**，已还原未验证 **106 → 110**（+4）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
 本轮 §13 已拉出 `0x12EAA/1300D/13185/13315/13488/13A44`（它们是 `0x14B78` 与 `0x18890` 的直接 callee），
 故 `0x14B78`(u8) 的真闭包已缩小，但仍含 `146D1/14237/1DEBE/15055/15311/1548E/1567E/1598A…`，>8 函数，暂跳。
 `0x1C75E`(u7，链 `1C81F`→`14121`→`14B78`，同上跳过)、`0x14EF0/2E9A8`(u6)。
-闭包就绪的头部单函数现为 `0x1B6B7`(u4)，随后是
-`0x1F42D/2921A/3645D`(u4) 与 `0x149F8/17643/1E739/1F558`(u3)。
+本轮 §17 已拉出 `0x1F42D` 及其两个 caller `0x1F1CC`/`0x1F30A` 与私有 helper `0x4EB59`；
+闭包就绪的头部单函数现为 `0x1B6B7`(u4)，随后是 `0x2921A/3645D`(u4) 与 `0x149F8/17643/1E739/1F558`(u3)。
 （`0x344B4` 已由 §16 连同其上游 `0x34366`/`0x33FAF` 整簇拉出；`0x2DF01/1FF79/1F73F` 已由 §14 拉出。）
 策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 结构反编译辅助）。
 （`0x2921A`＝地点菜单退场缩放（上批 §11 遗留）；`0x1B1E7`(地图队伍面板编排者，6 个 callee 已在 §12 还原）
