@@ -295,15 +295,26 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
   屏幕带循环的 `0x140/0x11C/0xa8fca/0xa974a/0xa99ca` 常量）。Ghidra 不恢复 chkstk 后的
   栈参，故用于**结构/常量互证**而非 ABI。
 
+### 8) 队伍状态屏簇 → `src/game/status_screen.c/.h`（本轮）
+
+- `0x26EDA` → `status_screen_run`（u6）：拷 `0x52418` 到本地 4-dword layout → BDA tick
+  驱动面板动画（`dword_53F52` 步进 / `dword_53F72` 帧）→ 轮到 `dlg_blit_dato(0)`/`(3)`
+  交替头像 → `kbd_pending()` 后 INT 16h 取键（含 E0/52→1C、53→1 重映射）。
+- `0x27079` → `status_panel_draw`（mode 0=高亮头像、1/3=帧带、2=图标行）。
+- `0x2810B` → `status_names_draw`：最多 6 行头像（`sprite24_plain49`）+ 名字流（`vm_run`），
+  高亮行用亮调色板（205/201）。
+- Ghidra 对 `27079/2810B/184C0` 的结构反编译**逐分支一致**（尤其确认 `184C0` 的
+  `rec[2*i+10] & 0x80` 循环条件，澄清了 IDA 的 `v15>=0` 写法）。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **276 → 255**，已还原未验证 **47 → 68**（+21）。
+- `function-map.csv`：待还原 **276 → 252**，已还原未验证 **47 → 71**（+24）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
 `0x115B6`(u9，真闭包去掉伪 `0x190AC` 后为 `12DAC/14742/1B932 簇`)、`0x14B78`(u8)、`0x1C75E`(u7)、
-`0x14EF0/1B932/26EDA/27D33/2E9A8`(u6) ……
+`0x14EF0/1B932/27D33/2E9A8`(u6) ……
 策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 的结构反编译辅助）。
 
 ---

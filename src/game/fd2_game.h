@@ -42,6 +42,7 @@
 #include "scene_states.h"
 #include "screen_fx.h"
 #include "sprite24.h"
+#include "status_screen.h"
 #include "svc.h"
 #include "tables.h"
 #include "unit.h"

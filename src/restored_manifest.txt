@@ -27,6 +27,9 @@
 0x26CE4 sub_26CE4 game/screen_fx.h
 0x27816 sub_27816 game/screen_fx.h
 0x278E7 sub_278E7 game/screen_fx.h
+0x26EDA sub_26EDA game/status_screen.h
+0x27079 sub_27079 game/status_screen.h
+0x2810B sub_2810B game/status_screen.h
 0x13FD4 sub_13FD4 game/item_use.h
 0x1C916 sub_1C916 game/item_use.h
 0x1DA16 sub_1DA16 game/item_use.h
