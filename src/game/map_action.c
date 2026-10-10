@@ -73,6 +73,40 @@ int map_action_grow_x(int a1, int count, const uint8_t *list)
     return 0;
 }
 
+/* 0x22866 - flag +35 and grow the +74 metric by (word * dbl_50218 + 1). */
+int map_action_grow_y(int a1, int count, const uint8_t *list)
+{
+    int i;
+
+    map_draw_party_icons_anim(a1, 18, count, list);
+    map_draw_party_icons(a1, 18, count, list);
+
+    for (i = 0; i < count; ++i) {
+        uint8_t *rec = (uint8_t *)dword_53A45 + REC_STRIDE * list[i];
+        int      v9  = rec[33];
+
+        if (rec[32] > 8 && rec[32] < 0x19)
+            v9 += 30;
+
+        if (rec[35] != 0) {
+            ev4_1E1DC(list[i]);
+        } else {
+            int v7;
+
+            rec[35] = (uint8_t)((int32_t)util_rand() % 4 + 2);
+            v7 = (int)((double)*(const uint16_t *)(const void *)(rec + 74)
+                       * dbl_50218 + 1.0);
+            map_enqueue_status(v7, 105, list[i]);
+            *(uint16_t *)(void *)(rec + 74) += (uint16_t)v7;
+            dword_53EC8 += 2u * (uint32_t)v9;
+        }
+    }
+
+    map_view_update(0);
+    map_draw_status_popups();
+    return 0;
+}
+
 /* 0x22997 - flag +36 (widen) and grow the +76/+78 metrics by 15. */
 int map_action_widen(int a1, int count, const uint8_t *list)
 {

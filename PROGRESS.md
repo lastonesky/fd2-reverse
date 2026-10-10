@@ -535,10 +535,49 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 - **返回值**：`0x2921A` 退出时 eax 残留 `zoom`、`0x28B41` 残留 `kbd_flush` 的左值，调用点均不读，C 侧声明 `void`。
 - 无对拍器，标“已还原未验证”。
 
+### 19) 地图行动 / 记录列表助手簇 → `src/game/map_records.c/.h` + `map_action.c`（本轮，3 函数）
+
+地图行动路由 `sub_20C6F`（行动码 8..24）与其驱动 `sub_1CFF0/15055/1567E/1548E/18D8C` 共用的
+“y 放大”handler 与记录收集助手；三者真依赖全部已还原：
+
+- `0x22866` → `map_action_grow_y`（追加 `map_action.c`）：与 `map_action_grow_x`（0x22721）同构——
+  先 `map_draw_party_icons_anim/_icons(a1,18,a2,a3)`，再逐目标：若记录 +35 空则置 `rand%4+2`，
+  把 +74 度量按 `(word * dbl_50218 + 1.0)` **截断**增长（Watcom `fild/fmul/fld1/faddp/__CHP/fistp`），
+  数字显示、`dword_53EC8 += 2*rec[33]`；否则 `ev4_1E1DC` 排空闲光标精灵。记录 +72/+74/+76/+78 在
+  `unit_load.c` 里即 x/y/h/w，故 +72→x（0x22721）、+74→y（本函数）、+76/+78→w/h（0x22997）。
+  是 `sub_20C6F` 行动码 15 的 handler。
+- `0x1B6B7` → `map_collect_scripts(out)`（新模块 `map_records`）：扫 `dword_53A45` 的 `dword_53BEB`
+  条记录，凡 `(rec[5]&1)==0 && rec[49]!=0xFF && word[rec+64]==0` 者，把 +49 处的 3 字节“脚本条目”
+  `memmove` 到 `out + 3*count`，**返回 count**（机器把计数留在 eax）。`sub_20C6F` 尾部即用它填好
+  局部数组后交给 `ev_script_run`（0x1AA1D）。
+- `0x149F8` → `map_scan_records(ref_x,ref_y,out,start_x,start_y,steps,want_empty)`：
+  从格 `(start_x,start_y)` 出发，每步按方向（同轴比 `ref`）±1 推进 `steps` 步，令全局 `qword_53AB1`
+  置 `(x,y)` 后 `dlg_portrait_find()` 找该格记录，命中且 `(want_empty==0 && rec[6]!=0) ||
+  (want_empty!=0 && rec[6]==0)` 则写入 `out`；越界（`0<=x<dword_53AC1 && 0<=y<dword_53AC5`，均
+  **有符号**比较）跳过。收尾还原 `qword_53AB1`，返回 count。`sub_15055/1567E/1CFF0` 用它做“从目标格
+  朝选中格”的行扫描。
+
+**陷阱 / 伪代码伪影**：
+- **伪 callee（共享尾声返 eax）**：三者的返回都靠跳进**邻函数**的共享尾声——
+  `0x1B6B7` 尾 `jmp 0x1B64D`（在 `sub_1B5F1` 体内，`mov eax,esi; pop×3; ret`）、
+  `0x149F8` 尾 `jmp 0x114FF`（在 `sub_1145A` 体内，`add esp,0x10; pop×3; ret`）、
+  `0x22866` 尾 `jmp 0x2281B`（在 `sub_22721` 体内：`map_view_update(0)`+`map_draw_status_popups()`）。
+  故 `function-map` 把 `sub_1B5F1/sub_1145A/sub_22721` 误列为 callee；真依赖仅本 3 函数 + 上列已还原资产。
+- **返回值**：IDA 因尾声不在本体内把 `0x1B6B7/0x149F8` 标成 `void`，实际 eax 回计数——
+  调用点 `0x1562f/0x18fd6/0x1d48d/0x21058` 均 `mov ebx,eax` 后作 `ev_script_run` 的 steps 参数，
+  故 C 侧声明为 `int`。
+- **qword 视图**：`0x149F8` 的 `qword_53AB1` 是 x/y 两个 32 位单元（低位 x=0x53AB1、高位
+  y=0x53AB5）；C 侧用 `qword_53AB1` 整体存取（与 `dlg.c`/`scene.c` 约定一致），步进用 32 位局部
+  变量以免 64 位进位污染另一半。
+- **word[rec+64] 判零**：机器 `movzx; test; jg skip`（有符号 >0 跳过）；与同簇 `ev5_1B653`、
+  `map_units.c` 的既有写法一致，按 `== 0` 还原（该字段为非负计数）。
+- **chkstk**：三者皆 `push size; call 0x3702F`，丢弃。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **213 → 208**，已还原未验证 **110 → 115**（+5）。
+- `function-map.csv`：待还原 **208 → 205**，已还原未验证 **115 → 118**（+3）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -547,7 +586,8 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 `0x1C75E`(u7，链 `1C81F`→`14121`→`14B78`，同上跳过)、`0x14EF0/2E9A8`(u6)。
 本轮 §17 已拉出 `0x1F42D` 及其两个 caller `0x1F1CC`/`0x1F30A` 与私有 helper `0x4EB59`；
 本轮 §18 已拉出 `0x2921A` 及其同簇的 `0x26A0D/28B41/26A7A/26B91`；
-闭包就绪的头部单函数现为 `0x1B6B7`(u4)，随后是 `0x3645D`(u4) 与 `0x149F8/17643/1E739/1F558/22866/265EC/2E95B/2F4D4`(u3)。
+本轮 §19 已拉出 `0x1B6B7`/`0x149F8`（`map_records`）与 `0x22866`（`map_action`）；
+闭包就绪的头部单函数现为 `0x3645D`(u4)，随后是 `0x2E95B/17643/1E739/1F558/265EC/2F4D4`(u3)。
 （`0x344B4` 已由 §16 连同其上游 `0x34366`/`0x33FAF` 整簇拉出；`0x2DF01/1FF79/1F73F` 已由 §14 拉出。）
 策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 结构反编译辅助）。
 （`0x2921A`＝地点菜单退场缩放（上批 §11 遗留）；`0x1B1E7`(地图队伍面板编排者，6 个 callee 已在 §12 还原）

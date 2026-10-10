@@ -12,6 +12,8 @@
  *                        drop the cost slot
  *   0x22721  +17 table    set record flag +34 (x-enlarge) to rand 2..5 and
  *                        grow the record's +72 metric
+ *   0x22866  +18 table    set record flag +35 (y-enlarge) to rand 2..5 and
+ *                        grow the record's +74 metric
  *   0x22997  +19 table    set record flag +36 (widen) to rand 2..5 and grow
  *                        the record's +76/+78 metrics by 15
  *   0x22C04  +25 table    clear bit 7 of record flag +5 (rec_flag_or80 writer)
@@ -42,6 +44,11 @@ int map_action_add_field(int a1, int value, int field, int slot, int count,
  * grow the record's +72 metric by (word * dbl_50210 + 1); otherwise queue the
  * record's idle cursor sprite. */
 int map_action_grow_x(int a1, int count, const uint8_t *list);
+
+/* 0x22866 - flag record +35 (y-enlarge) for each target whose +35 is empty and
+ * grow the record's +74 metric by (word * dbl_50218 + 1); otherwise queue the
+ * record's idle cursor sprite. */
+int map_action_grow_y(int a1, int count, const uint8_t *list);
 
 /* 0x22997 - flag record +36 (widen) for each target whose +36 is empty, grow
  * the +76/+78 metrics by 15; otherwise queue the idle cursor sprite. */

@@ -452,3 +452,8 @@
 0x28B41 sub_28B41 game/place_menu.h
 0x26A7A sub_26A7A game/place_menu.h
 0x26B91 sub_26B91 game/place_menu.h
+
+# map action / record-list helpers (drivers 0x20C6F / 0x1CFF0 / 0x15055 / 0x1567E / 0x1548E / 0x18D8C still pending)
+0x22866 sub_22866 game/map_action.h
+0x1B6B7 sub_1B6B7 game/map_records.h
+0x149F8 sub_149F8 game/map_records.h
