@@ -1151,10 +1151,41 @@ callee——`0x2AE0E`/`0x2AC7D`/`0x2FB2C`——作为一簇（1350B，真闭包�
   实为间接表调用与共享尾声，真依赖只有 `gfx_copy_rows`/`res_blit`/`svc_wait_ticks`。
 - 无对拍器，标“已还原未验证”；其唯一 caller `sub_2FF01`(u2，3876B) 仍待还原。
 
+### 45) 地点菜单/商店交互屏簇（本轮，4 函数）→ `src/game/shop_screen.c/.h`（追加）
+
+闭包筛选后，closure-ready 游戏函数只剩同 caller 的 u1 小簇。本轮取地点/商店菜单族里
+最连贯的一组：`0x28CBD`/`0x28EFE`（同为待还原驱动器 `sub_279BC` 的 callee，且 `0x28EFE` 的
+唯一待还原 callee 就是 `0x28CBD`）＋ `0x2A43E`（待还原驱动器 `sub_29DAA`/`sub_2A43E` 链，
+其唯一待还原 callee 是 `0x2A07A`）及其私有助手 `0x2A07A`。四者同属“地点/商店菜单的交互列表/
+道具屏”（`shop_screen.h` 既定范围），真闭包＝自身（callee 全在册：`menu_list_select`、
+`shop_items_paint/run`、`shop_party_run`、`place_transition`、`place_money_gain/spend`、
+`box_run`、`res_load`、`rec_field_byte`、`rec_slot_remove`、`unit_metrics`、`rec_flag`、
+`map_window_run`、`rle2_blit`、`dlg_draw_number`、`bgm_play` 及 `tbl_ptr(0x602AD,23)`）。
+拉出后 `0x28EFE`（u1）与 `0x2A43E`（u1）各自整函数闭合，`sub_279BC` 待还原 callee 由 4 降为 2。
+
+| 原址 | 新名 | 模块 | 要点 |
+|---|---|---|---|
+| `0x28CBD` | `shop_sell_run` | shop_screen.c | 循环：`dword_53F5E=dword_53BFB`；`menu_list_select()`（-1 即返回）；取 `dword_53C57` 记录，收集 `+10/11` 八个槽中状态字节<0x80 的道具号；无道具则 `dword_53AD9=rec[7]+1` + `msg_open_portrait` + `vm_run(v10[place],0xA94CC,…)` + `dlg_blit_dato` + `dlg_wait_key(1)` + `msg_close_portrait`；有道具则 `shop_items_paint/run`，确认后 `rec_field_byte` 查道具、`dword_53AE1=(3*item[19])>>2`、`vm_run(v9[place],…)`，若 `map_window_run()!=-1 && dword_53C57==0` 则 `place_transition`+`place_money_gain`+`rec_slot_remove`+`unit_metrics`（即卖出）。 |
+| `0x28EFE` | `shop_box_run` | shop_screen.c | 循环：`dword_53F5E=dword_53BFB`；`menu_list_select()`（-1 返回）；保存 `dword_53C67`→`box_run(dword_53C57)`→还原 `dword_53C67`；`dword_53A85=res_load(aDatoDat,…)`。 |
+| `0x2A43E` | `shop_buy_run` | shop_screen.c | 循环：`shop_usable_items` 过滤；无可用记录走 588 消息并返回；否则 589 消息 + `shop_party_run` 选人，`dword_53AE1=word_52397[rec[32]]*rec[33]`，590 消息后按 `map_window_run`/`dword_53C57` 与余款（有符号 `money<price`）分支：不足走 504 消息；买成则 `place_money_spend`、`rec[5]=0`、`rec[0x40]=rec[0x42]`、重绘金额条、`bgm_play(17,1)`+`place_transition`+`bgm_play(11,1)`。 |
+| `0x2A07A` | `shop_usable_items` | shop_screen.c | 扫描 `0..dword_53BFB`，把 `rec_flag(i)==1` 的 i 写入 `dst`，返回计数（机器用字节计数器）。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声**：`0x28CBD` 尾部 `0x28ef7..0x28efd`＝`add esp,0x20; pop edi; pop esi; pop ebx; ret`；
+  `0x28EFE` 只压 `ebx`，其 `je 0x28efc`/`jmp 0x28efc` 落在该尾部的 `pop ebx; ret`（跳过 edi/esi 弹出）。两者皆普通 `return`。
+- **返回值**：两函数只能经 `menu_list_select` 取消路径退出 → `return -1`（机器 eax=ebx=-1）；`0x2A43E` 声明 `int` 返回 0；调用者均忽略。
+- **`dlg_blit_dato` ABI**：机器只压 idx（这里恒 0），按既有约定（PROGRESS 0-J）补传 `dword_53A85,dword_53C67`。
+- **v9/v10 表**：`0x28CBD` 从 `0x52458`/`0x52464` 各拷 12 字节做 `int16_t[6]`，两分支分别用 `v10[place]`（无道具）/`v9[place]`（售出）作 `vm_run` 的 sub；globals 仅暴露字节视图 `unk_5245x`，故用 `memcpy(&fd2_data1[0x2458],…)`。
+- **有符号比较**：`0x2A43E` 的余款判定机器是 `cmp; jge`（有符号），C 侧 `(int32_t)dword_53BF3 < (int32_t)dword_53AE1`；`0x2A07A` 的循环上界 `cmp ebx,ds:0x53bfb; jge` 亦有符号，用 `(int)dword_53BFB`。
+- **原型骗过反编译器**：`fd2_funcs.h` 把 `0x2A43E` 记为 `int()`、`0x2A07A` 记为 `int(int)`；后者实为一参指针（写回缓冲），C 侧定 `int shop_usable_items(uint8_t *)`。
+- **伪 callee**：`0x28CBD` 尾 `je 0x28d80`/`jmp 0x28d85` 是自身循环回边，非外部函数。
+- **`0x2A07A` 私有助手**：唯一 caller `0x2A43E`，按 `map_levelup_mark_gain` 先例在头文件声明（非 static）。
+- 无对拍器，标“已还原未验证”；`0x279BC`/`0x29DAA`/`0x2872B`/`0x28F65`/`0x29300`/`0x29620`/`0x2AA00` 等上层仍待还原。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **145 → 144**（本轮 §44 −1），已还原未验证 **178 → 179**（本轮 +1）。（计数取 §43 后实测基线。）
+- `function-map.csv`：待还原 **144 → 140**（本轮 §45 −4），已还原未验证 **179 → 183**（本轮 +4）。（计数取 §44 后实测基线。）
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1220,6 +1251,11 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 → `sub_1C81F`，闭包 >8 暂跳）与表中其余大片条目；下一游戏头名仍为 u1 小簇
 `0x1D6C8`(sub_1CFF0)/`0x1DEBE`(sub_14237)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/
 `0x2A07A`(sub_2A43E)/`0x2F7B6`(sub_2EBE1)/`0x31266`(sub_2FF01) 等。
+本轮 §44 拉出 `0x31266`(fx_play)；本轮 §45 把地点/商店菜单族的同层四件 `0x28CBD`/`0x28EFE`
+（`sub_279BC` 的两个 callee）与 `0x2A43E`/`0x2A07A`（`sub_29DAA`→`sub_2A43E` 链）整体拉出
+（`shop_screen.c` 追加），故 `sub_279BC` 待还原 callee 由 4 降为 2（余 `0x2872B`/`0x28F65`）、
+`sub_2A43E` 与 `0x28EFE` 整函数闭合、`sub_29DAA` 待还原 callee 由 5 降为 4；下一游戏头名仍为 u1 小簇
+`0x1D6C8`(sub_1CFF0)/`0x1DEBE`(sub_14237)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2F7B6`(sub_2EBE1) 等。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交

@@ -577,3 +577,11 @@
 # 0x31266 is the second `call funcs_30469[reg*4]` site: it plays an emitter
 # over a saved background. Restored as fx_play (all callees already restored).
 0x31266 sub_31266 game/fx.h
+
+# the remaining place-menu entry screens driven by the still-pending 0x279BC /
+# 0x29DAA: 0x28CBD = member item list, 0x28EFE = member popup box, 0x2A43E =
+# buy screen + its 0x2A07A usable-record filter
+0x28CBD sub_28CBD game/shop_screen.h
+0x28EFE sub_28EFE game/shop_screen.h
+0x2A43E sub_2A43E game/shop_screen.h
+0x2A07A sub_2A07A game/shop_screen.h

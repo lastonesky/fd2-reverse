@@ -21,6 +21,25 @@
  *            stream comes from an equipment array (shop_party_equip_rows).
  *            Returns 1 / -1.
  *
+ * The remaining place-menu entry screens (the four menu options of 0x279BC)
+ * are driven here too:
+ *
+ *   0x28CBD  shop_sell_run     the member item list: pick a member with
+ *            menu_list_select, gather the state-bit-clear item slots of their
+ *            record, run shop_items_run over them, and on confirm show the
+ *            item's dialogue and, if the feedback window accepted, gain the
+ *            sale price (place_money_gain) and remove the slot.  With no items
+ *            it only shows the no-goods message.  Returns -1.
+ *   0x28EFE  shop_box_run      run the character popup box (box_run) for the
+ *            member picked with menu_list_select, preserving dword_53C67, then
+ *            reload DATO.DAT for the current place.  Returns -1.
+ *   0x2A43E  shop_buy_run      the buy screen: filter the usable records
+ *            (0x2A07A), choose one with shop_party_run, and on confirm spend
+ *            dword_53AE1 (price * count) and award the record; loops around the
+ *            feedback window.  Returns 0.
+ *   0x2A07A  shop_usable_items collect the indices whose rec_flag is 1 into the
+ *            caller's buffer; returns the count.
+ *
  * ABI = cdecl.  The three scratch buffers are the same globals msg.c,
  * menu_select.c and box_popup.c share; they are allocated with guest_malloc,
  * never the host heap.  The two `..._run` loops return the machine's EAX
@@ -49,5 +68,17 @@ int shop_party_run(int count, const uint8_t *members);
  * confirm, -1 on cancel. */
 int shop_party_equip_run(int count, const uint8_t *members,
                          const uint8_t *equip);
+
+/* 0x28CBD - the place menu's member item list (sell/inspect).  Returns -1. */
+int shop_sell_run(void);
+
+/* 0x28EFE - open the member's popup box, then reload DATO.DAT.  Returns -1. */
+int shop_box_run(void);
+
+/* 0x2A43E - the place menu's buy screen.  Returns 0. */
+int shop_buy_run(void);
+
+/* 0x2A07A - collect the indices whose rec_flag is 1 into `dst`; count. */
+int shop_usable_items(uint8_t *dst);
 
 #endif /* GAME_SHOP_SCREEN_H */
