@@ -1248,10 +1248,39 @@ closure-ready 游戏头名 `0x1C81F`(u3) 及其唯一待还原 callee/caller 交
 - 无对拍器，标“已还原未验证”。拉出后下一游戏头名仍为 u1 小簇
   `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2AA00`(sub_29DAA)/`0x2F7B6`(sub_2EBE1) 等。
 
+### 49) `funcs_1541F` 入口 22/26/27 + 共享伤害体（本轮，5 函数）→ `src/game/map_action.c/.h`（追加）
+
+closure-ready 游戏头名 `0x22D1B`(u5)；离线反汇编证实其真闭包＝自身（实调 `map_draw_party_icons_anim`
+(0x1C4CC)、`map_draw_party_icons`(0x1C2DA)、`unit_damage`(0x1C81F)、`map_enqueue_status`(0x1E0DB)、
+`ev4_1E1DC`(0x1E1DC)、`map_view_update`(0x11CAC)、`map_draw_status_popups`(0x1DF58)、`util_rand`(0x4EBE3)，
+全部已还原）。连同其共享体 `0x22CDA` 与三个 `funcs_1541F` 入口包装 `0x22BE1`/`0x22CBF`/`0x22E41`（均为其
+直接 caller，共同构成条目 22/26/27）整体拉出，合计 448 B。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x22D1B` | `map_action_damage_records` | 画队伍图标后，对列表里“效果字节 `field` 仍为空且 +32 类不为 25/26”的记录：50% 概率 `unit_damage(rec,10)` + 排队数字 + 把 `rec[field]` 置 `rand%4+2` + `dword_53EC8 += 8*rec[33]`；另一半只排空闲光标精灵。末尾 `map_view_update(0)`，`dword_53EC4!=0` 时 `map_draw_status_popups()`。`table_idx`＝图标子图库（由 `map_action_charge_damage` 传入）。 |
+| `0x22CDA` | `map_action_charge_damage` | 共享体：`dword_53EC4=0` → `rec_sub_table5(a1,index)` → 转 `map_action_damage_records`。三个入口包装都压常量后 `jmp 0x22BF7`（本函数体内）。 |
+| `0x22BE1` | `map_action_entry22` | 入口 22：`map_action_charge_damage(a1,22,count,list,39)`。 |
+| `0x22CBF` | `map_action_entry26` | 入口 26：`map_action_charge_damage(a1,26,count,list,37)`。 |
+| `0x22E41` | `map_action_entry27` | 入口 27：`map_action_charge_damage(a1,27,count,list,38)`。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声（伪 callee）**：`0x22D1B` 尾有两处 `JUMPOUT`：`0x22BBE` 是它**自己的尾声**
+  （`add esp,4; pop ebp/edi/esi/ebx; ret`，与入口 push 顺序一致），`0x22A7B` 是 `call 0x1DF58; jmp 0x22BBE`
+  的共享收尾，故 `dword_53EC4!=0` 路径等价于 `map_draw_status_popups(); return 0;`，不视为 callee。
+- **共享跳转尾**：`0x22BE1/0x22CBF/0x22E41` 三者前段压各自的常量后都 `jmp 0x22BF7`——`0x22BF7` 正是
+  `0x22BE1` 体内 `push a1; call 0x22CDA` 的那一条，故三者语义＝同一 `sub_22CDA` 调用（C 侧各写一条
+  语义调用，不模拟跳转）。`0x22BC6` 则 `jmp 0x22A9B`（另一共享体 `sub_22AA8`，§43 已还原），不属本簇。
+- **常量锚定**：`sub_20C6F` 行动码 14 直接 `sub_22D1B(a1,27,count,list,38)`（与入口 27 一致）、
+  `0x2DE..` 三连调用分别 `(a1,26,...,37)/(a1,22,...,39)/(a1,27,...,38)`——与三入口包装的常量逐一对上。
+- **chkstk**：五者皆 `push size; call 0x3702F`，丢弃。返回值为 `unit_damage`/队列残留，调用点不读，C 侧返回 0。
+- 无对拍器，标“已还原未验证”。拉出后下一游戏头名仍为 u1 小簇
+  `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2AA00`(sub_29DAA)/`0x2F7B6`(sub_2EBE1) 等。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **134 → 132**（本轮 §48 −2），已还原未验证 **189 → 191**（本轮 +2）。
+- `function-map.csv`：待还原 **132 → 127**（本轮 §49 −5），已还原未验证 **191 → 196**（本轮 +5）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 

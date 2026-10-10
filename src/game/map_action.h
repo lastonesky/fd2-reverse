@@ -1,4 +1,4 @@
-/* map_action.h - map action-effect handlers (original 0x21082 .. 0x22C04).
+/* map_action.h - map action-effect handlers (original 0x21082 .. 0x22E41).
  *
  * The per-record effects dispatched by the map action router sub_20C6F (action
  * codes 8..24) and by the funcs_1541F event/action table that sub_15311 and
@@ -29,6 +29,14 @@
  *   0x22BC6  +21 table    the same with entry-21 cost and effect byte 38
  *   0x22AA8               the shared body both of the above jump into
  *                        (charge cost, item_apply, then drain the status queue)
+ *
+ *   0x22D1B               the shared damage body of the entries 22/26/27:
+ *                        draw the icons, then deal 10 damage (50% chance) to
+ *                        each target whose effect byte is still empty, arm it
+ *                        to rand 2..5, queue the number and book 8*rec[33]
+ *   0x22CDA               its shared body: charge the cost, then run 0x22D1B
+ *   0x22BE1 / 0x22CBF / 0x22E41  entries 22/26/27: charge index 22/26/27 and
+ *                        damage effect byte 39/37/38 respectively
  *
  * ABI = cdecl, arguments decoded from the pushes (the offline disassembly is
  * the authority).  Record fields index the 80-byte table dword_53A45; the
@@ -85,5 +93,25 @@ int map_action_entry20(int a1, int count, const uint8_t *list);
 
 /* 0x22BC6 - funcs_1541F entry 21: charge cost index 21, effect byte 38. */
 int map_action_entry21(int a1, int count, const uint8_t *list);
+
+/* 0x22D1B - deal 10 damage (50% chance) to each listed record whose effect
+ * byte `field` is still empty, arm it to rand 2..5, book experience and queue
+ * the numbers.  Shared body of the funcs_1541F entries 22/26/27. */
+int map_action_damage_records(int a1, int table_idx, int count,
+                              const uint8_t *list, int field);
+
+/* 0x22CDA - charge cost `index` then run map_action_damage_records; shared
+ * body of the funcs_1541F entries 22/26/27. */
+int map_action_charge_damage(int a1, int index, int count, const uint8_t *list,
+                             int field);
+
+/* 0x22BE1 - funcs_1541F entry 22: charge cost index 22, effect byte 39. */
+int map_action_entry22(int a1, int count, const uint8_t *list);
+
+/* 0x22CBF - funcs_1541F entry 26: charge cost index 26, effect byte 37. */
+int map_action_entry26(int a1, int count, const uint8_t *list);
+
+/* 0x22E41 - funcs_1541F entry 27: charge cost index 27, effect byte 38. */
+int map_action_entry27(int a1, int count, const uint8_t *list);
 
 #endif /* GAME_MAP_ACTION_H */

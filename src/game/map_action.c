@@ -6,7 +6,8 @@
  *   map_draw_party_icons(_anim) (0x1C2DA/0x1C4CC), map_draw_status_popups
  *   (0x1DF58), map_enqueue_status (0x1E0DB), map_view_update (0x11CAC),
  *   ev4_1E1DC (0x1E1DC), rec_sub_table5 (0x1CA89), rec_slot_remove (0x1B8E7),
- *   unit_metrics (0x1B750) and the RNG util_rand (0x4EBE3).
+ *   unit_metrics (0x1B750), unit_damage (0x1C81F) and the RNG util_rand
+ *   (0x4EBE3).
  *
  * The Watcom stack probe (`push size; call 0x3702F`) is dropped.  The two
  * shared epilogues (`jmp 0x1317D`, `jmp 0x22BBE`) and the Hex-Rays `_CHP()`
@@ -222,4 +223,74 @@ int map_action_entry20(int a1, int count, const uint8_t *list)
 int map_action_entry21(int a1, int count, const uint8_t *list)
 {
     return map_action_charge_apply(a1, 21, count, list, 38);
+}
+
+/* 0x22D1B - shared "damage the listed records" body of the funcs_1541F
+ * entries 22/26/27.  It draws the party icons, then for every target whose
+ * effect byte `field` is still empty (and whose +32 class is neither 25 nor 26)
+ * it deals 10 damage with a 50% chance, queues the number, arms the effect
+ * byte to rand 2..5 and books 8*rec[33] experience; the other half of the
+ * targets just get their idle cursor sprite queued.  `table_idx` is the icon
+ * shape bank handed down by map_action_charge_damage (= the cost index). */
+int map_action_damage_records(int a1, int table_idx, int count,
+                              const uint8_t *list, int field)
+{
+    int i;
+
+    map_draw_party_icons_anim(a1, table_idx, count, list);
+    map_draw_party_icons(a1, table_idx, count, list);
+
+    for (i = 0; i < count; ++i) {
+        uint8_t *rec = (uint8_t *)dword_53A45 + REC_STRIDE * list[i];
+        int      dmg;
+
+        if (rec[field] != 0 || rec[32] == 25 || rec[32] == 26) {
+            ev4_1E1DC(list[i]);
+            continue;
+        }
+        if ((int32_t)util_rand() % 100 >= 50) {
+            ev4_1E1DC(list[i]);
+            continue;
+        }
+
+        dmg = unit_damage(list[i], 10);
+        map_enqueue_status(dmg, 94, list[i]);
+        rec[field] = (uint8_t)((int32_t)util_rand() % 4 + 2);
+        dword_53EC8 += 8u * (uint32_t)rec[33];
+    }
+
+    map_view_update(0);
+    if (dword_53EC4 != 0)
+        map_draw_status_popups();
+    return 0;
+}
+
+/* 0x22CDA - shared body of the funcs_1541F entries 22/26/27: clear the
+ * status-queue flag, charge cost `index` via rec_sub_table5, then run the
+ * damage body using `index` as the icon shape bank.  The entries below push
+ * their constants and fall into the 0x22BF7 tail of this body. */
+int map_action_charge_damage(int a1, int index, int count, const uint8_t *list,
+                             int field)
+{
+    dword_53EC4 = 0;
+    rec_sub_table5(a1, index);
+    return map_action_damage_records(a1, index, count, list, field);
+}
+
+/* 0x22BE1 - funcs_1541F entry 22: charge index 22, damage effect byte 39. */
+int map_action_entry22(int a1, int count, const uint8_t *list)
+{
+    return map_action_charge_damage(a1, 22, count, list, 39);
+}
+
+/* 0x22CBF - funcs_1541F entry 26: charge index 26, damage effect byte 37. */
+int map_action_entry26(int a1, int count, const uint8_t *list)
+{
+    return map_action_charge_damage(a1, 26, count, list, 37);
+}
+
+/* 0x22E41 - funcs_1541F entry 27: charge index 27, damage effect byte 38. */
+int map_action_entry27(int a1, int count, const uint8_t *list)
+{
+    return map_action_charge_damage(a1, 27, count, list, 38);
 }

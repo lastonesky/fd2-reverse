@@ -576,6 +576,15 @@
 0x22BC6 sub_22BC6 game/map_action.h
 0x22AA8 sub_22AA8 game/map_action.h
 
+# the funcs_1541F entries 22/26/27 (0x22BE1/0x22CBF/0x22E41) and their shared
+# damage body 0x22D1B + cost-charge wrapper 0x22CDA; the three wrappers push
+# their constants and jump into 0x22CDA's 0x22BF7 tail
+0x22D1B sub_22D1B game/map_action.h
+0x22CDA sub_22CDA game/map_action.h
+0x22BE1 sub_22BE1 game/map_action.h
+0x22CBF sub_22CBF game/map_action.h
+0x22E41 sub_22E41 game/map_action.h
+
 # 0x31266 is the second `call funcs_30469[reg*4]` site: it plays an emitter
 # over a saved background. Restored as fx_play (all callees already restored).
 0x31266 sub_31266 game/fx.h
