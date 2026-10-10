@@ -405,3 +405,11 @@
 0x19953 sub_19953 game/map_window.h
 0x26E38 sub_26E38 game/menu_select.h
 0x27D33 sub_27D33 game/menu_select.h
+
+# map party-status panel helpers (0x1B1E7 orchestrator still pending)
+0x1AF1E sub_1AF1E game/party_panel.h
+0x1AF99 sub_1AF99 game/party_panel.h
+0x1B019 sub_1B019 game/party_panel.h
+0x1B0AD sub_1B0AD game/party_panel.h
+0x1B14B sub_1B14B game/party_panel.h
+0x1B41D sub_1B41D game/party_panel.h

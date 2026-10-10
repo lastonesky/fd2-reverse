@@ -33,6 +33,7 @@
 #include "menu_actions.h"
 #include "menu_select.h"
 #include "msg.h"
+#include "party_panel.h"
 #include "path.h"
 #include "rec.h"
 #include "res.h"
