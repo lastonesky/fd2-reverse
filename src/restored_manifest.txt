@@ -348,3 +348,12 @@
 0x235F9 sub_235F9 game/scene_states.h
 0x23A0A sub_23A0A game/scene_states.h
 0x23B5F sub_23B5F game/scene_states.h
+0x23CD5 sub_23CD5 game/scene_states.h
+0x244B6 sub_244B6 game/scene_states.h
+0x24E80 sub_24E80 game/scene_states.h
+0x250CC sub_250CC game/scene_states.h
+0x23E74 sub_23E74 game/scene_states.h
+0x240FA sub_240FA game/scene_states.h
+0x25757 sub_25757 game/scene_states.h
+0x24754 sub_24754 game/scene_states.h
+0x2548C sub_2548C game/scene_states.h

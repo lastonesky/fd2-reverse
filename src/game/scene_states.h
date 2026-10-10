@@ -25,6 +25,15 @@ void scene_state_11(void);   /* 0x237D5 - funcs_25E23[11] */
 void scene_state_13(void);   /* 0x238DC - funcs_25E23[13] */
 void scene_state_15(void);   /* 0x23A0A - funcs_25E23[15] */
 void scene_state_16(void);   /* 0x23B5F - funcs_25E23[16] */
+void scene_state_17(void);   /* 0x23CD5 - funcs_25E23[17] */
+void scene_state_19(void);   /* 0x23E74 - funcs_25E23[19] */
+void scene_state_20(void);   /* 0x240FA - funcs_25E23[20] */
+void scene_state_21(void);   /* 0x244B6 - funcs_25E23[21] */
+void scene_state_25(void);   /* 0x24E80 - funcs_25E23[25] */
+void scene_state_26(void);   /* 0x250CC - funcs_25E23[26] */
+void scene_state_28(void);   /* 0x2548C - funcs_25E23[28] */
+void scene_state_29(void);   /* 0x25757 - funcs_25E23[29] */
+void scene_state_22(void);   /* 0x24754 - funcs_25E23[22] */
 void scene_state_23(void);   /* 0x24C1E - funcs_25E23[23] */
 void scene_state_08(void);   /* 0x235BC - funcs_25E23[8]  */
 void scene_state_24(void);   /* 0x24DF2 - funcs_25E23[24] */
@@ -42,6 +51,15 @@ void scene_state_27(void);   /* 0x25464 - funcs_25E23[27] */
 #define sub_238DC scene_state_13
 #define sub_23A0A scene_state_15
 #define sub_23B5F scene_state_16
+#define sub_23CD5 scene_state_17
+#define sub_23E74 scene_state_19
+#define sub_240FA scene_state_20
+#define sub_244B6 scene_state_21
+#define sub_24E80 scene_state_25
+#define sub_250CC scene_state_26
+#define sub_2548C scene_state_28
+#define sub_25757 scene_state_29
+#define sub_24754 scene_state_22
 #define sub_24C1E scene_state_23
 #define sub_235BC scene_state_08
 #define sub_24DF2 scene_state_24
