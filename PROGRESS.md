@@ -911,10 +911,36 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 - **归属**：`map_sprites.h`/`map_status.h` 已在伞头；新增 `map_shape.h`，伞头字母序插在 `map_scroll.h` 与 `map_sprites.h` 之间。
 - 无对拍器，标“已还原未验证”。
 
+### 34) 单位移动动画绘制相位簇（本轮，3 函数）→ `src/game/map_units.c/.h` 追加
+
+闭包就绪游戏函数中 **同 caller（`sub_22253`）** 的小簇：0x22253（541B，待还原，推断组 `ev3`）
+的唯一三个 callee，即“单位移动动画”的绘制相位。三者真依赖全部已还原/已验证。
+
+| 原址 | 新名 | 行为 |
+|---|---|---|
+| `0x22470` | `map_units_move_walk` | 走位：对 `dword_53AD1` 的 11 帧（下标 114..124）循环——从 `scratch` 还原地图视图；`rle2_blit_trans` 把该帧贴到格 (dst_x,dst_y)（`+0x8088 + 24*(dx−视图原点) + 10944*(dy−视图原点) + 456`，步长 456）；`dlg_portraits_refresh`；`gfx_copy_rows` 发布 312×192 到 `0xA0504`；`svc_wait_ticks(1)`。 |
+| `0x22547` | `map_units_move_reveal` | 揭示：先把 `sprite` `rle2_blit_trans` 进 `scratch` 同一格，再对 i=5..0——从 `scratch` 还原、`reveal_band(cx,cy,11,(cy/5)*i,192, dword_53A6D 帧 i)`、发布、`j___delay(10)`；收尾两次 `svc_wait_ticks(1)`，返回最后一帧 sprite（EDI）。 |
+| `0x22656` | `map_units_move_settle` | 稳定：i=0..9 的 `reveal_band(cx,cy,11,0,192, dword_53A6D 帧 i)`；只读第 3/4/5 实参。 |
+
+**陷阱 / 伪代码伪影**：
+- **chkstk 骗过反编译器（ABI 以离线反汇编定案）**：`0x22547` 的 `prototypes.csv`/`arity.json` 记为
+  `int(int)`（1 参），但机器前言 `mov ebp,[esp+0x1c]; mov esi,[esp+0x24]; mov eax,[esp+0x14]` 与唯一调用点
+  `0x22348`（`0x22253` 内，压 **6** 个实参）都要求 **6 参**；Hex-Rays 把多出的实参标成越帧局部 `v4..v8`。
+  C 侧按 6 参还原。
+- **返回值是 sprite 指针而非 int**：`0x22547` 尾 `jmp 0x1E5B9`（落在 `0x1E529` 体内的共享尾声
+  `mov eax,edi; pop×4; ret`）⇒ eax = 循环最后一帧 EDI（指针）；`0x22253` 随即把它当 `reveal_band` 的 table。
+  C 侧声明 `const void *`（台账 `int` 系尾声不在本体内造成的误标）。
+- **`0x22656` 只读第 3/4/5 实参**（`[esp+0x1c]`=`scratch`、`[esp+0x24]`=cy、`[esp+0x34]`→cx）：调用点仍压 7 参
+  （前两参为该驱动的目标格，末两参为 sprite/返回值），C 侧保留 7 参签名，未用者留名并以 `(void)` 消除告警。
+- **共享尾声（伪 callee）**：`0x22547` 尾 `jmp 0x1E5B9` 落在 `0x1E529`（已验证 dlg 资产）体内，是普通返回，非调用。
+- **chkstk**：三者皆 `push size; call 0x3702F`（不分配帧），丢弃。
+- **归属**：追加进既有 `map_units`（单位精灵在地图视图内的动画），未改已验证模块；`map_units.h` 已在伞头，无需改列。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180 → 179 → 176 → 172 → 169**（本批 −3；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143 → 144 → 147 → 151 → 154**（本批 +3）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180 → 179 → 176 → 172 → 169 → 166**（本批 −3；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143 → 144 → 147 → 151 → 154 → 157**（本批 +3）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -955,6 +981,9 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0x36FAC` 小库函数按既定策略跳过；
 另有多组同 caller 的小簇（均 u1）：`0x1C9DD`(sub_20C6F)、`0x22470`/`0x22547`/`0x22656`(sub_22253)、
 `0x2AC7D`/`0x2AE0E`/`0x2FB2C`(sub_2AA00)、`0x1E98C`/`0x1ECC7`(sub_1E856)、`0x1B1E7`(sub_19DF7)。
+本轮 §34 取同 caller 小簇的最优候选，把 `0x22470`/`0x22547`/`0x22656`(u1，`sub_22253` 的三个 callee)
+整体拉出（`map_units.c` 追加），故 `sub_22253` 现已闭包就绪（下一批候选）；游戏头名仍为
+`0x15880`(u1)、`0x15DA2`(u1)。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交

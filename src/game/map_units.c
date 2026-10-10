@@ -127,3 +127,99 @@ void map_units_animate(void)
     free(scratch);
     sub_11CAC(0);
 }
+
+/* --- phases of the unit-move animation 0x22253 (see map_units.h) -------- */
+
+/* 0x22470 - walk-in pass: for each of atlas dword_53AD1's 11 frames 114..124,
+ * restore the map view from `scratch`, blit the frame into the cell at
+ * (dst_x, dst_y), refresh the portrait layer and publish the 312x192 window
+ * to 0xA0504 before waiting one tick.  Arguments decoded from the single call
+ * site inside 0x22253 (analysis/cseg01_disasm.txt). */
+void map_units_move_walk(int dst_x, int dst_y, void *scratch)
+{
+    const int ox = (int)dword_53AA9;
+    const int oy = dword_53AAD;
+    int i;
+
+    for (i = 0; i < 11; ++i) {
+        const void *sprite = (const void *)(uintptr_t)
+            (dword_53AD1 + *(const uint32_t *)(uintptr_t)
+                           (dword_53AD1 + 4u * (uint32_t)(i + 114) + 6u));
+
+        memmove(dword_53A49, scratch, 0x25680u);
+        rle2_blit_trans(dword_53A49 + 0x8088u + 24u * (uint32_t)(dst_x - ox)
+                        + 10944u * (uint32_t)(dst_y - oy) + 456u,
+                        sprite, 456);
+        dlg_portraits_refresh();
+        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, dword_53A49 + 0x8088u,
+                      456, 0x138, 192);
+        svc_wait_ticks(1);
+    }
+}
+
+/* 0x22547 - reveal pass: blit `sprite` into `scratch` at the same cell, then
+ * for i = 5..0 restore the view from `scratch` and draw reveal_band around
+ * (cx, cy) with atlas dword_53A6D's frame i (y0 = (cy / 5) * i), publishing
+ * and delaying (j___delay(10)) each step.  Returns the last frame sprite left in EDI by
+ * the shared epilogue 0x1E5B9 - 0x22253 feeds it straight back to reveal_band
+ * as the table.  The recorded prototype (int(int)) is a chkstk artifact; the
+ * six arguments below come from the single call site inside 0x22253. */
+const void *map_units_move_reveal(int dst_x, int dst_y, void *scratch,
+                                  int cx, int cy, const void *sprite)
+{
+    const int   ox   = (int)dword_53AA9;
+    const int   oy   = dword_53AAD;
+    const void *last = sprite;
+    int i;
+
+    rle2_blit_trans((uint8_t *)scratch + 0x8088u
+                    + 24u * (uint32_t)(dst_x - ox)
+                    + 10944u * (uint32_t)(dst_y - oy) + 456u,
+                    sprite, 456);
+
+    for (i = 5; i >= 0; --i) {
+        const void *spr = (const void *)(uintptr_t)
+            (dword_53A6D + *(const uint32_t *)(uintptr_t)
+                           (dword_53A6D + 4u * (uint32_t)i + 6u));
+
+        memmove(dword_53A49, scratch, 0x25680u);
+        reveal_band(cx, cy, 11, (cy / 5) * i, 192, spr);
+        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, dword_53A49 + 0x8088u,
+                      456, 0x138, 192);
+        j___delay(10);
+        last = spr;
+    }
+
+    svc_wait_ticks(1);
+    svc_wait_ticks(1);
+    return last;
+}
+
+/* 0x22656 - settle pass: the same reveal_band loop for i = 0..9 over the
+ * dword_53A6D frames, but with y0 fixed at 0; only arguments 3..5 (scratch,
+ * cx, cy) are read, the other four are kept for the 7-argument ABI that
+ * 0x22253 uses and left unnamed.  Returns the last tick reading in EAX. */
+int map_units_move_settle(int unused1, int unused2, void *scratch,
+                          int cx, int cy, const void *unused3, int unused4)
+{
+    int i, r = 0;
+
+    (void)unused1;
+    (void)unused2;
+    (void)unused3;
+    (void)unused4;
+
+    for (i = 0; i < 10; ++i) {
+        const void *spr = (const void *)(uintptr_t)
+            (dword_53A6D + *(const uint32_t *)(uintptr_t)
+                           (dword_53A6D + 4u * (uint32_t)i + 6u));
+
+        memmove(dword_53A49, scratch, 0x25680u);
+        reveal_band(cx, cy, 11, 0, 192, spr);
+        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, dword_53A49 + 0x8088u,
+                      456, 0x138, 192);
+        r = svc_wait_ticks(1);
+    }
+
+    return r;
+}
