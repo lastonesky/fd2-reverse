@@ -208,6 +208,46 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 
 ---
 
+## 0-L. P1 启动（本轮）：`funcs_30469` 收尾 + 滑动合成簇
+
+### 1) `0x2C67D` → `fx_dots5`（`src/game/fx.c`）——P1 头号项，fx 分派表闭合
+
+- `funcs_30469[6]` 的 1151 B handler，也是该表**最后一块**；此前被单独摘出（唯一含 CRT `cos/sin`）。
+- 双效果共用：`selector 1/2/7/8` 把 5 粒子摆在椭圆上（角度 `72*n` 度，半径 `byte_540C9`，
+  y 基 `v23`=30，`rec[+6]==0` 时 90）：
+  `x[n]=(int)(cos a*byte_540C9+v23)`、`y[n]=(int)(sin a*byte_540C9*1.2+30.0)`；两处常量
+  经段镜像核出（`0x502AA`=double 1.2、`0x502B2`=double 30.0、float `0x3C8EFA2D`=π/180）。
+  两张只读表 `0x52605`(5 dword)/`0x52619`(5 B) 从镜像复制；`rec[+6]==0` 时前三项取反/清零。
+- `selector 0/3/6` 装填/复位旋转子（`byte_540C9/CA`、`dword_54090/98`、`dword_540A4/AC`），
+  `4/5` 为每帧五槽（`dword_540B0[]` 相位、`byte_540C4[]` 子图计数），每 5 帧发一次音效、
+  相位命中 2 时返回 1。
+- **离线反汇编定案**：Hex-Rays 把 `fild/fmul/fadd/__CHP/fistp` 渲染成 `_CHP()` + 乱序
+  `__int64`，逐指令回读 `0x2C7DD..0x2C890` 得上述两条公式；`__CHP`=截断转换（CRT 助手）。
+- **fx 表语义完整性**：`funcs_30469[0..9]` 现已 10/10 全部源码化（`fx.c`/`fx.h`），
+  `sub_31266` 小分派器只剩 `0x2FB2C/0x2FE14` 依赖。
+
+### 2) `0x182AD/0x18312/0x1839B/0x18409` → `fb_slide_band_a/b/c` + `fb_slide_step`（`src/game/fb_slide.c/.h`）
+
+- 对话框/地图框 12 步滑动转场的最底层合成器：三条 320 行带搬运（`memmove`，步长 320、
+  常量偏移 `0x8C0/0x8C5`、`0x5C/0x91C`、`0x5/0x7585`），`0x18409` 每步
+  `memmove(dst,saved,0xFA00)` → 三条带 → `memmove(0xA0000,dst,0xFA00)`。
+- 调用方证据：`0x17E0B`/`0x1B932`/`0x1BFFE`（`dword_53C5B/5F/63` 三块 0xFA00 暂存）。
+- ABI=`(int x, char *dst, char *src[, char *saved])`；负 x 移位并按 `-x` 裁剪字节数，
+  逐指令核对。无对拍器，标“已还原未验证”。
+
+### 验证与台账
+
+- `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
+- `function-map.csv`：待还原 **276 → 271**，已还原未验证 **47 → 52**（+5）。
+
+### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
+
+`0x2FACD`(u15，需先带 `0x18C6D`)、`0x115B6`(u9)、`0x14B78`(u8)、`0x24618`(u8，→`0x22046`)、
+`0x1C75E`(u7，→`0x1C81F`)、`0x13FD4/14EF0/1B932/2189A/22046/26CE4/26EDA`(u6) ……
+策略不变：**按 callee 簇整体拉出**（一个模块一次做完），不逐函数孤立处理。
+
+---
+
 ## 0-C. 下一步（按 module-map P0 执行）
 
 1. **P0 主状态机链**：`sub_25EBB`/`sub_117E7`/`sub_26152`/`sub_22E5C` + `funcs_25E23` 剩余 ~19 项

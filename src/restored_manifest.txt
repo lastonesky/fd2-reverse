@@ -11,6 +11,10 @@
 0x3aca3 AIL_allocate_sequence_handle lib/ail.h
 
 # P0 scene core
+0x182AD sub_182AD game/fb_slide.h
+0x18312 sub_18312 game/fb_slide.h
+0x1839B sub_1839B game/fb_slide.h
+0x18409 sub_18409 game/fb_slide.h
 0x25EBB sub_25EBB game/scene_core.h
 0x117E7 sub_117E7 game/scene_core.h
 0x26152 sub_26152 game/scene_core.h
@@ -161,6 +165,7 @@
 0x2BFD9 sub_2BFD9 game/fx.h
 0x2C217 sub_2C217 game/fx.h
 0x2C441 sub_2C441 game/fx.h
+0x2C67D sub_2C67D game/fx.h
 0x2CAFC sub_2CAFC game/fx.h
 0x2CCF4 sub_2CCF4 game/fx.h
 0x2CE1A sub_2CE1A game/fx.h
