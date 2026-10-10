@@ -457,3 +457,9 @@
 0x22866 sub_22866 game/map_action.h
 0x1B6B7 sub_1B6B7 game/map_records.h
 0x149F8 sub_149F8 game/map_records.h
+
+# map cursor direction-patch animation (drivers 0x16F55/0x1728C/0x18D8C/0x19DF7/0x1BBDC still pending)
+0x175A9 sub_175A9 game/map_cursor.h
+0x17643 sub_17643 game/map_cursor.h
+0x1741C sub_1741C game/map_cursor.h
+0x176B4 sub_176B4 game/map_cursor.h

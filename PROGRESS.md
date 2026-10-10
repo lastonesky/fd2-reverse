@@ -574,10 +574,45 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 - **chkstk**：三者皆 `push size; call 0x3702F`，丢弃。
 - 无对拍器，标“已还原未验证”。
 
+### 20) 地图方向光标补片动画簇 → `src/game/map_cursor.c/.h`（本轮，4 函数）
+
+`dword_53C57` 选方向的地图交互族（驱动器 `0x16F55/0x1728C/0x18D8C/0x19DF7/0x1BBDC`，均待还原）共用的
+“tile 补片 + 窗口暂存回填”动画：每帧先把暂存的 72×72 字节块贴回地图视图，再在 4 个偏移处
+`gfx_blit_transparent` 盖 4 张 tile，然后重画记录肖像并把 312×192 窗口发布到 VGA 暂存页 `0xA0504`。
+全部真依赖已还原（`dlg_portrait_find/draw`、`svc_play_sfx`、`anim_frame_step`、`map_render_view`、
+`dlg_portraits_refresh`、`map_draw_cursor`、`gfx_blit_transparent`、`gfx_copy_rows`、`kbd_flush`）：
+
+| 原址 | 新名 | 行为 |
+|---|---|---|
+| `0x175A9` | `map_cursor_window_save` | 释放旧 `dword_53A71` → `guest_malloc(0x1440)` → 72 行×72 字节从视图块拷入 |
+| `0x17643` | `map_cursor_window_restore` | 反向：把 72×72 块贴回视图（每行步长 456） |
+| `0x1741C` | `map_cursor_patch_expand` | 开场 4 帧：偏移表 `{0x390×4}` 每帧 `−0x8E8/−6/+6/+0x8E8`（发散）；先 find→sfx→anim→render→refresh→cursor→save |
+| `0x176B4` | `map_cursor_patch_collapse` | 收场 4 帧：偏移表 `{−0x23A0,0x378,0x3A8,0x2AC0}` 每帧 `+0x8E8/+6/−6/−0x8E8`（收敛）+ 末尾再回填一次 + `kbd_flush`；sfx 在 find 之前 |
+
+**陷阱 / 伪代码伪影**：
+- **探针不是 callee，且不分配帧（新的关键发现）**：`0x3702F` = `xchg [esp+4],eax; call 0x37042; mov eax,[esp+4];
+  ret 4`——`0x37042` 各条路径全是 `ret`，**不改 esp**。故 `push size; call 0x3702F` 只做守卫页探测，
+  函数帧来自显式的 `push ebx/esi/edi/ebp` + `sub esp,0x18`。这解释了 Hex-Rays 把 `0x1741C` 的
+  `[esp+0x2C]/[esp+0x30]` 误当“未初始化局部”：按上述净效应，`[esp+0x30]` = `[esp0+8]` = **第 2 实参**。
+- **ABI 由调用点定案**：两台机器码的前言一致，`mov ebp,[esp+0x30]` 即第二实参，故签名 =
+  `(const int *a_tiles, const int *b_tiles)`（各 4 个 dword 的索引数组；调用点
+  `0x16F91..0x16F97`、`0x1BC72..0x1BC77` 用 `lea/push` 压入局部数组佐证）。Hex-Rays 在 `0x1741C`
+  **丢掉这两个实参的加载**，把 4 元素偏移表误标成 `retaddr/a1/a2/v7`，必须以反汇编为准。
+- **伪 callee（共享尾声）**：两个画家尾部 `jmp 0x13FCC` 落在 `sub_13E9C` 体内（`add esp,0x18; pop×4; ret`）
+  → 普通 `return`；`function-map` 因此误列 `sub_13E9C`。真依赖只有本簇 4 个 + 上列已还原资产。
+- **块基点 vs 补片基点**：暂存块基点 = `+0x8088 + 24*(dword_53AB9−1) + 10944*(dword_53ABD−1)`（视图原点
+  左上隔一格），补片基点 = `+0x8088 + 24*dword_53AB9 + 10944*dword_53ABD`（恰好差一格 = 10968 字节）。
+- **索引表**：`0x51E9F` = `{7,5,6,4}`（镜像常量），`0x53EF2` 镜像里全 0（运行时填）；tile 偏移 =
+  `*(dword_53A89 + 4*(3*a[j]+2*b[j]))`，tile 指针 = `dword_53A89 + 该偏移`，每帧 4 张（机器每轮
+  重读 `dword_53A89`，C 侧同）。
+- **堆**：`dword_53A71` 是 `fd2_globals.h` 里的 `uint32_t` 标量 → 用 `guest_malloc/guest_free`（同 `0x3706E/0x3776E`）。
+- **返回值**：两者尾声 eax 残留最后一次 `memmove` 的结果，两个调用点均不读，C 侧声明 `void`。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205**，已还原未验证 **115 → 118**（+3）。
+- `function-map.csv`：待还原 **208 → 205 → 201**（本批 −4），已还原未验证 **115 → 118 → 122**（本批 +4）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -587,7 +622,9 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 本轮 §17 已拉出 `0x1F42D` 及其两个 caller `0x1F1CC`/`0x1F30A` 与私有 helper `0x4EB59`；
 本轮 §18 已拉出 `0x2921A` 及其同簇的 `0x26A0D/28B41/26A7A/26B91`；
 本轮 §19 已拉出 `0x1B6B7`/`0x149F8`（`map_records`）与 `0x22866`（`map_action`）；
-闭包就绪的头部单函数现为 `0x3645D`(u4)，随后是 `0x2E95B/17643/1E739/1F558/265EC/2F4D4`(u3)。
+本轮 §20 已拉出 `0x175A9`/`0x17643`/`0x1741C`/`0x176B4`（`map_cursor`），故其 5 个驱动器
+（`0x16F55/0x1728C/0x18D8C/0x19DF7/0x1BBDC`）只剩 `0x177FC`+`0x17898` 与 `0x16F55` 自身；
+闭包就绪的头部单函数现为 `0x3645D`(u4)，随后是 `0x1E739/1F558/2282F/265EC/2E95B/2F4D4/30E9D`(u3)。
 （`0x344B4` 已由 §16 连同其上游 `0x34366`/`0x33FAF` 整簇拉出；`0x2DF01/1FF79/1F73F` 已由 §14 拉出。）
 策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 结构反编译辅助）。
 （`0x2921A`＝地点菜单退场缩放（上批 §11 遗留）；`0x1B1E7`(地图队伍面板编排者，6 个 callee 已在 §12 还原）
