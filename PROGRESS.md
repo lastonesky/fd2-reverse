@@ -609,10 +609,38 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 - **返回值**：两者尾声 eax 残留最后一次 `memmove` 的结果，两个调用点均不读，C 侧声明 `void`。
 - 无对拍器，标“已还原未验证”。
 
+### 21) 队员图形动画视图助手簇 → `src/game/figure_view.c/.h`（本轮，3 函数）
+
+仍待还原的驱动器 `sub_2CF30`（0x2CF30，2269B）播放队员的 FIGANI.DAT 动画并铺 BG.DAT 卷动背景 +
+TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 callee `0x2E95B` 只在 CRT `fread` 包装
+`sub_373CA` 上重读 FD2.TMP，属库区，本批不收）：
+
+- `0x30E25` → `figure_bg_pick(count,units)`（u2）：从 `byte_52470[dword_53C03]` 起，倒序扫 `units[]`
+  的 80 字节记录，经 `map_cell_info` 取格信息，凡 `rec_skip(unit)==0 || sel==0` 就用其字节 6 作 BG 子图
+  索引；返回该索引（`sub_2FF01` 用它选 `res_load(BG.DAT,...)`）。
+- `0x2F4D4` → `figure_bg_scroll(unit,figure,screen,tmp,bg)`（u3）：两趟 i=9..0 把三张 BG 条带
+  `dword_5413F[(i)%3]` / `[(i+2)%3]` 经 `rle_decode` 铺进 640 步长工作缓冲（第二趟落点 +320），每步
+  `gfx_copy_rows` 从 `work+32*i` 发 320×200 窗到屏；中间清两缓冲→解当前 bg 到 320 步长屏→
+  `ui_status_panel_at(screen,unit)`→`res_blit(figure,0,work,640,-1)`。
+- `0x30E9D` → `figure_play(unit,mode,figure,base,tmp,screen,bg,tai)`（u3，840B）：按 `mode` 选
+  `dword_53A6D` 调色条带下标（8/32/33→19、>3→15、否则 11）；逐 `figure` 子精灵
+  （数=figure[2]，偏移=figure[4i+8]）→音效/姿态切换（`rec_sub_table5`+状态面板+非菜单模式画
+  bg/tai 并置 `flash=6`）→逐帧把 320 步长缓冲合成进 640 缓冲、按记录 +6 决定 `figure[i]`/`base[frame]`
+  先后、发框到 VGA、`outp` 调色闪 6 帧、推进 base 帧计/`svc_wait_ticks(1)`。
+
+**伪代码/语义要点**：
+- **算符顺序即 ABI**：本批三次调用都用离线反汇编的压栈序定了实参顺序（尤其 `0x30E9D` 的两次
+  `rle_decode_lut` 首参是 `a7`(a8)；`0x2F4D4` 的 `sub_2FACD(a3,a1)`＝`ui_status_panel_at(screen,unit)`）。
+- **`_EAX` 类型**：`dword_53A6D` 在 `fd2_globals.h` 是 `uint8_t*`，调色条带按 32 位读
+  `dword_53A6D + *(uint32_t*)(dword_53A6D+4*stride+6)`（同 `map.c`/`reveal.c` 约定）。
+- **chkstk**：三者皆 `push size; call 0x3702F`，丢弃。
+- **返回**：`0x2F4D4`/`0x30E9D` 的 eax 残留被调用点忽略，C 侧声明 `void`；`0x30E25` 返回索引，声明 `int`。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201**（本批 −4），已还原未验证 **115 → 118 → 122**（本批 +4）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198**（本批 −3），已还原未验证 **115 → 118 → 122 → 125**（本批 +3）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -624,7 +652,11 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 本轮 §19 已拉出 `0x1B6B7`/`0x149F8`（`map_records`）与 `0x22866`（`map_action`）；
 本轮 §20 已拉出 `0x175A9`/`0x17643`/`0x1741C`/`0x176B4`（`map_cursor`），故其 5 个驱动器
 （`0x16F55/0x1728C/0x18D8C/0x19DF7/0x1BBDC`）只剩 `0x177FC`+`0x17898` 与 `0x16F55` 自身；
-闭包就绪的头部单函数现为 `0x3645D`(u4)，随后是 `0x1E739/1F558/2282F/265EC/2E95B/2F4D4/30E9D`(u3)。
+调用量排序下，`function-map.csv` 的闭包就绪头名是 `0x3645D`(u4)，但它是 CRT `read` 包装（尾调 `sub_3CF50`=`lseek`，
+库区不投资源，同 module-map §2）；`0x2E95B`(u3) 同样因需 CRT `fread`（`sub_373CA`）而暂跳。
+本轮 §21 已把同属 `sub_2CF30` 的 `0x2F4D4/30E25/30E9D`(u3/u2) 作为一簇拉出。
+当前闭包就绪的游戏函数头名：`0x1E739`(u3)、`0x1F558`(u3)、`0x2282F`(u3)、`0x265EC`(u3)，随后 u2 若干
+（`0x1C142/1C1C3`、`0x2B439/2B843`、`0x272D0`、`0x2F631/2F7B6` 等同 caller 对）。
 （`0x344B4` 已由 §16 连同其上游 `0x34366`/`0x33FAF` 整簇拉出；`0x2DF01/1FF79/1F73F` 已由 §14 拉出。）
 策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 结构反编译辅助）。
 （`0x2921A`＝地点菜单退场缩放（上批 §11 遗留）；`0x1B1E7`(地图队伍面板编排者，6 个 callee 已在 §12 还原）
