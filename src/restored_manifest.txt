@@ -537,3 +537,11 @@
 0x22470 sub_22470 game/map_units.h
 0x22547 sub_22547 game/map_units.h
 0x22656 sub_22656 game/map_units.h
+
+# unit-AI target/action scorer (the move-target picker 0x1567E drives the two
+# raters; the action-target picker 0x1598A and decision driver 0x14EF0 are
+# still pending)
+0x1567E sub_1567E game/map_ai.h
+0x15880 sub_15880 game/map_ai.h
+0x15B77 sub_15B77 game/map_ai.h
+0x15DA2 sub_15DA2 game/map_ai.h
