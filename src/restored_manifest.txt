@@ -339,3 +339,12 @@
 # --- migrated from port/ (translation_map.csv) ---
 0x230F2 sub_230F2 game/scene_states.h
 0x231F9 sub_231F9 game/scene_states.h
+0x232E8 sub_232E8 game/scene_states.h
+0x234BB sub_234BB game/scene_states.h
+0x237D5 sub_237D5 game/scene_states.h
+0x238DC sub_238DC game/scene_states.h
+0x24C1E sub_24C1E game/scene_states.h
+0x22F37 sub_22F37 game/scene_states.h
+0x235F9 sub_235F9 game/scene_states.h
+0x23A0A sub_23A0A game/scene_states.h
+0x23B5F sub_23B5F game/scene_states.h

@@ -119,8 +119,25 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 2. 11 个 `static` 表访问器（`tbl_4E7DD/4E7F2/4E809/4E821/4E838/4E84F/4E866/4E87D/4E88E/4E8A5/4E8BC`）：调用方改用已迁入的 `tbl_ptr(base,stride,index,offset)`（`scene_core.c` 已示范 0x4E809→base 0x6238D/stride 31/offset -31）。
 3. `world_load.c` 的 IDA 短名 `p`/`buf` → 模块内别名（`world_load_alias.inc`）。
 
-**下一步**：P0 handler batch 2（idx[2] `sub_230F2` / idx[4] `sub_231F9` —— 现已被迁入的 `scene_place_records` 解锁）
-→ `funcs_25E3A` 余 10 项 → 解释器簇。
+**下一步**：`funcs_25E23` 余 9 项（idx 17/19/20/21/22/25/26/28/29）—— 其中 25/26（`0x24E80`→尾 `0x15487`、`0x250CC`→尾 `0x1B5EA`）是**外部 epilogue**（返回 eax，非简单推进状态），需单独核；其余按模板推进。→ 然后 `funcs_25E3A` 余 10 项 → 解释器簇。
+
+## 0-G. `funcs_25E23` batch 3/4（本轮）—— **21/30 已源码化**
+
+| 索引 | 新名 | 要点 |
+|---|---|---|
+| [6] | `scene_state_06` | 表 0x520E4/ED/F6（9B）+ `dword_53AD5[17]`/`rec_flag(43)` 双条件；origin=0x200000006 |
+| [7] | `scene_state_07` | 表 0x520FF/52109（10B）+ kind 字面量 2；末尾 `unit_add(5)`（尾 0x2327D）；origin=0xE00000008 |
+| [11] | `scene_state_11` | 表 0x52129/2137/2145（14B×14）+ `unit_add(17)`（尾 0x239B1）；origin=4 |
+| [13] | `scene_state_13` | 表 0x52153/2163/2173（16B×16）+ `unit_add` 前置 `sub_10B4E(1)`；origin=0xA0000000C |
+| [23] | `scene_state_23` | 行滚动 2..9（每行 30×（视图+等 tick））+ 行 9..15 每行 12 步淡出（fade 递增）+ 清屏 |
+| [1] | `scene_state_01` | 扫记录 5..10 的 +5 bit0 选 VM 单元格；三段固定延时；**末尾 `dword_53C03 = 2`（赋值非自增）** |
+| [9] | `scene_state_09` | 写 11 条记录（表 0x52113 + 11B 字面量）+ 三条记录（+4000/4080/4160）；设视图 origin qword；脚本序列 |
+| [15] | `scene_state_15` | 表 0x52183/2193（16B×16）+ `rec_flag(66..73)` 计数 >4 置标志；条件含 `dword_53BEF>18` |
+| [16] | `scene_state_16` | `unit_exists(18)` 双分支；表 0x521A3/21B3；origin=0x1100000011 |
+
+- 共享尾声语义在本批再次验证（0x2327D=unit_add+refresh+inc、0x239B1=inc）并**写进 C**（不模拟跳转）。
+- `-Werror` 抓到 `qword_53AA9` 被同址 `int32_t` 声明赢走 → 手工覆盖 + **提取器加"宽度优先"消解**（64>32>16）。
+- 验证：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头 OK。
 
 ---
 

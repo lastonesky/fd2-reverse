@@ -56,7 +56,8 @@ def main():
         def score(d):
             name, typ, mode, src = d
             ptr = '*' in typ
-            return (1 if ptr else 0, 1 if mode == 'lvalue' else 0)
+            width = 64 if '64' in typ else (32 if '32' in typ or typ in ('int', 'unsigned int') else 16)
+            return (1 if ptr else 0, 1 if mode == 'lvalue' else 0, width)
         best = max(ds, key=score)
         note = ''
         if len(ds) > 1:
