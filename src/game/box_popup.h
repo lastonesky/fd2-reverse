@@ -1,4 +1,4 @@
-/* box_popup.h - character/inventory popup box (original 0x17E0B .. 0x1B932).
+/* box_popup.h - character/inventory popup box (original 0x17E0B .. 0x1C1C3).
  *
  * The "open a party member's box" interaction: a framed panel with the two
  * HP/MP meters, the numeric readouts, the item rows and a name stream, opened
@@ -18,6 +18,10 @@
  *            confirm returns 1 (or -1 on ESC) through the item lookup.
  *   0x1B932  box_popup        run the box until the player confirms/cancels,
  *            slide out and free the buffers; returns "not cancelled".
+ *   0x1C142  box_item_select  mark one item slot (clear the 0x40 bit of the
+ *            same-half slots first), returns the slot.
+ *   0x1C1C3  box_item_usable  is item id `item` in the member's item-class
+ *            row (tbl_ptr base 0x6188A, stride 7, index = record byte +32)?
  *
  * ABI = cdecl.  Record pointers index the 80-byte table dword_53A45; `base`
  * is an absolute screen address.  Hand-restored, compile-verified, no
@@ -43,5 +47,11 @@ int box_input(int rec, int mode);
 
 /* 0x1B932 */
 int box_popup(int rec, int mode);
+
+/* 0x1C142 */
+int box_item_select(int rec, int slot);
+
+/* 0x1C1C3 */
+int box_item_usable(int rec, int item);
 
 #endif /* GAME_BOX_POPUP_H */

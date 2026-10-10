@@ -5,7 +5,8 @@
  * (0x187D6/0x1875D), dlg_frame_tile(0x1685C), dlg_box_stage(0x168B6),
  * dlg_wait_key(0x16C57), res_load(0x111BA), res_blit6(0x16886),
  * rle2_blit(0x4EBFF), vm_run(0x15F84), svc_play_sfx(0x25A96),
- * kbd_flush(0x4E381), fb_slide_step(0x18409) and tbl_ptr(0x4E8BC's table).
+ * kbd_flush(0x4E381), fb_slide_step(0x18409), rec_field_byte(0x1B722) and
+ * tbl_ptr(0x4E8BC / 0x4E88E tables).
  */
 #include "fd2_game.h"
 #include "box_popup.h"
@@ -288,4 +289,40 @@ int box_popup(int rec, int mode)
     guest_free((void *)(uintptr_t)dword_53C63);
 
     return ret != -1;
+}
+
+/* 0x1C1C3 */
+int box_item_usable(int rec, int item)
+{
+    const uint8_t *r = (const uint8_t *)dword_53A45 + 80u * (uint32_t)rec;
+    const uint8_t *cls = (const uint8_t *)tbl_ptr((void *)&fd2_data2[0x188A], 7,
+                                                  r[32], 0);
+    uint8_t type = item_rec(item)[0];
+    int i;
+
+    for (i = 0; i < 6; ++i) {
+        if (type == cls[i])
+            return 1;
+    }
+    return 0;
+}
+
+/* 0x1C142 */
+int box_item_select(int rec, int slot)
+{
+    uint8_t *r = (uint8_t *)dword_53A45 + 80u * (uint32_t)rec;
+    int v3 = rec_field_byte(rec, slot);
+    int i;
+
+    for (i = 0; i < 8; ++i) {
+        uint8_t *f = &r[2 * i + 10];
+
+        if ((*f & 0x40) == 0)
+            continue;
+        if ((v3 < 0x80 && r[2 * i + 11] < 0x80)
+            || (v3 >= 0x80 && r[2 * i + 11] >= 0x80))
+            *f = 0;
+    }
+    r[2 * slot + 10] = 0x40;
+    return slot;
 }
