@@ -445,3 +445,10 @@
 0x1F42D sub_1F42D game/mosaic_reveal.h
 0x1F1CC sub_1F1CC game/mosaic_reveal.h
 0x1F30A sub_1F30A game/mosaic_reveal.h
+
+# location/place-menu helpers (drivers 0x2670E/0x279BC/0x2872B/0x28CBD/0x29300/0x29DAA/0x2A43E still pending)
+0x26A0D sub_26A0D game/place_menu.h
+0x2921A sub_2921A game/place_menu.h
+0x28B41 sub_28B41 game/place_menu.h
+0x26A7A sub_26A7A game/place_menu.h
+0x26B91 sub_26B91 game/place_menu.h

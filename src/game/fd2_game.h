@@ -39,6 +39,7 @@
 #include "party_panel.h"
 #include "password.h"
 #include "path.h"
+#include "place_menu.h"
 #include "rec.h"
 #include "res.h"
 #include "reveal.h"
