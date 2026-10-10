@@ -9,6 +9,11 @@ Read `PROGRESS.md` and recent `src/game/*.c` for style. Leave the repo clean and
 - Inventory/status: `function-map.csv`; segment bytes: `analysis/seg_cseg01.bin` (file offset = addr - 0x10000).
 - Ghidra MCP may be unavailable in your context; the offline disassembly is the authority.
 
+> **IMPORTANT — bash exit codes abort your run.** A bash command that exits non-zero terminates this
+> child immediately. Any `grep`/`ls`/pipeline that may legitimately find nothing MUST end with
+> `|| true` (e.g. `grep -n "^ *1e504:" analysis/cseg01_disasm.txt || true`, `ls x | grep y || true`).
+> Avoid bare `grep` as the last command of a pipeline; do not use `set -e`/`pipefail`.
+
 ## Batch selection
 1. Compute closure-ready pending functions and pick a coherent cluster (1..6 funcs, <= ~1500 bytes) by usage desc, preferring same-module/callee clusters:
 
