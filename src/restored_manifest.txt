@@ -426,3 +426,11 @@
 0x1F73F sub_1F73F game/title_screen.h
 0x1FF79 sub_1FF79 game/title_screen.h
 0x2DF01 sub_2DF01 game/title_screen.h
+
+# map action-effect handlers (dispatched by sub_20C6F and funcs_1541F)
+0x21082 sub_21082 game/map_action.h
+0x226EA sub_226EA game/map_action.h
+0x22721 sub_22721 game/map_action.h
+0x22960 sub_22960 game/map_action.h
+0x22997 sub_22997 game/map_action.h
+0x22C04 sub_22C04 game/map_action.h

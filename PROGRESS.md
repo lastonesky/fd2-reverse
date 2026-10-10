@@ -411,10 +411,39 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
   `gfx_copy_rows(0xA0000,320,strip+320*row,320,320,200)` → 淡入：把 735 行的 5 段合成长图按 `row` 竖直开窗。
 - **伪 callee**：三者皆仅误挂 `sub_3702F`(chkstk)；真依赖全部已还原（res/rle/gfx/fade/svc）。三者无对拍器，标“已还原未验证”。
 
+### 15) 地图行动效果处理簇 → `src/game/map_action.c/.h`（本轮，6 函数）
+
+地图行动路由 `sub_20C6F`（行动码 8..24 分派）与 `funcs_1541F` 事件/行动表共同调用的
+“逐记录效果处理”簇。全部真依赖已还原（map/rec/ev4/unit_load/util）：
+
+- `0x21082` → `map_action_add_field(a1,value,field,slot,count,list,table_idx)`：画队伍图标 →
+  对 `list[0]` 记录的 `field` 处 16 位字 `+= value` → `map_enqueue_status(value,94,list[0])` →
+  刷新并弹状态数字 → `unit_metrics(a1)` → `rec_slot_remove(a1,slot)`。被 `sub_20C6F` 以多个
+  行动码（字段偏移 55/57/59/62/66/70、字形基 13/17/18/19）复用。
+- `0x22721` → `map_action_grow_x`：对每个目标，若记录 +34 标志为空则置为 `rand%4+2`，
+  把 +72 度量按 `(word * dbl_50210 + 1.0)` 增长（**Watcom `fild/fmul/fld1/faddp/__CHP/fistp`**，
+  C 侧即 `(int)((double)word * dbl_50210 + 1.0)` 截断）并把该增量显示为数字，`dword_53EC8 += 2*r[33]`；
+  否则只 `ev4_1E1DC` 排空闲光标精灵。
+- `0x22997` → `map_action_widen`：同构，作用 +36 标志并把 +76/+78 度量各 `+= 15`，显示 15。
+- `0x22C04` → `map_action_clear_flag`：`rec_sub_table5(a1,25)` 后对每个目标清除记录 +5 的 bit7
+  （`rec_flag_or80` 的逆操作），`dword_53EC8 += 8*r[33]`；否则排空闲光标精灵。
+- `0x226EA`/`0x22960` → `map_action_grow_x_cost`/`map_action_widen_cost`：`funcs_1541F` 第 17/19 项，
+  先 `rec_sub_table5(index,18/19)` 扣费再调用上面对应的 0x22721/0x22997。
+
+**陷阱/伪代码伪影**：
+- **伪 callee（共享尾声）**：`0x22721` 的 callee 表误挂 `sub_1300D`（尾 `jmp 0x1317D` 落进其共享尾声），
+  `0x22997` 误挂 `sub_22AF6`（尾 `jmp 0x22BBE`）——均按普通 return 处理，不传递依赖。
+- **chkstk**：六者皆 `push size; call 0x3702F`，丢弃。
+- **`_CHP()`**：`0x22721` 的 `call 0x37AF4` 是 Watcom 浮点取整辅助，配 `fistp` 即 C 的 `(int)` 截断。
+- **符号比较**：`0x22C04` 的 `rec[5] >= 0` 在机器上是 `test byte,0x80; je`，C 侧写 `(rec[5] & 0x80) == 0`
+  以避免 `uint8_t` 恒真；`v6 > 8 && v6 < 25` 用 `movzx` 无符号量，正数下与有符号同。
+- **返回值**：`0x22C04`/`0x22721`/`0x22997` 尾声处的 eax 是 `map_view_update`/`map_draw_status_popups`
+  的残留（均 void），调用点不读，C 侧返回 0。六者无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **229 → 226**，已还原未验证 **94 → 97**（+3）。
+- `function-map.csv`：待还原 **226 → 220**，已还原未验证 **97 → 103**（+6）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
