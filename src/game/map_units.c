@@ -288,3 +288,41 @@ void map_units_move_play(int rec, int rec_x, int rec_y, int at_x, int at_y)
     guest_free(scratch);
     guest_free(dato);
 }
+
+/* 0x2218A - deploy one map unit onto its (target) cell and follow it with the
+ * view.  `target` points at the record index to deploy (the only call site,
+ * 0x20C6F case 23, passes its unit-index array); `actor` is the acting record
+ * handed to rec_sub_table5.  The sequence glides the unit's portrait, spends
+ * one rec_sub_table5 entry, adds 10 * move-cost to the dword_53EC8 experience
+ * bookkeeping (cost = record byte 33, +30 when byte 32 is a walkable terrain
+ * 9..24), plays map_units_move_play from off-map (255,255) to the record's own
+ * cell, slides the view to qword_51CF9 (low dword = x, high dword = y), and
+ * replays the move onto that cell.  The middle argument is unused but keeps
+ * the 3-argument ABI of the call site. */
+void map_units_move_deploy(int actor, int unused, const uint8_t *target)
+{
+    const uint32_t x   = (uint32_t)qword_51CF9;
+    const uint32_t y   = (uint32_t)(qword_51CF9 >> 32);
+    const uint8_t  idx = *target;
+    const uint8_t *rec = (const uint8_t *)(uintptr_t)dword_53A45
+                         + 80u * (uint32_t)idx;
+    uint32_t cost = rec[33];
+
+    (void)unused;
+
+    dlg_portrait_glide(idx);
+    rec_sub_table5(actor, 23);
+
+    if (rec[32] > 8u && rec[32] < 0x19u) {
+        cost += 30u;
+    }
+    dword_53EC8 += 10u * cost;
+
+    map_units_move_play(idx, 255, 255, rec[0], rec[1]);
+
+    dword_51A83 = 0;
+    map_slide_view((int)x, (int)y);
+    map_units_move_play(idx, (int)x, (int)y, (int)x, (int)y);
+
+    dword_51A83 = 1;
+}

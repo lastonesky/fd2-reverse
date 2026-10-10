@@ -532,6 +532,7 @@
 
 # phases of the unit-move animation and their driver 0x22253 (the driver sets
 # the record's cell and loads the sfx); its inferred group is ev3)
+0x2218A sub_2218A game/map_units.h
 0x22253 sub_22253 game/map_units.h
 0x22470 sub_22470 game/map_units.h
 0x22547 sub_22547 game/map_units.h

@@ -14,8 +14,10 @@
  *                                    dword_53A6D.
  *   0x22253  map_units_move_play     driver of the three phases above (also
  *                                    set the record's cell and load the sfx).
+ *   0x2218A  map_units_move_deploy   deploy one unit onto its cell and slide
+ *                                    the view after it.
  *
- * All five are hand-restored and compile-verified; no differential harness yet.
+ * All are hand-restored and compile-verified; no differential harness yet.
  */
 #ifndef FD2_GAME_MAP_UNITS_H
 #define FD2_GAME_MAP_UNITS_H
@@ -43,6 +45,13 @@ int map_units_move_settle(int unused1, int unused2, void *scratch,
 /* 0x22253 - play the whole walk/reveal/settle move at cell (at_x, at_y) for
  * record `rec`, whose cell bytes are set to (rec_x, rec_y) in the process. */
 void map_units_move_play(int rec, int rec_x, int rec_y, int at_x, int at_y);
+
+/* 0x2218A - deploy the unit `target[0]` onto its cell, slip one
+ * rec_sub_table5(actor, 23) entry, book the move cost into dword_53EC8, play
+ * the walk from off-map to the unit's cell, slide the view to qword_51CF9 and
+ * replay the walk onto that cell.  The middle argument is unused but keeps the
+ * call site's 3-argument ABI. */
+void map_units_move_deploy(int actor, int unused, const uint8_t *target);
 
 /* Call sites keep the IDA name. */
 #define sub_1DB65 map_units_animate
