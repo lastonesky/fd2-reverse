@@ -182,8 +182,6 @@ int sub_22CDA(int, int, int, int, int);
 int sub_22D1B(int, int, int, int, int);
 int sub_22E41(int, int, int);
 int sub_22F37(int, int, int);
-int sub_230F2(int, int, int);
-int sub_231F9(int, int, int);
 int sub_232E8(int, int, int);
 int sub_234BB(int, int, int);
 int sub_235F9(int, int, int);

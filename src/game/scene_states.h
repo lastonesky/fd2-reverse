@@ -14,12 +14,16 @@
 #ifndef FD2_GAME_SCENE_STATES_H
 #define FD2_GAME_SCENE_STATES_H
 
+void scene_state_02(void);   /* 0x230F2 - funcs_25E23[2]  */
+void scene_state_04(void);   /* 0x231F9 - funcs_25E23[4]  */
 void scene_state_05(void);   /* 0x23296 - funcs_25E23[5]  */
 void scene_state_08(void);   /* 0x235BC - funcs_25E23[8]  */
 void scene_state_24(void);   /* 0x24DF2 - funcs_25E23[24] */
 void scene_state_27(void);   /* 0x25464 - funcs_25E23[27] */
 
 /* Call sites in not-yet-restored code keep the IDA names. */
+#define sub_230F2 scene_state_02
+#define sub_231F9 scene_state_04
 #define sub_23296 scene_state_05
 #define sub_235BC scene_state_08
 #define sub_24DF2 scene_state_24

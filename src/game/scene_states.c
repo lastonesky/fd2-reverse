@@ -79,3 +79,45 @@ void scene_state_27(void)
     sub_11506();
     dword_53C03++;
 }
+
+
+/* ---- batch 2 (unblocked by the migrated scene_place_records) ----------- */
+
+/* 0x230F2 - funcs_25E23[2]
+ * The original copies three 7-byte tables out of the data segment (0x520BA xs,
+ * 0x520C1 ys, 0x520C8 kind) into locals and passes them on; only reads happen,
+ * so here the image is passed directly. The rec_flag branch skips placement. */
+void scene_state_02(void)
+{
+    const uint8_t *xs   = (const uint8_t *)&fd2_data1[0x20BA];
+    const uint8_t *ys   = (const uint8_t *)&fd2_data1[0x20C1];
+    const uint8_t *kind = (const uint8_t *)&fd2_data1[0x20C8];
+
+    sub_11506();                        /* unit_refresh (before the test) */
+    if (rec_flag(6) != 0) {
+        vm(6);
+    } else {
+        scene_place_records(xs, ys, (uintptr_t)kind, 0, 6, 0, 0, 0, 0, 2u);
+        vm(7);
+    }
+    dword_53C03++;
+}
+
+/* 0x231F9 - funcs_25E23[4]
+ * Tables: xs from 0x520CF (7 bytes), ys is a 7-byte literal {11,11,11,9,10,9,10},
+ * kind from 0x520DD (7 bytes). Argument roles follow the verified
+ * scene_place_records: first=0, last=6, single=41, sx=12, sy=8, skind=0,
+ * origin = 6 | (4 << 32) (the two pushed dwords, low first). */
+void scene_state_04(void)
+{
+    const uint8_t *xs   = (const uint8_t *)&fd2_data1[0x20CF];
+    static const uint8_t ys_lit[7] = { 11, 11, 11, 9, 10, 9, 10 };
+    const uint8_t *kind = (const uint8_t *)&fd2_data1[0x20DD];
+
+    scene_place_records(xs, ys_lit, (uintptr_t)kind, 0, 6, 41, 12, 8, 0,
+                        ((uint64_t)4u << 32) | 6u);   /* origin = high<<32 | low */
+    vm(9);
+    sub_112A5(10);                      /* unit_add */
+    sub_11506();                        /* unit_refresh */
+    dword_53C03++;
+}

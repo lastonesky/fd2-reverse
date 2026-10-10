@@ -92,7 +92,7 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 
 ---
 
-## 0-F. 309 已验证资产迁入（本轮完成）
+## 0-F. 309 已验证资产迁入（完成）+ batch 2
 
 **结果**：`port/src/game` 的 31 对 `.c/.h` + `guest_mem.*` + `dos.h/platform.h/le.h` → `port3/src/`；
 **双 profile 零错误、`-Werror` 全绿、伞头自测通过**（`tools/check_compile.sh [--full]`）。
