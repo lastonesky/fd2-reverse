@@ -501,3 +501,6 @@
 # 0x20C6F/0x21227 still pending; siblings of map.c's 0x1C2DA/0x1C4CC)
 0x1CB94 sub_1CB94 game/map_sprites.h
 0x1CD17 sub_1CD17 game/map_sprites.h
+
+# item sub-menu loop that drives the box_popup helpers (callers 0x1BBDC / 0x28EFE still pending)
+0x1BFFE sub_1BFFE game/box_popup.h

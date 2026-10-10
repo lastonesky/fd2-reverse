@@ -18,6 +18,10 @@
  *            confirm returns 1 (or -1 on ESC) through the item lookup.
  *   0x1B932  box_popup        run the box until the player confirms/cancels,
  *            slide out and free the buffers; returns "not cancelled".
+ *   0x1BFFE  box_run         item sub-menu loop: open the box, then until the
+ *            input is ESC or the member has no free slot, re-stage the box
+ *            after a usable item is confirmed; ESC/full exits via the slide
+ *            out and the three scratch buffers are freed.
  *   0x1C142  box_item_select  mark one item slot (clear the 0x40 bit of the
  *            same-half slots first), returns the slot.
  *   0x1C1C3  box_item_usable  is item id `item` in the member's item-class
@@ -47,6 +51,9 @@ int box_input(int rec, int mode);
 
 /* 0x1B932 */
 int box_popup(int rec, int mode);
+
+/* 0x1BFFE */
+void box_run(int rec);
 
 /* 0x1C142 */
 int box_item_select(int rec, int slot);

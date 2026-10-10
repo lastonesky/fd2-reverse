@@ -307,6 +307,47 @@ int box_item_usable(int rec, int item)
     return 0;
 }
 
+/* 0x1BFFE */
+void box_run(int rec)
+{
+    int v1, v2, i;
+
+    box_open_anim(rec);
+    dword_53C57 = 0;
+
+    for (;;) {
+        do {
+            v1 = box_input(rec, 0);
+        } while (v1 == 0);
+
+        v2 = rec_field_byte(rec, (int)dword_53C57);
+
+        if (v1 == -1 || rec_slot_free(rec) == 0) {
+            for (i = 0; i <= 11; ++i)
+                fb_slide_step(i, (char *)(uintptr_t)dword_53C5B,
+                              (char *)(uintptr_t)dword_53C63,
+                              (char *)(uintptr_t)dword_53C5F);
+            memmove((void *)(uintptr_t)0xA0000u,
+                    (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
+            guest_free((void *)(uintptr_t)dword_53C5B);
+            guest_free((void *)(uintptr_t)dword_53C5F);
+            guest_free((void *)(uintptr_t)dword_53C63);
+            return;
+        }
+
+        if (box_item_usable(rec, v2) != 0) {
+            box_item_select(rec, (int)dword_53C57);
+            unit_metrics(rec);
+            memmove((void *)(uintptr_t)dword_53A49,
+                    (const void *)(uintptr_t)0xA0000u, 0xFA00u);
+            box_open_init(rec, (int)dword_53A49);
+            box_items_draw(rec, -1, (int)dword_53A49);
+            memmove((void *)(uintptr_t)0xA0000u,
+                    (const void *)(uintptr_t)dword_53A49, 0xFA00u);
+        }
+    }
+}
+
 /* 0x1C142 */
 int box_item_select(int rec, int slot)
 {

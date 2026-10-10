@@ -779,10 +779,33 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
   `map_scroll.h` 与 `map_status.h` 之间）。
 - 无对拍器，标“已还原未验证”。
 
+### 29) 物品子菜单循环（本轮，1 函数）→ `src/game/box_popup.c`（追加，物品盒家族闭合）
+
+§24 收尾的 `box_item_usable`/`box_item_select` 之后，物品盒（DATO）编排环 `0x1BFFE` 成为本轮
+闭包就绪的游戏函数头名（u2，324B）；它的全部 callee 均已在册（`0x17E0B`/`0x1B9DE`/`0x17EEF`/
+`0x184C0`/`0x1C142`/`0x1C1C3`/`0x18409` 及 `rec_field_byte`(0x1B722)/`rec_slot_free`(0x1B8A6)/
+`unit_metrics`(0x1B750)），故按“同模块簇”直接拉出，物品盒模块现闭合：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1BFFE` | `box_run(rec)` | `box_open_anim(rec)` + `dword_53C57=0` → 内层 `do{ v1=box_input(rec,0); }while(v1==0)`；`v2=rec_field_byte(rec,dword_53C57)`；若 `v1==-1 || rec_slot_free(rec)==0` → 12 步 `fb_slide_step` 滑出 + `memmove(0xA0000,dword_53C5F,0xFA00)` + 释放三块 0xFA00 暂存 → 返回；否则若 `box_item_usable(rec,v2)!=0` → `box_item_select` + `unit_metrics` + 把屏存进 `dword_53A49` → `box_open_init`/`box_items_draw` 重铺箱面 → 回贴屏，继续环。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声（伪 callee）**：尾 `jmp 0x10C49` 落在 `0x10B4E` 体内它自己的尾声
+  （`add esp,0x4; pop edi; pop esi; pop ebx; ret`）。该 `add esp,0x4` 恰好清掉**最后一次**
+  `guest_free(0x53C63)` 压入的实参——前两次 free 各自带 `add esp,0x4`，故本函数净栈平衡，
+  跳转即普通 `return`，**不是**对 `sub_10B4E/sub_10C50` 的调用；`function-map` 亦未误列。
+- **返回值**：机器 eax 残留最后一次 `guest_free` 的结果；两个调用点（`0x1BFC6` 压 `ebp`；
+  `0x28F30` 压 `dword_53C57`）均不读，C 侧声明 `void`（签名 `(int rec)`）。
+- **chkstk**：`push 0x20; call 0x3702F`（`0x3702F` 不分配帧），丢弃。
+- **归属**：追加进既有 `box_popup.c`（`fd2_game.h` 伞头已含该模块头，无需改动）。两个 caller
+  `0x1BBDC`（物品盒驱动，`sub_53C57==2` 分支）与 `0x28EFE`（商店菜单）仍待还原。无对拍器，
+  标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181**（本批 −2；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142**（本批 +2）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180**（本批 −1；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143**（本批 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -805,8 +828,10 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 本轮 §26 已拉出闭包就绪头名 `0x1A7BD`/`0x1A7F1`(u2，`0x1A30B` 的音效库加载/释放对)。
 本轮 §27 已拉出闭包就绪头名 `0x2B439`/`0x2B843`(u2，同 caller `sub_2AF28` 的队伍名册助手)。
 本轮 §28 已拉出闭包就绪头名 `0x1CB94`/`0x1CD17`(u2，`map.c` 的 0x1C2DA/0x1C4CC 同族；地图视口记录精灵族现只剩调用者 `0x1CAC7` 与格坐标 `0x1EC2A`)。
+本轮 §29 已拉出闭包就绪头名 `0x1BFFE`(u2，物品盒编排环，`box_popup` 家族闭合；其 caller `0x1BBDC`/`0x28EFE` 仍待还原)。
 现闭包就绪的游戏函数头名：`0x1EC2A`(u2，格坐标/标记锚点)
-/`0x272D0`/`0x2A0C2`/`0x2A694`(u2，名册行绘制)/`0x1BFFE`(u2，物品盒；其私有助手 0x1C142/0x1C1C3 已还原)；
+/`0x272D0`/`0x2A0C2`/`0x2A694`(u2，名册行绘制；同一 `sub_2670E`/`2872B`… 商店屏家族)
+/`0x1CAC7`(u2，§28 `map_draw_record_layer` 的驱动器)；
 另有多组同 caller 的小簇（均 u1）：`0x1C9DD`(sub_20C6F)、`0x22470`/`0x22547`/`0x22656`(sub_22253)、
 `0x2AC7D`/`0x2AE0E`/`0x2FB2C`(sub_2AA00)、`0x1E98C`/`0x1ECC7`(sub_1E856)、`0x1B1E7`(sub_19DF7)。
 
