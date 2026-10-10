@@ -395,18 +395,35 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 - **返回值**：`0x13A44` 在部分路径于 eax 留一字节，其三个调用点（`0x1300D/0x13A9F/0x18890`）均不读，
   C 侧声明 `void`。
 
+### 14) 开场/继续游戏画面助手 → `src/game/title_screen.c/.h`（本轮，3 函数）
+
+开场屏 `0x1F894`（载 FDOTHER.DAT、滚动 logo、读 FD2.SAV 询问“继续？”）的三个已闭包就绪 callee：
+
+- `0x2DF01` → `pal_blend_to(first,last,step,r,g,b)`（u5，本轮最高）：把 DAC 段 `[first,last)` 每项按
+  `target + (pal[i]-target)*step/40` 混合（机器用 `imul/idiv`，**有符号截断**；`step`=40 原样输出、0 全变目标色），
+  每项先 `outp(0x3C8,i)` 再逐通道 `outp(0x3C9,·)`；`outp` 经原地址 `0x37AE5` 调用（同 `fade.c`）。被开场屏与片头 `0x2D80D` 共用。
+- `0x1FF79` → `title_options_draw(image,selected,count)`（u4）：把 `image`（FDOTHER 项）的第 1..3 条选项带
+  `res_blit6` 到屏幕固定偏移 `0xACD81/0xAD8C1/0xAE401`（各差 9 行=2880B），选中行用偶数子图（2/4/6）、
+  否则奇数（1/3/5）；`count` 决定画 1..3 条（`cmp;jle` 有符号）。原函数 eax 留 `res_blit6` 的返回值，调用点不读，C 侧声明 `void`。
+- `0x1F73F` → `title_frame_show(image_index,palette_index,strip,row)`（u1）：淡出 → `memset(0xA0000,0,0xFA00)`
+  → `res_load(FDOTHER,·,palette_index)` 换调色板 + `res_load(FDOTHER,0,image_index)` → `rle_decode` 到屏
+  → 淡入 → `svc_wait_ticks(1)`/`(6)` → 淡出 → `res_load(FDOTHER,·,101)` →
+  `gfx_copy_rows(0xA0000,320,strip+320*row,320,320,200)` → 淡入：把 735 行的 5 段合成长图按 `row` 竖直开窗。
+- **伪 callee**：三者皆仅误挂 `sub_3702F`(chkstk)；真依赖全部已还原（res/rle/gfx/fade/svc）。三者无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **235 → 229**，已还原未验证 **88 → 94**（+6）。
+- `function-map.csv`：待还原 **229 → 226**，已还原未验证 **94 → 97**（+3）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
 本轮 §13 已拉出 `0x12EAA/1300D/13185/13315/13488/13A44`（它们是 `0x14B78` 与 `0x18890` 的直接 callee），
 故 `0x14B78`(u8) 的真闭包已缩小，但仍含 `146D1/14237/1DEBE/15055/15311/1548E/1567E/1598A…`，>8 函数，暂跳。
 `0x1C75E`(u7，链 `1C81F`→`14121`→`14B78`，同上跳过)、`0x14EF0/2E9A8`(u6)。
-闭包就绪的头部单函数现为 `0x2DF01`(u5，`outp`)、`0x344B4`(u5，`sub_4E22A`），随后是
-`0x1B6B7/1F42D/1FF79/2921A/3645D`(u4) 与 `0x149F8/17643/1E739/1F558/22721`(u3)。
+闭包就绪的头部单函数现为 `0x344B4`(u5，`sub_4E22A`），随后是
+`0x1B6B7/1F42D/2921A/3645D`(u4) 与 `0x149F8/17643/1E739/1F558/22721`(u3)。
+（`0x2DF01/1FF79/1F73F` 已由 §14 按“同 callee 簇”整体拉出。）
 策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 结构反编译辅助）。
 （`0x2921A`＝地点菜单退场缩放（上批 §11 遗留）；`0x1B1E7`(地图队伍面板编排者，6 个 callee 已在 §12 还原）
 现已闭包就绪，惟其内层读未初始化的 ebp，需先定性 tick 基线。）

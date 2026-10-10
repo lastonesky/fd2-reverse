@@ -50,6 +50,7 @@
 #include "status_screen.h"
 #include "svc.h"
 #include "tables.h"
+#include "title_screen.h"
 #include "unit.h"
 #include "unit_load.h"
 #include "util.h"

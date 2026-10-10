@@ -421,3 +421,8 @@
 0x13315 sub_13315 game/map_scroll.h
 0x13488 sub_13488 game/map_scroll.h
 0x13A44 sub_13A44 game/map_scroll.h
+
+# opening / continue-screen helpers (0x1F894 orchestrator still pending)
+0x1F73F sub_1F73F game/title_screen.h
+0x1FF79 sub_1FF79 game/title_screen.h
+0x2DF01 sub_2DF01 game/title_screen.h
