@@ -547,3 +547,10 @@
 0x1598A sub_1598A game/map_ai.h
 0x15B77 sub_15B77 game/map_ai.h
 0x15DA2 sub_15DA2 game/map_ai.h
+
+# map item-use screen helpers (all three are the closure-ready callees of the
+# still-pending driver sub_2AA00 0x2AA00; 0x2FB2C is also the figure-animation
+# driver of the sub_2AA00 item flow)
+0x2AE0E sub_2AE0E game/item_menu.h
+0x2AC7D sub_2AC7D game/item_menu.h
+0x2FB2C sub_2FB2C game/item_menu.h

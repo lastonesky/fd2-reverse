@@ -25,6 +25,7 @@
 #include "fx.h"
 #include "gfx.h"
 #include "guest_mem.h"
+#include "item_menu.h"
 #include "item_use.h"
 #include "kbd.h"
 #include "map.h"

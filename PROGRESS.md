@@ -1041,10 +1041,33 @@ module-map §2 既定策略跳过。
 - **+68/+70 语义**：`box_status_draw`(0x17FC0) 将其绘为第二根量表、`ev5_25089` 令 `+68=+70`，判为魔法点池。
 - **归属/别名**：追加至 `item_use`；被调方均以语义名调用（`unit_heal`/`tbl_ptr`/`util_rand`），无需新增 `#define` 别名；`fd2_game.h` 已含 `item_use.h`。无对拍器，标“已还原未验证”。
 
+### 40) 地图"对队员使用道具"屏簇（本轮，3 函数）→ `src/game/item_menu.c/.h`（新建）
+
+本轮 closure-ready 游戏头名仍被 CRT/库包装 `0x3645D`(u4)/`0x2E95B`(u3)/`0x365DA`(u2) 与巨型 CRT
+包装 `0x190AC`(u1，callee 全为 `sub_34xxx..sub_36xxx` 数学库) 占据；`0x1B1E7`(u1) 真闭包自身但**内层读未初始化**
+（`retaddr`/`v0`，§32 已记）暂跳。按"同 caller"聚类，取仍待还原的驱动器 `sub_2AA00`(0x2AA00) 的三个
+callee——`0x2AE0E`/`0x2AC7D`/`0x2FB2C`——作为一簇（1350B，真闭包＝自身，callee 全在册）。本批后
+`sub_2AA00` 的待还原 callee 由 3 归零（该驱动器已闭包就绪）。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2AE0E` | `item_menu_list(records,kinds)` | 扫 `i<dword_53BFB` 的 80B 记录：`rec[33]>=0x14 && rec[7]<0x12 && rec[7]!=7`；`records[n]=i`，`kinds[n]=type+32`，`ev3_2AEDB(i,byte_523D5[type])!=-1` 时 `type+50`，`type==9 && ev3_2AEDB(i,90)!=-1` 时 52；返回 n（**2 个实参**，反编译只列了 1 个）。 |
+| `0x2AC7D` | `item_menu_use(rec)` | `tbl_620A1(rec[7])`；`kbd_flush`→`msg_open_portrait(rec[7])`→`dword_53AD9=rec[0x20]+150`→`vm_run(...,595,0xA951F,320,205,76,74,19,1)`→`dlg_blit_dato`→`kbd_flush`；五连 `msg_show_page(rec+0x37/0x39/0x3e/0x42/0x46, tbl+0..8, 490..494, prev_page)`；`tbl_615FE(rec[7])[1]!=0` 时 `vm_run(...,596,6080*page+0xA951F,...)`+`dlg_wait_key(0)`+`rec[0x3b]+=dword_53AE1`；`unit_metrics(rec)`+`msg_close_portrait()`+`rec[0x21]=1/rec[0x3c]=0/word[+0x40]=word[+0x42]/word[+0x44]=word[+0x46]`；末尾 `kbd_flush`。 |
+| `0x2FB2C` | `item_menu_figure_play(rec,group)` | `res_load(BG.DAT)` ×3 → `dword_5413F[0..2]`；`malloc(0x1F400)` 工作缓冲 +`malloc(0xFA00)` 快照；`res_load(FIGANI.DAT, 3*rec[7])`/`(…,3*group)`；`pal_fade_out`+`svc_wait_ticks(1)`；`i=8..0`：`memset`+（BDA tick 非 0 时 `strip=(strip+1)%3`）+`rle_decode(dword_5413F[strip],0,50,work,640,-1)`+`res_blit(fig_user,0,work+10*i,640,-1)`+`gfx_copy_rows`+`pal_fade_range(0,255,6*i)`；`figure_frame_run(fig_user,work,16)`；`j=0..19` `pal_fade_add(0,255,3*j)`+`j___delay(10)`；再 `rle_decode+res_blit(fig_target,work+10*j=+200)+gfx_copy_rows+pal_fade_range(0,255,0)+figure_frame_run(fig_target,work,24)+pal_fade_out+memmove(恢复)+pal_fade_in`；七次 `free`。 |
+
+**陷阱 / 伪代码伪影**：
+- **`sub_2AE0E` 实参个数**：反编译原型记 `int(int)`，但反汇编读 `[esp+0x1c]`（记录号输出数组）与 `[esp+0x20]`（kind 输出数组）两槽；调用点 `sub_2AA00` 亦压两参（`v10,v9`）。C 侧定为 2 参。
+- **`dword_5413F` 是 3 元素数组**：`dword_5413F[0]` 与独立标量 `dword_54143`/`dword_54147` 相邻（0x5413F/43/47）；`res_load` 返回值经 `(uint32_t)(uintptr_t)` 存入。
+- **BDA tick 判定**：`mov eax,0x46c; movsx eax,WORD[eax]; je` → `if (BDA_W(0x46C)!=0) strip=(strip+1)%3`；反编译误渲染为 `if (&p != nullptr)`。
+- **`0x2AC7D` 返回值**：机器 `ret` 时 eax 来自其调用的 `kbd_flush`（void），无意义；C 侧声明为 void（调用方忽略）。
+- **`sub_2FB2C` 的 i/j 复用**：`j` 循环结束后第 2 次 `res_blit` 用 `work+10*j`（j==20→+200），C 侧按同序写。
+- **chkstk**：三者皆 `push size; call 0x3702F`（不分配帧），丢弃。
+- **归属/别名**：新建 `item_menu`；被调方均以语义名调用（`msg_show_page`/`vm_run`/`res_load`/`figure_frame_run`…），无需 `#define` 别名（`sub_2FE14` 已按 figure_view.h 的 `figure_frame_run` 调用）。无对拍器，标"已还原未验证"。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → … → 160 → 159 → 157**（本批 −2），已还原未验证 **115 → … → 163 → 164 → 166**（本批 +2）。
+- `function-map.csv`：待还原 **208 → … → 160 → 159 → 157 → 154**（本批 −3），已还原未验证 **115 → … → 163 → 164 → 166 → 169**（本批 +3）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1094,7 +1117,10 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 游戏头名转为 `0x1c8ed`/`0x1c9dd`(u1，`sub_1C916`/`sub_4EBE3` 小簇)；
 本轮 §39 继而把这个头名对 `0x1C8ED`/`0x1C9DD` 拉出（`item_use` 追加），治疗族闭合。
 下一游戏头名转为 `0x2e95b`(u3，仍需 CRT `fread` `sub_373CA`，暂跳)，其后为同属 `sub_20C6F`/`sub_21B18`
-等地图驱动器及 u1 小簇（`0x1E98C`/`0x1ECC7`、`0x2AC7D`/`0x2AE0E`/`0x2FB2C`、`0x1B1E7`），均受各自 caller 闭包阻挡。
+等地图驱动器及 u1 小簇（`0x1E98C`/`0x1ECC7`、`0x1B1E7`），均受各自 caller 闭包阻挡。
+本轮 §40 继而把同 caller（`sub_2AA00`）的三个 u1 callee `0x2AC7D`/`0x2AE0E`/`0x2FB2C` 拉出（新建 `item_menu`），
+故 `sub_2AA00` 已闭包就绪；下一游戏头名再回落至同 caller 对 `0x1E98C`/`0x1ECC7`（`sub_1E856`）与 u1 小簇
+`0x1D6C8`/`0x1D79C`/`0x1DEBE`/`0x1EB05`/`0x22AA8`/`0x24BDE`/`0x28632`/`0x2A07A`/`0x2F7B6` 等（分别闭簇其 caller）。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交
