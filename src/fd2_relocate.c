@@ -32,6 +32,8 @@
 #include "game/gfx.h"
 #include "game/kbd.h"
 #include "game/map.h"
+#include "game/map_units.h"
+#include "game/map_window.h"
 #include "game/menu_actions.h"
 #include "game/msg.h"
 #include "game/path.h"
