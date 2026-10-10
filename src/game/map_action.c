@@ -15,6 +15,14 @@
  * `(int)` cast, matching unit_metrics' 1.15 scaling and unit_heal's `% 100`.
  * Hex-Rays lists sub_1300D as a callee of 0x22721 and sub_22AF6 as a callee of
  * 0x22997; both are false (jumps into a neighbour's shared epilogue).
+ *
+ * The funcs_1541F effect entries 0/1/2/3/8 (0x21206/0x2134B/0x21364/0x2137D/
+ * 0x21494) all fall into the 0x2121A tail of 0x21206 and hence the shared body
+ * map_action_resolve_list (0x21227); their tails land on the 0x21190 epilogue
+ * inside 0x2111A, which IDA records as a false callee.  All callees here
+ * (map_draw_party_icons(_anim), map_blink_units, rec_sub_table5,
+ * unit_action_damage, map_enqueue_status, ev4_1E1DC, map_view_update,
+ * map_draw_status_popups) are already-restored assets.
  */
 #include "fd2_game.h"
 #include "map_action.h"
@@ -293,4 +301,66 @@ int map_action_entry26(int a1, int count, const uint8_t *list)
 int map_action_entry27(int a1, int count, const uint8_t *list)
 {
     return map_action_charge_damage(a1, 27, count, list, 38);
+}
+
+/* 0x21227 - shared effect body of the funcs_1541F entries 0/1/2/3/8: clear
+ * the status-queue flag, draw the party icons with shape bank `table_idx`,
+ * blink the targets over the map view, charge cost `table_idx` via
+ * rec_sub_table5, then resolve action `table_idx` on every listed record
+ * (unit_action_damage) and queue the number it dealt (or the idle cursor
+ * sprite on a miss).  Ends with the shared 0x21190 tail (map_view_update(0)
+ * + map_draw_status_popups).  The entries below push their constant and fall
+ * into this body via the 0x2121A tail of map_action_entry00. */
+int map_action_resolve_list(int a1, int table_idx, int count,
+                            const uint8_t *list)
+{
+    int i;
+
+    dword_53EC4 = 0;
+    map_draw_party_icons_anim(a1, table_idx, count, list);
+    map_blink_units(a1, table_idx, count, list);
+    rec_sub_table5(a1, table_idx);
+
+    for (i = 0; i < count; ++i) {
+        int dmg = unit_action_damage(list[i], table_idx);
+
+        if (dmg != 0)
+            map_enqueue_status(dmg, 94, list[i]);
+        else
+            ev4_1E1DC(list[i]);
+    }
+
+    map_view_update(0);
+    map_draw_status_popups();
+    return 0;
+}
+
+/* 0x21206 - funcs_1541F entry 0: resolve action 0 on the list. */
+int map_action_entry00(int a1, int count, const uint8_t *list)
+{
+    return map_action_resolve_list(a1, 0, count, list);
+}
+
+/* 0x2134B - funcs_1541F entry 1: resolve action 1 on the list. */
+int map_action_entry01(int a1, int count, const uint8_t *list)
+{
+    return map_action_resolve_list(a1, 1, count, list);
+}
+
+/* 0x21364 - funcs_1541F entry 2: resolve action 2 on the list. */
+int map_action_entry02(int a1, int count, const uint8_t *list)
+{
+    return map_action_resolve_list(a1, 2, count, list);
+}
+
+/* 0x2137D - funcs_1541F entry 3: resolve action 3 on the list. */
+int map_action_entry03(int a1, int count, const uint8_t *list)
+{
+    return map_action_resolve_list(a1, 3, count, list);
+}
+
+/* 0x21494 - funcs_1541F entry 8: resolve action 8 on the list. */
+int map_action_entry08(int a1, int count, const uint8_t *list)
+{
+    return map_action_resolve_list(a1, 8, count, list);
 }

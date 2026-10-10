@@ -610,3 +610,14 @@
 0x14B78 sub_14B78 game/map_move.h
 0x14121 sub_14121 game/map_move.h
 0x13E9C sub_13E9C game/map_move.h
+
+# the funcs_1541F status-effect entries 0/1/2/3/8 (0x21206/0x2134B/0x21364/
+# 0x2137D/0x21494) and their shared body 0x21227: draw the party icons, blink
+# the targets over the map view, charge the cost and resolve the action on the
+# list.  All run through the shared 0x2121A/0x21190 tails (false callees).
+0x21227 sub_21227 game/map_action.h
+0x21206 sub_21206 game/map_action.h
+0x2134B sub_2134B game/map_action.h
+0x21364 sub_21364 game/map_action.h
+0x2137D sub_2137D game/map_action.h
+0x21494 sub_21494 game/map_action.h

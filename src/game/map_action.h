@@ -114,4 +114,18 @@ int map_action_entry26(int a1, int count, const uint8_t *list);
 /* 0x22E41 - funcs_1541F entry 27: charge cost index 27, effect byte 38. */
 int map_action_entry27(int a1, int count, const uint8_t *list);
 
+/* 0x21227 - charge cost `table_idx`, blink the targets over the map view and
+ * resolve action `table_idx` on each listed record, queueing the dealt number.
+ * Shared effect body of the funcs_1541F entries 0/1/2/3/8. */
+int map_action_resolve_list(int a1, int table_idx, int count,
+                            const uint8_t *list);
+
+/* 0x21206 / 0x2134B / 0x21364 / 0x2137D / 0x21494 - funcs_1541F entries
+ * 0/1/2/3/8: resolve action 0/1/2/3/8 on the list. */
+int map_action_entry00(int a1, int count, const uint8_t *list);
+int map_action_entry01(int a1, int count, const uint8_t *list);
+int map_action_entry02(int a1, int count, const uint8_t *list);
+int map_action_entry03(int a1, int count, const uint8_t *list);
+int map_action_entry08(int a1, int count, const uint8_t *list);
+
 #endif /* GAME_MAP_ACTION_H */

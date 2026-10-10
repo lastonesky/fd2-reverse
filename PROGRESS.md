@@ -1277,10 +1277,40 @@ closure-ready 游戏头名 `0x22D1B`(u5)；离线反汇编证实其真闭包＝�
 - 无对拍器，标“已还原未验证”。拉出后下一游戏头名仍为 u1 小簇
   `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2AA00`(sub_29DAA)/`0x2F7B6`(sub_2EBE1) 等。
 
+### 50) `funcs_1541F` 效果入口 0/1/2/3/8 + 共享体（本轮，6 函数）→ `src/game/map_action.c/.h`（追加）
+
+`function-map.csv` 闭包就绪的游戏头名是 `0x214AD`(u3)，但它与 `0x2111A/211A4/21227/213B7`
+以及 `funcs_1541F` 条目 0..10 的薄包装同属一张“对记录列表施加行动效果”的家族。本轮取其中最完整
+且自洽的一簇：条目 0/1/2/3/8 的包装 + 它们共用的效果体（合计 279 B，全部真依赖已还原）：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x21227` | `map_action_resolve_list` | 共享体：`dword_53EC4=0` → `map_draw_party_icons_anim(a1,idx,count,list)` → `map_blink_units(a1,idx,count,list)` → `rec_sub_table5(a1,idx)` → 对每条记录 `unit_action_damage(list[i],idx)`，命中时 `map_enqueue_status(dmg,94,list[i])`，未命中 `ev4_1E1DC(list[i])` → 共享尾声 `map_view_update(0); map_draw_status_popups()`。 |
+| `0x21206` | `map_action_entry00` | `map_action_resolve_list(a1,0,count,list)`（条目 0） |
+| `0x2134B` | `map_action_entry01` | 同上，`idx=1` |
+| `0x21364` | `map_action_entry02` | 同上，`idx=2` |
+| `0x2137D` | `map_action_entry03` | 同上，`idx=3` |
+| `0x21494` | `map_action_entry08` | 同上，`idx=8` |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声（伪 callee 两处）**：`0x21227` 的循环出口 `jge 0x21190` 落在 `sub_2111A` 体内——`0x21190`
+  是 `push 0; call 0x11CAC; call 0x1DF58; pop×4; ret` 的**共享收尾**（`sub_2111A/2111A4/21227/213B7`
+  共用），非调用；`function-map` 因此把 `sub_2111A` 记为 `sub_21227/213B7/211A4` 的伪 callee。
+- **共享跳转尾**：`0x2134B/0x21364/0x2137D/0x21494` 压完常量后 `jmp 0x2121A`；`0x2121A` 正是 `sub_21206`
+  体内 `push a1; call 0x21227` 那一条，故四者语义＝同一 `sub_21227` 调用（C 侧各写一条语义调用，不模拟跳转）。
+- **chkstk**：六者皆 `push size; call 0x3702F`（`__chkstk` 带 `ret 4`，弹出自己的入参），丢弃。返回值为
+  `map_draw_status_popups` 残留，dispatch 经函数指针调用不读，C 侧返回 0。
+- **ABI 逐指令核对**：条目包装经 `funcs_1541F[K](a1, count, list)` 进入（`sub_15311`/`sub_1CFF0` 实参），
+  包装补上常量 K，效果体签名 `(a1, table_idx=K, count, list)`（`rec_sub_table5(a1,K)`、`map_blink_units(a1,K,count,list)`）。
+- 无对拍器，标“已还原未验证”。拉出后 `sub_21227` 的 5 个条目闭合；条目 1/2/3/8 的兄弟
+  `0x21396`(条目4) 等（共用另一效果体 `sub_213B7`，blink 走 `map_record_layer_blink`）连同自由体
+  `0x2111A/211A4` 与独立条目 9 `0x214AD`(u3) 仍在册；下一游戏头名回落至
+  `0x214AD`(u3)、`0x2111A`(u2) 及 u1 小簇 `0x1D6C8`/`0x24BDE`/`0x28632`/`0x2AA00`/`0x2F7B6` 等。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **132 → 127**（本轮 §49 −5），已还原未验证 **191 → 196**（本轮 +5）。
+- `function-map.csv`：待还原 **127 → 121**（本轮 §50 −6），已还原未验证 **196 → 202**（本轮 +6）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
