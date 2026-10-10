@@ -93,27 +93,27 @@ extern uint8_t fd2_lowmem[0x100000]; /* real-mode IVT+BDA mirror */
 #define name ((const char *)&fd2_data1[0x1B])
 #define aOutOfMemory_0 ((const char *)&fd2_data1[0x23])
 #define aOutOfMemory_1 ((const char *)&fd2_data1[0x37])
-#define aRb_1 (*(uint8_t *)&fd2_data1[0x4B])  /* TODO verify type */
+#define aRb_1 ((const char *)&fd2_data1[0x4B])  /* TODO verify type */
 #define aFdiconB24 ((const char *)&fd2_data1[0x4E])
-#define aWb_0 (*(uint8_t *)&fd2_data1[0x59])  /* TODO verify type */
+#define aWb_0 ((const char *)&fd2_data1[0x59])  /* TODO verify type */
 #define aFd2Tmp ((const char *)&fd2_data1[0x5C])
 #define aOutOfMemory_2 ((const char *)&fd2_data1[0x64])
-#define aRb_2 (*(uint8_t *)&fd2_data1[0x78])  /* TODO verify type */
+#define aRb_2 ((const char *)&fd2_data1[0x78])  /* TODO verify type */
 #define aFdiconB24_1 ((const char *)&fd2_data1[0x7B])
 #define aFileNotFoundFd ((const char *)&fd2_data1[0x86])
-#define aRb_11 (*(uint8_t *)&fd2_data1[0xA9])  /* TODO verify type */
+#define aRb_11 ((const char *)&fd2_data1[0xA9])  /* TODO verify type */
 #define aFdiconB24_0 ((const char *)&fd2_data1[0xAC])
 #define aFileFdiconB24E ((const char *)&fd2_data1[0xB7])
-#define aWb_1 (*(uint8_t *)&fd2_data1[0xD3])  /* TODO verify type */
+#define aWb_1 ((const char *)&fd2_data1[0xD3])  /* TODO verify type */
 #define aFd2Tmp_0 ((const char *)&fd2_data1[0xD6])
-#define aRb_12 (*(uint8_t *)&fd2_data1[0xDE])  /* TODO verify type */
+#define aRb_12 ((const char *)&fd2_data1[0xDE])  /* TODO verify type */
 #define aFileNotFoundS ((const char *)&fd2_data1[0xE1])
 #define aOutOfMemoryAtL ((const char *)&fd2_data1[0xFC])
 #define aOutOfMemoryAtR ((const char *)&fd2_data1[0x122])
 #define dbl_50144 (*(double *)&fd2_data1[0x144])
-#define aD_0 (*(uint8_t *)&fd2_data1[0x14C])  /* TODO verify type */
+#define aD_0 ((const char *)&fd2_data1[0x14C])  /* TODO verify type */
 #define aAnsSLengthD ((const char *)&fd2_data1[0x152])
-#define aRb_14 (*(uint8_t *)&fd2_data1[0x16C])  /* TODO verify type */
+#define aRb_14 ((const char *)&fd2_data1[0x16C])  /* TODO verify type */
 #define aFd2Sav ((const char *)&fd2_data1[0x16F])
 #define aRb ((const char *)&fd2_data1[0x177])  /* TODO verify type */
 #define aFd2Sav_0 ((const char *)&fd2_data1[0x17A])
@@ -122,9 +122,9 @@ extern uint8_t fd2_lowmem[0x100000]; /* real-mode IVT+BDA mirror */
 #define dbl_5018D (*(double *)&fd2_data1[0x18D])
 #define aOutOfMemoryAtG ((const char *)&fd2_data1[0x195])
 #define aD ((const char *)&fd2_data1[0x1B6])  /* TODO verify type */
-#define aRb_3 (*(uint8_t *)&fd2_data1[0x1B9])  /* TODO verify type */
+#define aRb_3 ((const char *)&fd2_data1[0x1B9])  /* TODO verify type */
 #define aFd2Sav_3 ((const char *)&fd2_data1[0x1BC])
-#define aRb_13 (*(uint8_t *)&fd2_data1[0x1C4])  /* TODO verify type */
+#define aRb_13 ((const char *)&fd2_data1[0x1C4])  /* TODO verify type */
 #define aAniDat ((const char *)&fd2_data1[0x1C7])
 #define aOutOfMemoryAtE ((const char *)&fd2_data1[0x1CF])
 #define dbl_501F0 (*(double *)&fd2_data1[0x1F0])
@@ -133,42 +133,42 @@ extern uint8_t fd2_lowmem[0x100000]; /* real-mode IVT+BDA mirror */
 #define dbl_50208 (*(double *)&fd2_data1[0x208])
 #define dbl_50210 (*(double *)&fd2_data1[0x210])
 #define dbl_50218 (*(double *)&fd2_data1[0x218])
-#define aRb_0 (*(uint8_t *)&fd2_data1[0x220])  /* TODO verify type */
+#define aRb_0 ((const char *)&fd2_data1[0x220])  /* TODO verify type */
 #define aFd2Sav_4 ((const char *)&fd2_data1[0x223])
-#define aRb_4 (*(uint8_t *)&fd2_data1[0x22B])  /* TODO verify type */
+#define aRb_4 ((const char *)&fd2_data1[0x22B])  /* TODO verify type */
 #define aFdiconB24_2 ((const char *)&fd2_data1[0x22E])
 #define a08d_1 ((const char *)&fd2_data1[0x239])
 #define a08d_2 ((const char *)&fd2_data1[0x23F])
 #define a08d ((const char *)&fd2_data1[0x245])
 #define a08d_0 ((const char *)&fd2_data1[0x24B])
-#define aRb_5 (*(uint8_t *)&fd2_data1[0x251])  /* TODO verify type */
+#define aRb_5 ((const char *)&fd2_data1[0x251])  /* TODO verify type */
 #define aFd2Sav_5 ((const char *)&fd2_data1[0x254])
-#define aWb_2 (*(uint8_t *)&fd2_data1[0x25C])  /* TODO verify type */
+#define aWb_2 ((const char *)&fd2_data1[0x25C])  /* TODO verify type */
 #define aFd2Sav_6 ((const char *)&fd2_data1[0x25F])
-#define aRb_6 (*(uint8_t *)&fd2_data1[0x267])  /* TODO verify type */
+#define aRb_6 ((const char *)&fd2_data1[0x267])  /* TODO verify type */
 #define aFd2Sav_7 ((const char *)&fd2_data1[0x26A])
-#define aRb_7 (*(uint8_t *)&fd2_data1[0x272])  /* TODO verify type */
+#define aRb_7 ((const char *)&fd2_data1[0x272])  /* TODO verify type */
 #define aFdiconB24_3 ((const char *)&fd2_data1[0x275])
-#define aRb_8 (*(uint8_t *)&fd2_data1[0x280])  /* TODO verify type */
+#define aRb_8 ((const char *)&fd2_data1[0x280])  /* TODO verify type */
 #define aFdiconB24_4 ((const char *)&fd2_data1[0x283])
-#define aRb_9 (*(uint8_t *)&fd2_data1[0x28E])  /* TODO verify type */
+#define aRb_9 ((const char *)&fd2_data1[0x28E])  /* TODO verify type */
 #define aFdiconB24_5 ((const char *)&fd2_data1[0x291])
-#define aRb_10 (*(uint8_t *)&fd2_data1[0x29C])  /* TODO verify type */
+#define aRb_10 ((const char *)&fd2_data1[0x29C])  /* TODO verify type */
 #define aFdiconB24_6 ((const char *)&fd2_data1[0x29F])
 #define dbl_502AA (*(double *)&fd2_data1[0x2AA])
 #define dbl_502B2 (*(double *)&fd2_data1[0x2B2])
-#define aRb_15 (*(uint8_t *)&fd2_data1[0x2BA])  /* TODO verify type */
+#define aRb_15 ((const char *)&fd2_data1[0x2BA])  /* TODO verify type */
 #define aFd2Tmp_1 ((const char *)&fd2_data1[0x2BD])
 #define aSorryYourPassw ((const char *)&fd2_data1[0x2C5])
-#define a02d (*(uint8_t *)&fd2_data1[0x2E8])  /* TODO verify type */
+#define a02d ((const char *)&fd2_data1[0x2E8])  /* TODO verify type */
 #define aLx ((const char *)&fd2_data1[0x2F0])  /* TODO verify type */
 #define a02u02u02u02u ((const char *)&fd2_data1[0x2F4])
-#define asc_5030F ((const char *)&fd2_data1[0x30F])
+#define asc_5030F (*(uint8_t *)&fd2_data1[0x30F])
 #define aAilDebug ((const char *)&fd2_data1[0x313])
 #define aAilSysDebug ((const char *)&fd2_data1[0x31D])
 #define aWT ((const char *)&fd2_data1[0x32B])  /* TODO verify type */
 #define asc_5032F ((const char *)&fd2_data1[0x32F])
-#define a302 (*(uint8_t *)&fd2_data1[0x380])  /* TODO verify type */
+#define a302 ((const char *)&fd2_data1[0x380])  /* TODO verify type */
 #define aAudioInterface ((const char *)&fd2_data1[0x385])
 #define aStartTimeS ((const char *)&fd2_data1[0x3CC])
 #define asc_503DC ((const char *)&fd2_data1[0x3DC])
@@ -443,7 +443,7 @@ extern uint8_t fd2_lowmem[0x100000]; /* real-mode IVT+BDA mirror */
 #define byte_51F75 (*(uint8_t *)&fd2_data1[0x1F75])
 #define byte_52006 ((const char *)&fd2_data1[0x2006])
 #define byte_5202C (*(uint8_t *)&fd2_data1[0x202C])
-#define asc_52045 ((const char *)&fd2_data1[0x2045])
+#define asc_52045 (*(uint8_t *)&fd2_data1[0x2045])
 #define dword_5204A (*(uint32_t *)&fd2_data1[0x204A])
 #define byte_521C3 (*(uint8_t *)&fd2_data1[0x21C3])
 #define byte_521D4 (*(uint8_t *)&fd2_data1[0x21D4])
@@ -552,7 +552,7 @@ extern uint8_t fd2_lowmem[0x100000]; /* real-mode IVT+BDA mirror */
 #define aSample ((const char *)&fd2_data1[0x3698])
 #define dword_53718 (*(uint32_t *)&fd2_data1[0x3718])
 #define dword_5371C (*(uint32_t *)&fd2_data1[0x371C])
-#define aTimb_0 (*(uint8_t *)&fd2_data1[0x3720])  /* TODO verify type */
+#define aTimb_0 ((const char *)&fd2_data1[0x3720])  /* TODO verify type */
 #define byte_5372A (*(uint8_t *)&fd2_data1[0x372A])
 #define byte_5372B (*(uint8_t *)&fd2_data1[0x372B])
 #define dword_5372C (*(uint32_t *)&fd2_data1[0x372C])

@@ -44,8 +44,9 @@
  */
 #include "../include/fd2_globals.h"
 #include "../include/fd2_funcs.h"
-#include "res.h"
+#include "res.h"            /* res_load  (0x111BA, port3-restored) */
 #include "boot.h"
+#include "scene_core.h"     /* scenario_menu (0x25EBB), scene_event_tick (0x117E7) */
 #include "../lib/ail.h"
 
 #include <stdlib.h>

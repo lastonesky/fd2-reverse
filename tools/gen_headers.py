@@ -62,9 +62,10 @@ def base_type(name, strings_set, size):
     if name.startswith('funcs_'): return 'FUNC'
     if name.startswith('off_'):   return 'PTR'
     if name.startswith('jpt_'):   return 'JPT'
-    if name in strings_set or name.startswith('asc_') or (
-            name.startswith('a') and len(name) > 1 and name[1].isalpha() and '_' not in name[:8]):
-        # IDA string names: aWord / aSome_text_0 / aRb_0 ...  heuristic + strings.csv
+    import re as _re
+    # ONE rule for string labels, shared with gen_globals.emit():
+    # 'a' + [A-Z0-9_] (aFdotherDat / aRb_0 / a123456789abcde) or listed in strings.csv
+    if name in strings_set or bool(_re.match(r'^a[A-Z0-9_]', name)):
         return 'STR' if name in strings_set else 'STR?'
     for p, t in (('qword_', 'uint64_t'), ('dbl_', 'double'), ('tbyte_', 'long double'),
                  ('dword_', 'uint32_t'), ('word_', 'uint16_t'), ('byte_', 'uint8_t'),
@@ -275,6 +276,12 @@ def gen_funcs(protos, restored):
     out.append('void fd2_jumpout(uintptr_t ea);')
     out.append('')
     manual = []
+    overrides = {}
+    ov_path = os.path.join(AN, 'prototype_overrides.csv')
+    if os.path.exists(ov_path):
+        for r in list(csv.reader(open(ov_path, encoding='utf-8')))[1:]:
+            if len(r) >= 3:
+                overrides[r[0].strip().lower()] = (r[2], r[3] if len(r) > 3 else '')
     for addr, name, size, sig in protos:
         if name in CRT_SKIP or name in restored:
             continue  # standard header or restored module provides it
@@ -290,13 +297,19 @@ def gen_funcs(protos, restored):
         if '@<' in sig or '__spoils' in sig:
             out.append('/* %s @ %s : %s  <- MANUAL (register-arg ABI) */' % (name, addr, sig))
             manual.append(name); continue
-        ret, args, cc = split_sig(sig)
-        if cc not in ('__cdecl', ''):
-            manual.append(name)
+        ov = overrides.get(addr.strip().lower())
+        if ov is not None:
+            ov_sig, ov_reason = ov
+            ret, args, cc = split_sig(ov_sig)
+            note = '  /* OVERRIDE: %s */' % (ov_reason or ov_sig)
+        else:
+            ret, args, cc = split_sig(sig)
+            if cc not in ('__cdecl', ''):
+                manual.append(name)
+            note = '  /* %s */' % sig if cc not in ('__cdecl', '') else ''
         ret = normalize_type(ret)
         args = normalize_type(args).strip().replace('__cdecl', '').replace('__fastcall', '').replace('__stdcall', '')
         args = positional_args(args)
-        note = '  /* %s */' % sig if cc not in ('__cdecl', '') else ''
         if ret.endswith('*'):
             out.append('%s%s;%s' % (ret, name + args, note))
         else:

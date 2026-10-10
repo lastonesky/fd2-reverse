@@ -27,8 +27,7 @@ int sub_112A5(int);
 int sub_1145A(int);
 int sub_11506(void);
 int sub_115B6(int, int, int);
-int sub_117E7(void);
-int sub_11AA8(int);
+int sub_11AA8(void);  /* OVERRIDE: 唯一调用点 sub_117E7 无压栈 ⇒ 真实实参 0（伪代码 a1 为栈槽伪像） */
 int sub_11B48(void);
 int sub_11B9B(void);
 int sub_11BFA(void);
@@ -219,7 +218,7 @@ int sub_1F6EF(int, int, int, int);
 int sub_1F73F(int, int, int, int);
 int sub_1F81E(int, int, int);
 void sub_1F882(void);
-int sub_1F894(int);
+int sub_1F894(void);  /* OVERRIDE: 唯一调用点 sub_25EBB(0x25EC8) 无压栈且无 add esp ⇒ 真实实参 0；函数体内对 [esp+4] 的读取疑为 IDA 误判（还原 sub_1F894 本体时须复核） */
 char sub_1FF79(int, int, int);
 int sub_2000A(void);
 int sub_203BD(int, int, int);
@@ -338,7 +337,6 @@ int sub_25757(int, int, int);
 int sub_25977(int, int);
 int sub_25A96(int, int, int);
 int sub_25B45(int, int, int);
-int sub_25EBB(void);
 int sub_26152(void);
 int sub_265EC(void);
 int sub_2670E(void);
