@@ -403,3 +403,5 @@
 0x1AA1D sub_1AA1D game/ev_script.h
 0x1DB65 sub_1DB65 game/map_units.h
 0x19953 sub_19953 game/map_window.h
+0x26E38 sub_26E38 game/menu_select.h
+0x27D33 sub_27D33 game/menu_select.h

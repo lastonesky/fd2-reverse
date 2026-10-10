@@ -329,16 +329,38 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 - `0x14742` `map_find_records`：曼哈顿半径内按 `rec[5]&1` 与 `rec[6]` 状态类收集，返回计数。
 - **Ghidra 结构比对**：`0x115B6` 的双层循环/`mode` 分支/重复去重与 C 版**逐分支一致**。
 
+### 11) 地点/场景菜单选择环 → `src/game/menu_select.c/.h`（本轮）
+
+- `0x27D33` `menu_list_select`（u6，535B，本轮最高）＝地点菜单（`dword_53F4A` 选定）的
+  滚动列表选择环：`guest_malloc` 三块 `0xFA00`（共享全局 `dword_53C5B/F/63`）→ 快照 VGA →
+  `rle2_blit` 面板子图（`dword_53F66+[+70]` @ `+35845`）→ `status_names_draw` 布名行 → 6 条
+  `msg_blit_band` → 循环 `status_screen_run(3)`，上/下（`4B/4D`）走一行、翻页（`48/50`）走两行，
+  越过窗口界线 `dword_53F4E±2` 时 `screen_band_forward/backward` 滚动，回车/空格返回 1、Esc 返回 -1。
+- `0x26E38` `menu_choice4`（u3）＝同一渲染器上的四槽环绕选择环：`status_screen_run(0)`，
+  左右在 `dword_53C57`（0..3）环绕，回车/空格 1、Esc -1。两者共用同键值表（`4B/4D/48/50/1C/39/1`）。
+- **共享尾声 + 有符号比较（陷阱）**：`0x27D33` 的反编译把三个下行分支折成 `LABEL_7/9/13`
+  goto；本 C 用 `scroll_down`/`scroll_up_tail` 标号等价还原（已逐指令核对 `27e1a..27f49`）。
+  机器对 32 位全局 `dword_53C57/53F4E/53BFB` 用 `jge/jle/jl`（**有符号**）比较，C 侧显式
+  `(int32_t)` 转型以保原语义（`-Wno-sign-compare` 之外仍按原样写）。
+- **伪 callee**：`0x27D33` 曾误挂 `sub_3702F`(chkstk)；真实依赖仅 `rle2_blit/status_names_draw/
+  msg_blit_band/screen_band_forward/backward`（全部已还原）＋ `0x26E38`。闭包=本 2 函数。
+- **未在机内释放**：`0x27D33` 只分配不释放 `0x53C5B/F/63`——这三个全局与 `msg.c`(0x1956B/26996)、
+  `box_popup.c`(0x17E0B/1B932) 复用，释放点在 `msg_close_portrait`/`box_popup`，故 C 版同样不 free。
+- **相邻未还原**：`0x2921A`（u4，230B，中心缩放最近邻 blit 到 `dword_53A49`）为同一批地点菜单
+  驱动的退场缩放，本轮未纳入（可与 `0x26A0D`/`0x28B41` 等菜单驱动一并拉出）。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **276 → 243**，已还原未验证 **47 → 80**（+33）。
+- `function-map.csv`：待还原 **243 → 241**，已还原未验证 **80 → 82**（+2）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
-`0x14B78`(u8，888B，真依赖去掉伪 callee 后需 `13488/12EAA/1300D/13185/13315/146D1/14237` 等)、
-`0x1C75E`(u7，链 `1C81F`→`14121`→`14B78`)、`0x14EF0/27D33/2E9A8`(u6)、`0x13A44/1741C/176B4`(u5) ……
+`0x14B78`(u8，888B，**真闭包过大**：`13488/12EAA/1300D/13185/13315/146D1/14237` 又带
+`1DEBE/15055/15311/1548E/1567E/1598A…`，>8 函数，跳过)、`0x1C75E`(u7，链 `1C81F`→`14121`→`14B78`，同上跳过)、
+`0x14EF0/2E9A8`(u6)、`0x13A44/1741C/176B4`(u5) ……
 策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 结构反编译辅助）。
+（本轮直接可用：`0x27D33` 家族里 `0x2921A`(u4)、`0x2DF01`(u5) 等仍是闭包就绪单函数。）
 
 ---
 

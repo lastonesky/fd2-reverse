@@ -31,6 +31,7 @@
 #include "map_units.h"
 #include "map_window.h"
 #include "menu_actions.h"
+#include "menu_select.h"
 #include "msg.h"
 #include "path.h"
 #include "rec.h"
