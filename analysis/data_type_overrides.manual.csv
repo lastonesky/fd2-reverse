@@ -1,0 +1,7 @@
+addr,name,type,mode,reason
+0x53C6C,byte_53C6C,uint8_t,ptr,"map.c: byte_53C6C[i] —— 需字节指针视图（与 ev4.c 的 dword_53C6C 标量取名不同）"
+0x53D34,byte_53D34,uint8_t,ptr,"map.c: byte_53D34[i]"
+0x53DFC,byte_53DFC,uint8_t,ptr,"map.c: byte_53DFC[i]"
+0x53C6C,dword_53C6C,uint8_t,lvalue,"ev4.c: (&dword_53C6C)[i] ⇒ 标量 uint8_t lvalue"
+0x53D34,dword_53D34,uint8_t,lvalue,"ev4.c: (&dword_53D34)[i]"
+0x53DFC,dword_53DFC,uint8_t,lvalue,"ev4.c: (&dword_53DFC)[i]"

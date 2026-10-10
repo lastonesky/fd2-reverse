@@ -1,0 +1,768 @@
+/* map.c - map view / terrain tile rendering (source translation of 0x126F7).
+ *
+ * The map bitmap lives at *(0x53A49) (a 320x200-ish surface, drawn with
+ * stride 456 into a 0x8088 base offset), the tileset resource at *(0x53A4D)
+ * (its sub-image offset table starts at +6), and the visible window is
+ * (0x53AA9,0x53AAD) + (0x51A87,0x51A8B) cells. One cell is one 24x24 tile.
+ *
+ * The original bounds-checks the cell against the view and then runs the
+ * already-verified sprite24_plain() on it. Layout:
+ *
+ *     dst = bitmap + (y - oy) * 10944 + (x - ox) * 24 + 32904
+ *     src = tileset + *(u32 *)(tileset + 4*index + 6)
+ *
+ * (10944 = 456 * 24, i.e. 24 rows of the 456-stride bitmap.)
+ */
+#include "map.h"
+#include "sprite24.h"
+#include "rec.h"
+#include "gfx.h"
+#include "rle.h"
+#include "dlg.h"
+#include "anim.h"
+#include "fade.h"
+#include "guest_mem.h"
+#include "../dos.h"
+
+#include <stdint.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include "../include/fd2_globals.h"
+
+
+/* --- map view rendering core (round 37) ------------------------------- */
+#define BDA_W(off)  (*(volatile uint16_t *)(uintptr_t)(DOS_LOWMEM_BASE + (off)))
+
+void map_blit_tile(int x, int y, int index)
+{
+    const uint8_t *src;
+    uint8_t       *dst;
+
+    if (x < dword_53AA9 || dword_53AA9 + dword_51A87 <= x)
+        return;
+    if (y < dword_53AAD || dword_53AAD + dword_51A8B <= y)
+        return;
+
+    src = dword_53A4D + *(const uint32_t *)(dword_53A4D + 4 * index + 6);
+    dst = dword_53A49 + (y - dword_53AAD) * 10944 + (x - dword_53AA9) * 24
+        + 32904;
+    sprite24_plain(src, dst, 456);
+}
+
+/* 0x12E38 - read one map cell: out[0..1] = terrain tile (14 bits),
+ * out[2..3] = flags (0x1F), out[4..7] = the 4 bytes of dword_53A69[tile]. */
+void map_cell_info(int x, int y, uint8_t *out)
+{
+    const uint8_t *cell = dword_53A51 + 4 * (x + dword_53AC1 * y);
+    uint16_t tile  = *(const uint16_t *)(cell + 4) & 0x03FFu;
+    uint16_t flags = (uint16_t)(cell[6] & 0x1F);
+    const uint8_t *t = (const uint8_t *)(uintptr_t)(dword_53A69 + 4 * tile);
+
+    *(uint16_t *)out     = tile;
+    *(uint16_t *)(out + 2) = flags;
+    out[4] = t[0]; out[5] = t[1]; out[6] = t[2]; out[7] = t[3];
+}
+
+/* 0x12AC6 - blit the object sprite of map cell (x, y) onto `dst`.
+ *
+ * Cell tile -> dword_53A69[4*tile]: bit 3 adds 2*dword_53A40 to the index,
+ * bit 7 means "there is a sprite". The sprite comes from the bank
+ * *(0x53A5D) (offset table at +0x0A) and is drawn plain, or through the
+ * palette *(0x53A6D)[byte_51A97[dword_53C1F]] (offset table at +6) when the
+ * cell's byte +7 is not 0xFF. */
+void map_blit_cell_sprite(void *dst, int x, int y)
+{
+    uint8_t *cell;
+    const uint8_t *src, *pal;
+    uint8_t *d;
+    uint16_t tile;
+    uint8_t  v;
+
+    if (dword_53AA9 - 1 > x || dword_53AA9 + dword_51A87 < x)
+        return;
+    if (dword_53AAD - 1 > y || dword_53AAD + dword_51A8B + 1 < y)
+        return;
+    if (y < 0)
+        return;
+
+    cell = dword_53A51 + 4 * (x + dword_53AC1 * y);
+    tile = *(const uint16_t *)(cell + 4) & 0x03FFu;
+    v    = *(const uint8_t *)(uintptr_t)(dword_53A69 + 4 * tile);
+    if (v & 8)
+        tile = (uint16_t)(tile + 2 * dword_53A40);
+    if (!(v & 0x80))
+        return;
+
+    src = dword_53A5D + *(const uint32_t *)(dword_53A5D + 4 * tile + 0x0A);
+    pal = dword_53A6D
+        + *(const uint32_t *)(dword_53A6D + 4 * byte_51A97[dword_53C1F] + 6);
+    d   = (uint8_t *)dst + 0x8088 + 10944 * (y - dword_53AAD)
+        + 24 * (x - dword_53AA9);
+
+    if (cell[7] == 0xFF)
+        sprite24_plain(src, d, 456);
+    else
+        sprite24_pal(src, d, 456, pal);
+}
+
+/* 0x129EC - refresh the cell sprites under every drawable record: the cell
+ * the record occupies and the one above, plus extra cells chosen by the
+ * record's direction byte (0 = below, 1 = left pair, 2 = two above,
+ * other = right pair) when record[4] is set. */
+void map_refresh_records(void)
+{
+    int i;
+
+    for (i = 0; i < dword_53BEB; i++) {
+        const uint8_t *p = (const uint8_t *)(uintptr_t)dword_53A45 + 80 * i;
+        int x, y, d, v;
+
+        if (rec_skip(i) != 0 || rec_flag(i) != 0)
+            continue;
+        x = p[0]; y = p[1]; d = p[3]; v = p[4];
+
+        map_blit_cell_sprite(dword_53A49, x, y);
+        map_blit_cell_sprite(dword_53A49, x, y - 1);
+        if (v != 0) {
+            if (d != 0) {
+                if (d == 1) {
+                    map_blit_cell_sprite(dword_53A49, x - 1, y);
+                    map_blit_cell_sprite(dword_53A49, x - 1, y - 1);
+                } else if (d == 2) {
+                    map_blit_cell_sprite(dword_53A49, x, y - 2);
+                } else {
+                    map_blit_cell_sprite(dword_53A49, x + 1, y);
+                    map_blit_cell_sprite(dword_53A49, x + 1, y - 1);
+                }
+            } else {
+                map_blit_cell_sprite(dword_53A49, x, y + 1);
+            }
+        }
+    }
+}
+
+/* 0x11EEE - render the visible map window into `dst`.
+ *
+ * `dst` is a strided surface (stride `pitch`); the actual drawing base is
+ * dst + 456*dword_53AF1 + dword_53AED + dword_53AF5 (dword_53AF5/dword_53AED
+ * are the bitmap origin offsets, 456 = 24 rows of the 456-stride bitmap).
+ *
+ * Per BIOS tick dword_53A40 (the sprite mirror bit) toggles once, and for
+ * the scanline modes the 16-phase expander advances. The view mode
+ * dword_53C03 selects which intermediate buffer is copied into dst:
+ *   9/24/25/28/29  expand dword_53AFF into dword_53B03, copy 320 -> pitch
+ *   17/21/22/27    copy a window of dword_53AFF with stride 462/408
+ *   23             scroll dword_53AFF one line, copy 312 -> pitch
+ *   other          no copy
+ * Then the w*h grid of 24x24 tiles (cell table dword_53A51, one 4-byte cell,
+ * tile in the low 10 bits at +4) is blitted with sprite24_plain, or through
+ * the cursor palette dword_53A6D[byte_51A97[dword_53C1F]] when cell[3] is
+ * not 0xFF. Cell flags dword_53A69[tile] bits 3/4/5 pick mirrored/ramp
+ * variants. */
+void map_render_view(uint8_t *dst, int pitch, int w, int h, int ox, int oy)
+{
+    const uint8_t *pal;
+    int32_t        tick;
+    uint8_t       *out;
+    int            i, row;
+
+    tick = (int16_t)BDA_W(0x46C);
+    if (tick != dword_53A00) {
+        dword_53A40 ^= 1;
+        dword_53A00 = tick;
+    }
+
+    out = dst + 456 * dword_53AF1 + dword_53AED + dword_53AF5;
+
+    switch (dword_53C03) {
+    case 9: case 24: case 25: case 28: case 29:
+        if (tick != dword_539F8) {
+            gfx_expand_scanlines((const void *)(uintptr_t)dword_53AFF,
+                                 (void *)(uintptr_t)dword_53B03, dword_539FC);
+            dword_539F8 = tick;
+            if (++dword_539FC == 16)
+                dword_539FC = 0;
+        }
+        gfx_copy_rows(out, pitch, (const void *)(uintptr_t)dword_53B03,
+                      320, 312, 192);
+        break;
+    case 17: case 21: case 22: case 27: {
+        int stride = (dword_53C03 == 17 || dword_53C03 == 27) ? 462 : 408;
+        const uint8_t *src = (const uint8_t *)(uintptr_t)
+            (dword_53AFF + 3 * ox + 2 * stride * oy + dword_53B07 / 2
+             + stride * (dword_53B0B / 3));
+        gfx_copy_rows(out, pitch, src, stride, 312, 192);
+        break;
+    }
+    case 23:
+        if (tick != dword_539F8) {
+            map_scroll_lines(0);
+            dword_539F8 = tick;
+        }
+        gfx_copy_rows(out, pitch, (const void *)(uintptr_t)dword_53AFF,
+                      312, 312, 192);
+        break;
+    default:
+        break;
+    }
+
+    if (dword_51A93 == -1) {
+        if (tick - dword_539F4 > 2 || tick < dword_539F4) {
+            if (++dword_53C1F == 20)
+                dword_53C1F = 0;
+            dword_539F4 = tick;
+        }
+    } else {
+        dword_53C1F = dword_51A93;
+    }
+
+    pal = dword_53A6D
+        + *(const uint32_t *)(dword_53A6D + 4 * byte_51A97[dword_53C1F] + 6);
+
+    for (row = 0; row < h; row++) {
+        const uint8_t *cell = dword_53A51
+            + 4 * (ox + dword_53AC1 * (oy + row)) + 4;
+        uint8_t *d = dst + 24 * pitch * row;
+
+        for (i = 0; i < w; i++) {
+            int            tile  = *(const uint16_t *)cell & 0x03FF;
+            uint8_t        flags = *(const uint8_t *)(uintptr_t)(dword_53A69 + 4 * tile);
+            const uint8_t *spr;
+
+            if (flags & 0x08)
+                tile += 2 * dword_53A40;
+            else if (flags & 0x10)
+                tile += dword_53C0B / 2;
+            else if (flags & 0x04)
+                tile += dword_53A40;
+
+            spr = dword_53A5D + *(const uint32_t *)(dword_53A5D + 4 * tile + 6);
+            if (cell[3] == 0xFF)
+                sprite24_plain(spr, d, pitch);
+            else
+                sprite24_pal_recolor(spr, d, pitch, pal);
+            cell += 4;
+            d += 24;
+        }
+    }
+}
+
+/* 0x24D22 - scroll the screen buffer dword_53AFF down by `n` lines.
+ *
+ * `n != 0` only latches the line count into byte_51A10; the actual scroll
+ * happens on the next call with n == 0, which moves the bottom `lines` rows
+ * into a temporary buffer, shifts the remaining rows down and puts the
+ * bottom rows on top (the classic wrap-around scroll). */
+void map_scroll_lines(int n)
+{
+    uint8_t *screen = (uint8_t *)(uintptr_t)dword_53AFF;
+    int      lines, i;
+    uint8_t *tmp;
+
+    if (n != 0) {
+        byte_51A10 = (uint8_t)n;
+        return;
+    }
+
+    lines = byte_51A10;
+    tmp   = (uint8_t *)guest_malloc(312u * (size_t)lines);
+    memmove(tmp, screen + 312 * (192 - lines), 312u * (size_t)lines);
+    for (i = 191 - lines; i >= 0; --i)
+        memmove(screen + 312 * lines + 312 * i, screen + 312 * i, 0x138);
+    memmove(screen, tmp, 312u * (size_t)lines);
+    guest_free(tmp);
+}
+
+/* 0x122DC - reveal the tiles around the map cursor (dword_53AB1 x / y).
+ *
+ * dword_51A83 selects the reveal radius (1..5 draw a diamond of 1..21 cells
+ * with the blink-frame indices of dword_53A4D; the centre is index 0/1), and
+ * mode 6 instead clears the cursor cell's visibility byte. */
+void map_reveal_cursor(void)
+{
+    int x = dword_53AB1;
+    int y = dword_53AB5;
+
+    switch (dword_51A83) {
+    case 1:
+        map_blit_tile(x, y, 0);
+        break;
+    case 2:
+        map_blit_tile(x, y, 1);
+        break;
+    case 3:
+        map_blit_tile(x, y, 14);
+        map_blit_tile(x, y - 1, 2);
+        map_blit_tile(x - 1, y, 3);
+        map_blit_tile(x + 1, y, 4);
+        map_blit_tile(x, y + 1, 5);
+        break;
+    case 4:
+        map_blit_tile(x, y, 1);
+        map_blit_tile(x, y - 2, 2);
+        map_blit_tile(x - 2, y, 3);
+        map_blit_tile(x + 2, y, 4);
+        map_blit_tile(x, y + 2, 5);
+        map_blit_tile(x - 1, y - 1, 6);
+        map_blit_tile(x + 1, y - 1, 7);
+        map_blit_tile(x - 1, y + 1, 8);
+        map_blit_tile(x + 1, y + 1, 9);
+        map_blit_tile(x, y - 1, 10);
+        map_blit_tile(x - 1, y, 11);
+        map_blit_tile(x + 1, y, 12);
+        map_blit_tile(x, y + 1, 13);
+        break;
+    case 5:
+        map_blit_tile(x, y, 1);
+        map_blit_tile(x, y - 3, 2);
+        map_blit_tile(x - 3, y, 3);
+        map_blit_tile(x + 3, y, 4);
+        map_blit_tile(x, y + 3, 5);
+        map_blit_tile(x - 1, y - 2, 6);
+        map_blit_tile(x - 2, y - 1, 6);
+        map_blit_tile(x + 1, y - 2, 7);
+        map_blit_tile(x + 2, y - 1, 7);
+        map_blit_tile(x - 1, y + 2, 8);
+        map_blit_tile(x - 2, y + 1, 8);
+        map_blit_tile(x + 1, y + 2, 9);
+        map_blit_tile(x + 2, y + 1, 9);
+        map_blit_tile(x, y - 2, 10);
+        map_blit_tile(x - 2, y, 11);
+        map_blit_tile(x + 2, y, 12);
+        map_blit_tile(x, y + 2, 13);
+        map_blit_tile(x - 1, y - 1, 15);
+        map_blit_tile(x + 1, y - 1, 16);
+        map_blit_tile(x - 1, y + 1, 17);
+        map_blit_tile(x + 1, y + 1, 18);
+        break;
+    case 6:
+        *(uint8_t *)(dword_53A51 + 4 * (x + dword_53AC1 * y) + 7) = 0;
+        break;
+    default:
+        break;
+    }
+}
+
+/* 0x1ACF3 - draw the selection cursor / record icon on the map view.
+ *
+ * byte_51AAB / byte_51AAC gate the cursor; dword_51A0C is the top scanline
+ * inside the 157-line map area. It blits the cursor frame (icon resource
+ * dword_53A81 sub-image 130), the cell's terrain sprite and its two numbers,
+ * then, when a portrait record sits under the cursor, the record's icon and
+ * a 3-digit HP bar. */
+void map_draw_cursor(uint8_t *dst, int pitch)
+{
+    uint8_t        info[8];
+    uint8_t       *p;
+    const uint8_t *rec;
+    int            idx;
+
+    if (!byte_51AAB || !byte_51AAC)
+        return;
+
+    if (dword_53ABD <= 5 || dword_53AB9 >= 3) {
+        if (dword_53ABD > 5 && dword_53AB9 > 9)
+            dword_51A0C = 1;
+    } else {
+        dword_51A0C = 242;
+    }
+
+    p = dst + 157 * pitch + dword_51A0C;
+    rle_decode((const void *)(uintptr_t)
+                   (dword_53A81 + *(const uint32_t *)(dword_53A81 + 526)),
+               0, 0, p, pitch, -1);
+
+    map_cell_info(dword_53AB1, dword_53AB5, info);
+    sprite24_plain(dword_53A5D
+                   + *(const uint32_t *)(dword_53A5D + 4 * *(const uint16_t *)info + 6),
+                   p + 5 * pitch + 6, pitch);
+    dlg_draw_number_signed(p + 8 * pitch + 43, pitch, dword_51A12[info[5]]);
+    dlg_draw_number_signed(p + 19 * pitch + 43, pitch, dword_51A2A[info[5]]);
+
+    idx = dlg_portrait_find();
+    if (idx == -1)
+        return;
+
+    rec = (const uint8_t *)(uintptr_t)dword_53A45 + 80 * idx;
+    if (rec[7] == 121 || (rec[31] == 10 && rec[6] == 1))
+        return;
+
+    {
+        int v = dword_53C0B;
+        if (v == 3)
+            v = 1;
+        sprite24_plain(dword_53A61
+                       + *(const uint32_t *)(dword_53A61 + 4 * (12 * rec[2] + v)),
+                       p + 5 * pitch + 6, pitch);
+        dlg_draw_number_pair(p + 21 * pitch + 9, pitch,
+                             *(const uint16_t *)(rec + 64),
+                             *(const uint16_t *)(rec + 66), 3);
+    }
+}
+
+/* 0x32230 - per-record movement blip.
+ *
+ * The 29-byte table *(0x52725) classifies the record's unit type (record +32
+ * is a 1-based index into it). A record that rec_skip() reports as skipped
+ * pings with effect 10 every 6th call; otherwise the unit class selects
+ * effect 9 every 6 (class 0) / every 4 (class 1) / effect 11 every 9 calls.
+ * byte_54132 is the free-running call counter (uint8, wraps at 256), and the
+ * effect always plays on bank *(0x53EEC) with loop count 1.
+ *
+ * The machine code copies the table to the stack first and indexes it as
+ * t[k-1]; record +32 is a valid 1..29 index in the game's data, so the copy
+ * has no observable effect on in-range indices. `sub_25A96` (svc_play_sfx) is
+ * called through its original address so the host and the differential
+ * harness can both observe it at one place.
+ *
+ * Callers ignore the return value (IDA: every call site overwrites EAX). */
+typedef int (*sfx_fn)(const void *bank, int index, int loops);
+#define ORIG_SFX ((sfx_fn)(uintptr_t)0x00025A96u)
+
+void map_unit_ping(int idx)
+{
+    uint8_t t[29];
+    int     s;
+
+    memcpy(t, byte_52725, sizeof t);
+
+    if (rec_skip(idx)) {
+        if ((uint8_t)byte_54132 % 6 == 0)
+            ORIG_SFX(dword_53EEC, 10, 1);
+    } else {
+        int k = *(const uint8_t *)((uintptr_t)dword_53A45 + 80u * (uint32_t)idx
+                                   + 32u);
+
+        s = t[k - 1];
+        if (s == 0) {
+            if ((uint8_t)byte_54132 % 6 == 0)
+                ORIG_SFX(dword_53EEC, 9, 1);
+        } else if (s == 1) {
+            if ((uint8_t)byte_54132 % 4 == 0)
+                ORIG_SFX(dword_53EEC, 9, 1);
+        } else {
+            if ((uint8_t)byte_54132 % 9 == 0)
+                ORIG_SFX(dword_53EEC, 11, 1);
+        }
+    }
+    ++byte_54132;
+}
+
+/* 0x11CAC - the whole map-view refresh: advance the animation frame, update
+ * the DAC animation when `flag == 0`, re-render the 13x8 tile window at the
+ * view origin into the map bitmap, reveal/refresh the cursor and portraits,
+ * then push the 192x312 bitmap window to VGA at 0xA0504. */
+void map_view_update(int flag)
+{
+    uint8_t *view = dword_53A49 + 0x8088;   /* 32904 */
+
+    anim_frame_step();
+    if (flag == 0)
+        pal_anim_step();
+    map_render_view(view, 456, 13, 8, dword_53AA9, dword_53AAD);
+    map_reveal_cursor();
+    dlg_portraits_refresh();
+    map_draw_cursor(view, 456);
+    gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, view, 456, 312, 192);
+}
+
+/* --- map reveal / status queue / view slide (batch of small leaves) ----- */
+
+
+typedef void *(*path_tbl_fn)(int);
+typedef void  (*path_flood_fn)(void *, int, int, int, void *, void *);
+typedef int   (*wait_fn)(int);
+typedef void  (*h0v_fn)(void);
+
+#define ORIG_PATH_TBL   ((path_tbl_fn)  (uintptr_t)0x0004E8A5u)
+#define ORIG_PATH_FLOOD ((path_flood_fn)(uintptr_t)0x0004E390u)
+#define ORIG_11B48      ((h0v_fn)(uintptr_t)0x00011B48u)
+#define ORIG_11B9B      ((h0v_fn)(uintptr_t)0x00011B9Bu)
+#define ORIG_11BFA      ((h0v_fn)(uintptr_t)0x00011BFAu)
+#define ORIG_11C59      ((h0v_fn)(uintptr_t)0x00011C59u)
+#define ORIG_17AA9      ((wait_fn)(uintptr_t)0x00017AA9u)
+#define ORIG_4E381      ((h0v_fn)(uintptr_t)0x0004E381u)
+
+/* 0x14818 */
+int map_reveal_reachable(int x, int y, uint8_t *out, int range, int radius,
+                         int filter)
+{
+    int n = 0, i, j;
+
+    if (range >= 16) {
+        int lim = range - 16;
+        for (i = 0; i < dword_53AC1; i++)
+            if (abs(i - x) <= lim)
+                dword_53A51[4 * (i + dword_53AC1 * y) + 7] = 0;
+        for (i = 0; i < dword_53AC5; i++)
+            if (abs(i - y) <= lim)
+                dword_53A51[4 * (x + i * dword_53AC1) + 7] = 0;
+    } else {
+        void *tbl = ORIG_PATH_TBL(0);
+        ORIG_PATH_FLOOD(tbl, x, y, range, dword_53A51,
+                        (void *)(uintptr_t)dword_53A69);
+        if (radius != 0) {
+            for (j = 0; j < dword_53AC5; j++)
+                for (i = 0; i < dword_53AC1; i++)
+                    if (abs(i - x) + abs(j - y) < radius)
+                        dword_53A51[4 * (i + j * dword_53AC1) + 7] = 0xFF;
+        }
+    }
+    for (i = 0; i < dword_53BEB; i++) {
+        const uint8_t *rec = dword_53A45 + 80u * (uint32_t)i;
+        if ((rec[5] & 1u) == 0 &&
+            dword_53A51[4 * (dword_53AC1 * rec[1] + rec[0]) + 7] != 0xFF &&
+            ((filter == 0 && rec[6] == 0) || (filter == 1 && rec[6] != 0) ||
+             (filter == 2 && rec[6] == 1) || (filter == 3 && rec[6] == 2))) {
+            if (out)
+                out[n] = (uint8_t)i;
+            n++;
+        }
+    }
+    return n;
+}
+
+/* 0x1E0DB */
+void map_enqueue_status(int value, int char_base, int rec_index)
+{
+    const uint8_t *rec = dword_53A45 + 80u * (uint32_t)rec_index;
+    int x = rec[0], y = rec[1];
+    int remain = 3, used = 0, i;
+    char buf[8];
+
+    if (!(x > dword_53AA9 - 1 && x < dword_51A87 + dword_53AA9 &&
+          y >= dword_53AAD - 1 && y <= dword_51A8B + dword_53AAD))
+        return;
+    for (i = 0; i < 4; i++) {
+        int len;
+        sprintf(buf, "%d", value);
+        byte_53D34[dword_53EC4 + i] = (uint8_t)(5 * i + 2);
+        byte_53DFC[dword_53EC4 + i] = (uint8_t)rec_index;
+        len = (int)strlen(buf);
+        if (len <= remain)
+            byte_53C6C[dword_53EC4 + i] = 0;
+        else
+            byte_53C6C[dword_53EC4 + i] =
+                (uint8_t)(buf[used++] + char_base - 48);
+        remain--;
+    }
+    dword_53EC4 += 4;
+}
+
+/* 0x12CEA */
+void map_slide_view(int target_x, int target_y)
+{
+    map_view_update(0);
+    while (target_x != dword_53AB1) {
+        if (target_x >= dword_53AB1)
+            ORIG_11BFA();
+        else
+            ORIG_11C59();
+        if (dword_51A83 != 0 && dword_51A83 != 6)
+            ORIG_17AA9(1);
+        ORIG_4E381();
+    }
+    while (target_y != dword_53AB5) {
+        if (target_y >= dword_53AB5)
+            ORIG_11B9B();
+        else
+            ORIG_11B48();
+        if (dword_51A83 != 0 && dword_51A83 != 6)
+            ORIG_17AA9(1);
+        ORIG_4E381();
+    }
+}
+
+/* 0x1DF58 */
+typedef void (*rle2trans_fn2)(void *, const void *, int);
+typedef void (*gfxrows_fn)(void *, int, const void *, int, int, int);
+typedef void (*delay_fn2)(int);
+#define ORIG_RLE2TRANS2 ((rle2trans_fn2)(uintptr_t)0x0004EBABu)
+#define ORIG_GFXROWS    ((gfxrows_fn)   (uintptr_t)0x00011EB0u)
+#define ORIG_DELAY2     ((delay_fn2)    (uintptr_t)0x0003790Au)
+
+void map_draw_status_popups(void)
+{
+    uint8_t v3[28];
+    uint8_t *p;
+    uint32_t i, j;
+
+    memcpy(v3, byte_5202C, 25);
+    if (dword_53EC4 == 0)
+        return;
+    p = (uint8_t *)guest_malloc(0x25680u);
+    memmove(p, dword_53A49, 0x25680u);
+    for (i = 0; i < 22; i++) {
+        memmove(dword_53A49, p, 0x25680u);
+        for (j = 0; j < (uint32_t)dword_53EC4; j++) {
+            if (byte_53C6C[j] != 0) {
+                const uint8_t *rec = dword_53A45 + 80u * (uint32_t)byte_53DFC[j];
+                uint8_t *dst = dword_53A49
+                    + 0x8088u
+                    + 24u * (uint32_t)(rec[0] - dword_53AA9)
+                    + 10944u * (uint32_t)(rec[1] - dword_53AAD)
+                    + byte_53D34[j]
+                    + (uint32_t)(456 * ((int)v3[j % 4u + i] - 3));
+                ORIG_RLE2TRANS2(dst,
+                    (const void *)(uintptr_t)(dword_53A81 +
+                        *(const uint32_t *)(uintptr_t)(dword_53A81 +
+                            4u * (uint32_t)byte_53C6C[j] + 6u)), 456);
+            }
+        }
+        ORIG_GFXROWS((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
+        ORIG_DELAY2(2);
+    }
+    guest_free(p);
+    ORIG_DELAY2(500);
+}
+
+/* 0x1C2DA - draw a list of party records' 24x24 icons into the map bitmap,
+ * then flash between the current and saved bitmap five times. */
+typedef int  (*sfx_fn2)(void *, int, int);
+typedef void (*wait_fn2)(int);
+typedef void (*spr24_fn)(const void *, void *, int);
+#define ORIG_SFX2   ((sfx_fn2) (uintptr_t)0x00025A96u)
+#define ORIG_WAIT   ((wait_fn2)(uintptr_t)0x00017AA9u)
+#define ORIG_SPR24  ((spr24_fn)(uintptr_t)0x0004E127u)
+
+void map_draw_party_icons(int unused, int table_idx, int count, const uint8_t *list)
+{
+    uint8_t *p;
+    int i;
+
+    (void)unused;
+    (void)table_idx;   /* only feeds sprite24_const's ignored 4th argument */
+    ORIG_SFX2((void *)(uintptr_t)dword_53B13, 1, 1);
+    p = (uint8_t *)guest_malloc(0x25680u);
+    memmove(p, dword_53A49, 0x25680u);
+    for (i = 0; i < count; i++) {
+        const uint8_t *rec = dword_53A45 + 80u * (uint32_t)list[i];
+        int x = rec[0], y = rec[1], kind = rec[2];
+        if (x >= dword_53AA9 - 1 && x <= dword_51A87 + dword_53AA9 &&
+            y >= dword_53AAD - 1 && y <= dword_51A8B + dword_53AAD + 1) {
+            uint8_t *dst = dword_53A49 + 0x8088u
+                + 24u * (uint32_t)(x - dword_53AA9)
+                + 10944u * (uint32_t)(y - dword_53AAD) - 0xAB0u;
+            int ebx = kind * 12;
+            const void *src;
+            ebx += (dword_53C0B == 3) ? 2 : dword_53C0B;
+            src = dword_53A61 + *(uint32_t *)(uintptr_t)(dword_53A61 + 4u * (uint32_t)ebx);
+            ORIG_SPR24(src, dst, 456);
+        }
+    }
+    for (i = 0; i < 5; i++) {
+        ORIG_GFXROWS((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
+        ORIG_WAIT(1);
+        ORIG_GFXROWS((void *)0xA0504u, 320, p + 32904u, 456, 312, 192);
+        ORIG_WAIT(1);
+    }
+    ORIG_GFXROWS((void *)0xA0504u, 320, p + 32904u, 456, 312, 192);
+    guest_free(p);
+}
+
+
+/* 0x1C4CC - like 0x1C2DA but shape bank 0x53AD1, a per-frame sound effect
+ * and a map-view refresh before and after. */
+
+void map_draw_party_icons_anim(int unused, int table_idx, int count,
+                               const uint8_t *list)
+{
+    uint8_t v16[36], v17[36], v18[36];
+    uint8_t *p;
+    int i, j;
+
+    (void)unused;
+    memcpy(v18, byte_51F33, 33);
+    memcpy(v16, byte_51F54, 33);
+    memcpy(v17, byte_51F75, 33);
+    map_view_update(0);
+    p = (uint8_t *)guest_malloc(0x25680u);
+    if (p == NULL)
+        return;
+    memmove(p, dword_53A49, 0x25680u);
+    for (i = 0; i < (int)v16[table_idx]; i++) {
+        const void *v20 = (const void *)(uintptr_t)(dword_53AD1 +
+            *(const uint32_t *)(uintptr_t)(dword_53AD1 +
+                4u * (uint32_t)(i + v18[table_idx]) + 6u));
+        memmove(dword_53A49, p, 0x25680u);
+        for (j = 0; j < count; j++) {
+            const uint8_t *rec = dword_53A45 + 80u * (uint32_t)list[j];
+            int x = rec[0], y = rec[1];
+            if (x >= dword_53AA9 - 1 && x <= dword_51A87 + dword_53AA9 &&
+                y >= dword_53AAD - 1 && y <= dword_51A8B + dword_53AAD + 1) {
+                uint8_t *dst = dword_53A49 + 24u * (uint32_t)(x - dword_53AA9)
+                    + 32904u + 10944u * (uint32_t)(y - dword_53AAD) - 2736u;
+                ORIG_RLE2TRANS2(dst, v20, 456);
+            }
+        }
+        ORIG_GFXROWS((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
+        if (i != 0 || v17[table_idx] == 0) {
+            int s = -1;
+            if (table_idx == 22 && i == 7)                     s = 3;
+            else if (table_idx == 25 && (i == 3 || i == 6))    s = 5;
+            else if (table_idx == 18 && i == 4)                s = 7;
+            else if (table_idx == 19 && (i == 3 || i == 6))    s = 8;
+            else if (table_idx == 8  && (i == 3 || i == 6))    s = 10;
+            else if (table_idx == 9  && (i == 15 || i == 19))  s = 15;
+            if (s >= 0)
+                ORIG_SFX2((void *)(uintptr_t)dword_53B13, s, 1);
+        } else {
+            ORIG_SFX2((void *)(uintptr_t)dword_53B13, v17[table_idx], 1);
+        }
+        ORIG_WAIT(1);
+    }
+    guest_free(p);
+    map_view_update(0);
+}
+
+/* 0x197E5 - composite the dialogue/text window: render the map view, copy a
+ * band from the staging screen, blit two raw shape blocks with a sliding
+ * vertical offset, blit the view to 0xA0504, then copy the lower band back. */
+typedef void (*h0v3_fn)(void);
+typedef void (*render3_fn)(uint8_t *, int, int, int, int, int);
+typedef void (*blittrans_fn)(void *, const void *, int);
+typedef void (*gfxrows3_fn)(void *, int, const void *, int, int, int);
+#define ORIG_ANIM3     ((h0v3_fn)     (uintptr_t)0x0001297Du)
+#define ORIG_RENDER3   ((render3_fn)  (uintptr_t)0x00011EEEu)
+#define ORIG_ALLPORT3  ((h0v3_fn)     (uintptr_t)0x000127A9u)
+#define ORIG_BLITTRANS ((blittrans_fn)(uintptr_t)0x0004ED34u)
+#define ORIG_GFXROWS3  ((gfxrows3_fn) (uintptr_t)0x00011EB0u)
+
+void map_draw_text_window(void)
+{
+    uint32_t v13[2];
+    uint8_t *base;
+    int32_t v14 = -16, v15 = 16;
+    int i, j, k;
+
+    v13[0] = *(const uint32_t *)(uintptr_t)0x00051EE5u;
+    v13[1] = *(const uint32_t *)(uintptr_t)0x00051EE9u;
+    base = dword_53A49 + 0x1A59Cu;
+    if ((uint32_t)(uintptr_t)dword_53A51 > 1u) {
+        ORIG_ANIM3();
+        ORIG_RENDER3(dword_53A49 + 0x8088u, 456, 13, 8,
+                     dword_53AA9, dword_53AAD);
+        ORIG_ALLPORT3();
+    }
+    for (i = 0; i < 4; i++) {
+        v14 += 4;
+        v15 -= 4;
+        for (k = 0; k < 86; k++)
+            memmove(dword_53A49 + 0x8089u + 456u * (uint32_t)(k + 108),
+                    (const void *)(uintptr_t)(dword_53C63 + 0x8C05u
+                                              + 320u * (uint32_t)k), 310);
+        for (j = 0; j < 2; j++) {
+            int off = (j == 0) ? v14 : v15;
+            ORIG_BLITTRANS(base + off,
+                (const void *)(uintptr_t)(dword_53A89 +
+                    *(const uint32_t *)(uintptr_t)(dword_53A89
+                        + 12u * v13[j])), 456);
+        }
+        ORIG_GFXROWS3((void *)0xA0504u, 320, dword_53A49 + 0x8088u, 456, 312, 192);
+    }
+    for (k = 0; k < 86; k++)
+        memmove((uint8_t *)(uintptr_t)0xA8C05u + 320u * (uint32_t)k,
+                (const void *)(uintptr_t)(dword_53C63 + 5u
+                                          + 320u * (uint32_t)(k + 112)), 310);
+}

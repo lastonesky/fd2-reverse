@@ -42,8 +42,7 @@
  * structured form below is a 1:1 mapping of the branches at
  * 0x25DC6/0x25E74/0x25E7C/0x25E88/0x25E8F - see comments with addresses).
  */
-#include "../include/fd2_globals.h"
-#include "../include/fd2_funcs.h"
+#include "fd2_game.h"      /* migrated assets + aliases + fd2_* model */
 #include "res.h"            /* res_load  (0x111BA, port3-restored) */
 #include "boot.h"
 #include "scene_core.h"     /* scenario_menu (0x25EBB), scene_event_tick (0x117E7) */

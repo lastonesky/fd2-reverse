@@ -1,0 +1,45 @@
+/* fd2_game.h - GENERATED umbrella for the migrated game modules.
+ * Include this to see every verified asset + the fd2_* model + aliases. */
+#ifndef FD2_GAME_UMBRELLA_H
+#define FD2_GAME_UMBRELLA_H
+
+#include "../include/fd2_globals.h"
+#include "../include/fd2_funcs.h"
+#include "../include/fd2_aliases.h"
+
+#include "anim.h"
+#include "bgm.h"
+#include "boot.h"
+#include "dlg.h"
+#include "ev.h"
+#include "ev2.h"
+#include "ev3.h"
+#include "ev4.h"
+#include "ev5.h"
+#include "ev6.h"
+#include "fade.h"
+#include "fx.h"
+#include "gfx.h"
+#include "guest_mem.h"
+#include "kbd.h"
+#include "map.h"
+#include "menu_actions.h"
+#include "msg.h"
+#include "path.h"
+#include "rec.h"
+#include "res.h"
+#include "rle.h"
+#include "rle2.h"
+#include "scene.h"
+#include "scene_core.h"
+#include "scene_states.h"
+#include "sprite24.h"
+#include "svc.h"
+#include "tables.h"
+#include "unit.h"
+#include "unit_load.h"
+#include "util.h"
+#include "vm.h"
+#include "world_load.h"
+
+#endif /* FD2_GAME_UMBRELLA_H */

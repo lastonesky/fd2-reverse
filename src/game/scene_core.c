@@ -18,8 +18,7 @@
  *  - record table access uses the 80-byte stride and 32-bit wrap semantics
  *    documented in data-layout.md §3 (rec.c is the authority).
  */
-#include "../include/fd2_globals.h"
-#include "../include/fd2_funcs.h"
+#include "fd2_game.h"
 #include "res.h"          /* res_load (0x111BA), verified in port/ (rescheck 160) */
 #include "scene_core.h"
 
@@ -29,7 +28,7 @@
 #include <string.h>
 
 #define VGA_BASE 0xA0000u
-#define REC_STRIDE 80u
+/* REC_STRIDE (80) comes from the migrated rec.h */
 #define SAVE_FILE_SIZE 0x59CBu   /* 22987 bytes = FD2.SAV payload */
 #define SLOT_STRIDE 2600u        /* bytes per save slot */
 #define SLOT_PARTY_OFF 12587u    /* party table (0xA00) + header inside slot */
@@ -308,7 +307,10 @@ int scene_apply_state(void)
         sub_11D40(0, 255, 0);
         sub_1956B(75);
         sub_15F84((int)dword_53A7D, 410, 0xA9524, 320, 205, 76, 74, 19, 1);
-        sub_16559(0);
+        /* 0x16559: the machine code pushes ONE arg (see 0x262D8) while port/'s
+           dlg_blit_dato takes 3 and passed dlgcheck(800); port/'s own call sites
+           pass (dword_53A85, dword_53C67, idx). ABI question recorded in PROGRESS 0-F. */
+        sub_16559((int)(uintptr_t)dword_53A85, dword_53C67, 0);
         dword_53A51 = 1;                            /* non-NULL sentinel */
         rc = sub_19953();
         dword_53A51 = 0;
@@ -331,7 +333,11 @@ int scene_apply_state(void)
 
     /* ---- B: interactive scene-select (0x2637F..0x265EB) ----------------- */
     dword_53A5D = (uint32_t)(uintptr_t)malloc(0x25680);
-    dword_53F56 = (uint32_t)(uintptr_t)sub_4E809(dword_53C03);   /* table entry */
+    /* 0x4E809 = table accessor: base 0x6238D, stride 31, offset -31 (tables.h).
+       port/ implements it as the file-local static tbl_6238D, so call the
+       migrated generic helper directly instead of an alias that cannot link. */
+    dword_53F56 = (uint32_t)(uintptr_t)tbl_ptr((void *)&fd2_data2[0x238D], 31,
+                                               (int)dword_53C03, -31);
     v5 = *(uint8_t *)(uintptr_t)dword_53F56;                     /* [0] */
     sub_1F882();
     sub_25977(10, 0);
