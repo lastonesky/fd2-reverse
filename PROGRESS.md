@@ -1341,10 +1341,30 @@ closure-ready 游戏头名 `0x22D1B`(u5)；离线反汇编证实其真闭包＝�
   `count` 仍传给 `map_draw_party_icons_anim`。
 - 无对拍器，标“已还原未验证”。
 
+### 52) `funcs_1541F` 动态 action 体 `0x2111A`/`0x211A4`（本轮，2 函数）→ `src/game/map_action.c/.h`（追加）
+
+拉出 §51 留待的两个**动态 action 索引独立体**（非表条目，由动作路由 `sub_20C6F` 依 action 码直调，
+并被 `0x2D80D` 第二处调）。本批后 `funcs_1541F` 相关低号条目/自由体全部闭合。
+
+| 地址 | 语义名 | 说明 |
+|---|---|---|
+| `0x2111A` | `map_action_anim_resolve` | 动作码 21 体：`map_draw_party_icons_anim(a1,bank,count,list)` → `map_record_layer_blink(a1,bank,count,list)` → 逐记录 `unit_action_damage(list[i],bank)`，命中 `map_enqueue_status(dmg,94,list[i])` 否则 `ev4_1E1DC(list[i])`；结尾 `map_view_update(0)`+`map_draw_status_popups()`。**它是共享尾声 `0x21190` 的宿主**；等价于 `map_action_resolve_layer` 但不清 `dword_53EC4`、不收 `rec_sub_table5` 代价 |
+| `0x211A4` | `map_action_heal_list` | 动作码 5/13 体：固定 bank 13 的两遍图标（`map_draw_party_icons_anim`/`map_draw_party_icons`），逐记录 `unit_heal(list[i],amount)` → `map_enqueue_status(healed,105,list[i])`；结尾共享 `0x21190` |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声（伪 callee）**：两函数结尾 `push 0; call 0x11CAC; call 0x1DF58`（`0x21190`）被 `function-map`
+  记为 `sub_2111A` 的 callee（`0x21227/0x213B7/0x211A4/0x214AD` 共用），非调用；C 侧写成语义调用。
+- **ABI**：cdecl `(a1, count, list, bank)`（`0x211A4` 第四参为治疗量）。逐指令核出：保存 4 寄存器后
+  `edi`/`ebp` 指向 `a3`/`a2`（`0x2111A`）与 `a2`/`a3`（`0x211A4`），循环计数取 `[esp+0x18]`/`edi`；
+  `sub_1C4CC`/`sub_1CAC7` 的压栈序为 `(a1, bank, count, list)`。
+- **chkstk**：两者均为 `push 0x24; call 0x3702F`（丢弃）。返回值为 `map_draw_status_popups` 残留，
+  dispatch 经调用点直调不读，C 侧返回 0（与 §51 同风格）。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **121 → 115**（本轮 §51 −6），已还原未验证 **202 → 208**（本轮 +6）。
+- `function-map.csv`：待还原 **115 → 113**（本轮 §52 −2），已还原未验证 **208 → 210**（本轮 +2）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1419,6 +1439,9 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 + 条目 9 `0x214AD` 与其共享体 `0x213B7`（`map_action.c` 追加），故该表 0..9 条目仅剩独立效果体
 `0x2111A`(u2)/`0x211A4`(u2)（均为动态 action 索引、由 `sub_20C6F` 直接调）；下一游戏头名回落至
 `0x2111A`(u2)/`0x211A4`(u2) 及 u1 小簇 `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2F7B6`(sub_2EBE1) 等。
+本轮 §52 拉出该表余下的两个动态 action 体 `0x2111A`(u2)/`0x211A4`(u2)（`map_action.c` 追加），
+故 `funcs_1541F` 相关低号条目/自由体全部闭合；下一游戏头名回落至 u1 小簇
+`0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2F7B6`(sub_2EBE1) 等。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交

@@ -442,3 +442,51 @@ int map_action_entry09(int a1, int count, const uint8_t *list)
     map_draw_status_popups();
     return 0;
 }
+
+/* 0x2111A - the action router sub_20C6F's action-code 21 body (and also called
+ * by 0x2D80D).  Same effect as map_action_resolve_layer without the status-flag
+ * clear and without charging the 0x619FD cost: draw the animated party icons
+ * with shape bank `bank`, alternate the record-layer animation frames, then
+ * resolve action `bank` on every listed record (unit_action_damage) and queue
+ * the number it dealt (or the idle cursor sprite on a miss).  It OWNS the
+ * shared 0x21190 epilogue (`map_view_update(0); map_draw_status_popups()`),
+ * which the siblings 0x21227/0x213B7/0x211A4/0x214AD jump into (false callee). */
+int map_action_anim_resolve(int a1, int count, const uint8_t *list, int bank)
+{
+    int i;
+
+    map_draw_party_icons_anim(a1, bank, count, list);
+    map_record_layer_blink(a1, bank, count, list);
+
+    for (i = 0; i < count; ++i) {
+        int dmg = unit_action_damage(list[i], bank);
+
+        if (dmg != 0)
+            map_enqueue_status(dmg, 94, list[i]);
+        else
+            ev4_1E1DC(list[i]);
+    }
+
+    map_view_update(0);
+    map_draw_status_popups();
+    return 0;
+}
+
+/* 0x211A4 - the action router sub_20C6F's action-code 5 / 13 body (and called
+ * by 0x2D80D).  Draws both party-icon passes with the fixed shape bank 13, then
+ * heals each listed record by `amount` (unit_heal) and queues the recovered
+ * number with glyph base 105.  Ends on the shared 0x21190 epilogue. */
+int map_action_heal_list(int a1, int count, const uint8_t *list, int amount)
+{
+    int i;
+
+    map_draw_party_icons_anim(a1, 13, count, list);
+    map_draw_party_icons(a1, 13, count, list);
+
+    for (i = 0; i < count; ++i)
+        map_enqueue_status(unit_heal(list[i], amount), 105, list[i]);
+
+    map_view_update(0);
+    map_draw_status_popups();
+    return 0;
+}

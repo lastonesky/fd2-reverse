@@ -631,3 +631,10 @@
 0x21462 sub_21462 game/map_action.h
 0x2147B sub_2147B game/map_action.h
 0x214AD sub_214AD game/map_action.h
+
+# dynamic action bodies reached straight from the action router 0x20C6F (not
+# funcs_1541F entries): action 21 resolves the action on the listed records with
+# record-layer blink, actions 5/13 heal the list.  0x2111A owns the shared
+# 0x21190 epilogue the other families jump into (false callees).
+0x2111A sub_2111A game/map_action.h
+0x211A4 sub_211A4 game/map_action.h

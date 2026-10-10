@@ -147,4 +147,16 @@ int map_action_entry07(int a1, int count, const uint8_t *list);
  * first listed record only and queue the dealt number. */
 int map_action_entry09(int a1, int count, const uint8_t *list);
 
+/* 0x2111A - action router (sub_20C6F) action-code 21 body: draw the animated
+ * party icons and the record-layer blink with shape bank `bank`, resolve action
+ * `bank` on each listed record and queue the dealt number.  Owns the shared
+ * 0x21190 epilogue (map_view_update + map_draw_status_popups) that the siblings
+ * 0x21227/0x213B7/0x211A4/0x214AD jump into. */
+int map_action_anim_resolve(int a1, int count, const uint8_t *list, int bank);
+
+/* 0x211A4 - action router (sub_20C6F) action-code 5/13 body: draw both
+ * party-icon passes with the fixed bank 13, then heal each listed record by
+ * `amount` and queue the recovered number with glyph base 105. */
+int map_action_heal_list(int a1, int count, const uint8_t *list, int amount);
+
 #endif /* GAME_MAP_ACTION_H */
