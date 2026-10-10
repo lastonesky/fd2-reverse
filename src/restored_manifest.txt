@@ -514,3 +514,11 @@
 0x272D0 sub_272D0 game/shop_rows.h
 0x2A0C2 sub_2A0C2 game/shop_rows.h
 0x2A694 sub_2A694 game/shop_rows.h
+
+# interactive list screens of the shop/place-menu family (they drive the
+# shop_rows painters above; their callers 0x2872B/0x28CBD/0x28F65/0x2A43E/
+# 0x2AA00 are still pending)
+0x275E6 sub_275E6 game/shop_screen.h
+0x27738 sub_27738 game/shop_screen.h
+0x2A29D sub_2A29D game/shop_screen.h
+0x2A857 sub_2A857 game/shop_screen.h
