@@ -937,10 +937,35 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 - **归属**：追加进既有 `map_units`（单位精灵在地图视图内的动画），未改已验证模块；`map_units.h` 已在伞头，无需改列。
 - 无对拍器，标“已还原未验证”。
 
+### 35) 单位移动动画驱动（本轮，1 函数）→ `src/game/map_units.c`（追加，单位移动族闭合）
+
+§34 三个相位的调用者 `0x22253`（541B，u5）是本轮 `function-map.csv` 闭包就绪游戏头名，其 callee 全在册
+（含 §34 三相位 + `res_load`/`map_render_view`/`svc_play_sfx`/`reveal_band`），故按同模块簇整体拉出：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x22253` | `map_units_move_play(rec, rec_x, rec_y, at_x, at_y)` | `res_load(FDOTHER,0,81)`（音效库）→ `guest_malloc(0x25680)` 暂存 → `map_render_view(暂存+0x8088,…)` → `map_units_move_walk(at_x,at_y,暂存)` → 若记录的新格 `(rec_x,rec_y)` 与动画格 `(at_x,at_y)` 相同则音效索引取 1（否则 0），`svc_play_sfx` → `map_units_move_reveal`（返回末帧 sprite）→ **把记录 `dword_53A45+80*rec` 的字节 0/1 写成 `(rec_x,rec_y)`** → `memmove(dword_53A49, 暂存, 0x25680)` → `reveal_band(cx,cy,11,0,192,末帧)` → 把约 24 行（视图首行 18 行）的 312 字节窗口从暂存拷贝回帧缓冲（每行 24 字节、行距 320）→ `map_units_move_settle` → `guest_free`×2。`cx=24*dword_53AB9+12`、`cy=24*dword_53ABD+15`。 |
+
+**陷阱 / 伪代码伪影**：
+- **ABI（chkstk 骗过反编译器，以离线反汇编定案）**：机器帧 `push ebx/esi/edi/ebp; sub esp,0x1c` 后
+  `mov ebx,[esp+0x30]` 即第 1 实参 `rec`；第 2/3 实参 `[esp+0x34]/[esp+0x38]` 写入记录字节 0/1，
+  第 4/5 实参 `[esp+0x3c]/[esp+0x40]` 为动画格；比较 `arg2==arg4 && arg3==arg5` 定音效索引。
+- **`free((void*)p)` 的误名**：Hex-Rays 把 `res_load` 结果（栈 local `[esp+8]`）误渲染成第二形参 `p`；
+  机器实为 `0x3776E`(guest_free) 释放该 `res_load` 结果，C 侧走 `guest_free` 缝。
+- **sprite 偏移**：`dword_53AD1 + *(uint32_t*)(dword_53AD1+0x1F6)`（0x1F6=502，单帧覆盖图集项）。
+- **共享尾声非跳转**：机器尾 `jmp 0x18888`（落进 `dlg_draw_number` 体内尾声）＝普通 `return`；
+  `function-map` 误列 `sub_187D6`，真实依赖不含它（故未调用）。
+- **伪 callee**：`0x22253` 的 callee 表未含 §34 相位之外的真依赖；`sub_3702F`(chkstk) 丢弃。
+- **别名**：`scene_states.c`（§7/§34 既有）已按 IDA 名调用 `sub_22253`，故 `map_units.h` 沿用同头
+  `#define sub_22253 map_units_move_play` 保持调用点不变；返回值原为残留 eax，调用点均不读，C 侧声明 `void`。
+- **chkstk**：`push 0x4C; call 0x3702F`（不分配帧），丢弃。
+- **归属**：追加进既有 `map_units`（§34 三相位的驱动），单位移动族（`0x22253` + 三相位）现闭合；
+  其 caller `0x2218A`/`0x250CC`/`0x2548C`/`0x33F78` 仍待还原。无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180 → 179 → 176 → 172 → 169 → 166**（本批 −3；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143 → 144 → 147 → 151 → 154 → 157**（本批 +3）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180 → 179 → 176 → 172 → 169 → 166 → 165**（本批 −1；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143 → 144 → 147 → 151 → 154 → 157 → 158**（本批 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 

@@ -12,8 +12,10 @@
  *                                    dword_53A6D, returns the last frame.
  *   0x22656  map_units_move_settle   reveal pass around (cx, cy): 10 frames of
  *                                    dword_53A6D.
+ *   0x22253  map_units_move_play     driver of the three phases above (also
+ *                                    set the record's cell and load the sfx).
  *
- * All four are hand-restored and compile-verified; no differential harness yet.
+ * All five are hand-restored and compile-verified; no differential harness yet.
  */
 #ifndef FD2_GAME_MAP_UNITS_H
 #define FD2_GAME_MAP_UNITS_H
@@ -38,7 +40,12 @@ const void *map_units_move_reveal(int dst_x, int dst_y, void *scratch,
 int map_units_move_settle(int unused1, int unused2, void *scratch,
                           int cx, int cy, const void *unused3, int unused4);
 
+/* 0x22253 - play the whole walk/reveal/settle move at cell (at_x, at_y) for
+ * record `rec`, whose cell bytes are set to (rec_x, rec_y) in the process. */
+void map_units_move_play(int rec, int rec_x, int rec_y, int at_x, int at_y);
+
 /* Call sites keep the IDA name. */
 #define sub_1DB65 map_units_animate
+#define sub_22253 map_units_move_play
 
 #endif /* FD2_GAME_MAP_UNITS_H */

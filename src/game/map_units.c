@@ -223,3 +223,68 @@ int map_units_move_settle(int unused1, int unused2, void *scratch,
 
     return r;
 }
+
+/* 0x22253 - driver of the three move phases above.  `rec` names a record in
+ * dword_53A45: its cell bytes are set to (rec_x, rec_y) while the walk /
+ * reveal / settle phases are played at the cell (at_x, at_y) on a 0x25680
+ * scratch copy of the map view.  When (rec_x, rec_y) already equals
+ * (at_x, at_y) the sound-effect index becomes 1 (otherwise 0).  FDOTHER.DAT
+ * entry 81 is loaded for that effect and freed at the end; the sprite blitted
+ * into the cell comes from the dword_53AD1 overlay atlas at its +0x1F6
+ * offset.  After the reveal a 24-row band (18 rows on the view's top line)
+ * is memmove'd from the scratch copy into the frame buffer in 24-byte pieces,
+ * 10 ms apart.  Argument order and the chkstk-suppressed frame come from the
+ * four call sites 0x221FD / 0x2223F / 0x2541F / 0x25535. */
+void map_units_move_play(int rec, int rec_x, int rec_y, int at_x, int at_y)
+{
+    void    *dato     = res_load(aFdotherDat, NULL, 81);
+    uint8_t *scratch  = (uint8_t *)guest_malloc(0x25680u);
+    uint8_t *record   = (uint8_t *)(uintptr_t)dword_53A45 + 80u * (uint32_t)rec;
+    const int ox      = (int)dword_53AA9;
+    const int oy      = dword_53AAD;
+    const void *sprite = (const void *)(uintptr_t)
+        (dword_53AD1 + *(const uint32_t *)(uintptr_t)(dword_53AD1 + 502u));
+    const int cx = 24 * (int)dword_53AB9 + 12;
+    const int cy = 24 * (int)dword_53ABD + 15;
+    const void *last;
+    uint8_t *dst, *src;
+    uint8_t rows;
+    int i;
+
+    map_render_view(scratch + 0x8088u, 456, 13, 8, ox, oy);
+    map_units_move_walk(at_x, at_y, scratch);
+
+    svc_play_sfx(dato, (rec_x == at_x && rec_y == at_y) ? 1 : 0, 1);
+    last = map_units_move_reveal(at_x, at_y, scratch, cx, cy, sprite);
+
+    record[0] = (uint8_t)rec_x;
+    record[1] = (uint8_t)rec_y;
+    memmove(dword_53A49, scratch, 0x25680u);
+
+    reveal_band(cx, cy, 11, 0, 192, last);
+
+    {
+        uint8_t *base = dword_53A49 + 24 * (at_x - ox) + 0x8088u;
+
+        src  = base + 10944 * (at_y - oy) - 2736;
+        dst  = (uint8_t *)(uintptr_t)dword_53A49
+               + 24 * (at_x - ox) + 654724 + 7680 * (at_y - oy);
+        rows = 24;
+        if (at_y == oy) {
+            rows = 18;
+            src  = base + 10944 * (at_y - oy);
+            dst += 1920;
+        }
+    }
+    for (i = 0; i < rows; ++i) {
+        memmove(dst, src, 0x18u);
+        dst += 320;
+        src += 456;
+        j___delay(10);
+    }
+
+    map_units_move_settle(at_x, at_y, scratch, cx, cy, sprite,
+                          (int)(intptr_t)last);
+    guest_free(scratch);
+    guest_free(dato);
+}

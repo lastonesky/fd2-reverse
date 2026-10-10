@@ -530,8 +530,9 @@
 0x1CAC7 sub_1CAC7 game/map_sprites.h
 0x1EC2A sub_1EC2A game/map_status.h
 
-# phases of the unit-move animation (all callees of 0x22253; the driver is
-# still pending, its inferred group is ev3)
+# phases of the unit-move animation and their driver 0x22253 (the driver sets
+# the record's cell and loads the sfx); its inferred group is ev3)
+0x22253 sub_22253 game/map_units.h
 0x22470 sub_22470 game/map_units.h
 0x22547 sub_22547 game/map_units.h
 0x22656 sub_22656 game/map_units.h
