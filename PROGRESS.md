@@ -1205,10 +1205,32 @@ callee——`0x2AE0E`/`0x2AC7D`/`0x2FB2C`——作为一簇（1350B，真闭包�
 - **堆**：`0x3706E`/`0x3776E` → `guest_malloc`/`guest_free`；Watcom 栈探针（`push size; call 0x3702F`）剔除。
 - 无对拍器，标“已还原未验证”。拉出后 `0x14B78`(u8) 的真闭包去除 `146D1/14237/1DEBE` 三项，但仍含 `15055/15311/1548E/1567E/1598A…` >8 函数；下一游戏头名仍为 u1 小簇（`0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2AA00`(sub_29DAA)/`0x2F7B6`(sub_2EBE1) 等）。
 
+### 47) actor “approach cell” core + two callers（本轮，3 函数）→ `src/game/map_move.c/.h`（新建）
+
+§46 后 closure-ready 游戏头名升为 `0x14B78`(u8)；离线反汇编证实其真闭包＝**自身**（8 个实调 callee
+全在册：`path_mark`(0x4E390)、`path_find`(0x4E4F6)、`ev5_14B16`(0x14B16)、`util_fix_records`(0x4DF4C)、
+`unit_mark_nearby`(0x145CD)、`map_exclude_record_cells`(0x146D1)、`map_scroll_path`(0x13488)、
+`rec_skip`(0x1F183)，及 `tbl_ptr(0x61646,20)`）。连同其两个 closure-ready caller
+`0x14121`(u3)/`0x13E9C`(u1) 整体拉出，合计 1478 B。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x14B78` | `map_move_toward` | 朝格 (tx,ty) 走：先 `path_find(mode0)` 直连；不通则 `path_find(mode1,start_mp=28)` 求带转向偏好的路径，`path_mark` 标记后沿方向表从记录格行走、取最后一个非 0xFF 格为新目标；再 `path_mark`→`map_exclude_record_cells`→`ev5_14B16` 收集可达格，按曼哈顿距离（并列取 `|dx|-|dy|` 最小）挑最近格，最后 `path_find(mode0)`→`map_scroll_path` 提交。返回是否提交。 |
+| `0x14121` | `map_move_to_marked` | `path_find(mode2,target 0,0,start_mp=28)` 求可达的 0x40 标记格（出参 2 字节＝目标格）；与记录格相同则空转，否则 `dlg_portrait_glide` 后 `map_move_toward`。`dword_51A83` 0/1 包裹。 |
+| `0x13E9C` | `map_move_to_nearest` | 遍历 `dword_53BEB` 条记录，按 `+6`（mode==0 取 `!=0`，否则 `==0`）过滤，取曼哈顿最近者的格；同上 glide + `map_move_toward`。 |
+
+**陷阱 / 伪代码伪影**：
+- **闭包修正**：§46 曾记 `0x14B78` 的真闭包含 `15055/15311/1548E/1567E/1598A`；离线反汇编/伪代码证实其**实调**仅上表 8 项，其余为 `0x14B78` 的既有 caller，非闭包。
+- **反编译器实参错位**：`sub_14B78` 的 Hex-Rays 渲染把 `path_find/path_mark` 的 `(x,y)` 实参错标成 `(a4,v22)`，并把方向扫描起点错标成 `(a4,v22)`；离线反汇编定为记录格 `(rec[0],rec[1])`、`path_find(...,rec_x,rec_y,...)`、`path_mark(...,rec_x,rec_y,...)`，本模块按反汇编。
+- **`0x14121` 出参**：`mode2` 的 `path_find` 只在命中 `cell[-1]&0x40` 时写 2 字节目标格（`path.c` `mark_target`），故栈上 2 字节缓冲足矣（原机帧一致）。
+- 共享尾声：`0x14B78` 尾 `jmp 0x11011`、`0x14121` 尾 `jmp 0x10B46` 属外部纯 `return` 尾声（伪 callee）。堆 `0x3706E/0x3776E` → `guest_malloc/guest_free`。
+- 无对拍器，标“已还原未验证”。拉出后下一游戏头名回落至 u1 小簇
+  `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2AA00`(sub_29DAA)/`0x2F7B6`(sub_2EBE1) 等。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **140 → 137**（本轮 §46 −3），已还原未验证 **183 → 186**（本轮 +3）。
+- `function-map.csv`：待还原 **137 → 134**（本轮 §47 −3），已还原未验证 **186 → 189**（本轮 +3）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 

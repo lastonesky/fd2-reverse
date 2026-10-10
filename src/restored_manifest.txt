@@ -592,3 +592,10 @@
 0x14237 sub_14237 game/map_ai.h
 0x146D1 sub_146D1 game/map_ai.h
 0x1DEBE sub_1DEBE game/map_ai.h
+
+# the actor-"approach a cell" core (0x14B78) and its two closure-ready
+# callers: 0x14121 (move onto the reachable 0x40-flagged cell) and 0x13E9C
+# (move onto the nearest record matching the +6 filter).
+0x14B78 sub_14B78 game/map_move.h
+0x14121 sub_14121 game/map_move.h
+0x13E9C sub_13E9C game/map_move.h
