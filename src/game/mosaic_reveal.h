@@ -1,5 +1,5 @@
-/* mosaic_reveal.h - party-portrait mosaic reveal transition (original 0x4EB59,
- * 0x1F42D, 0x1F1CC, 0x1F30A).
+/* mosaic_reveal.h - party-portrait mosaic reveal transition (original 0x1A7BD,
+ * 0x1A7F1, 0x4EB59, 0x1F42D, 0x1F1CC, 0x1F30A).
  *
  * One "character joins / party changes" transition on the map screen.  The live
  * 0xFA00-byte frame is copied to a scratch buffer, then re-composited frame by
@@ -18,6 +18,16 @@
  *   0x1F30A  "in": mosaic with block 17..1 while fading back up, then redraw
  *            the map window and refresh the portraits.
  *
+ * The 0x1A30B orchestrator brackets each run of the map-frame handlers
+ * (0x1D80B / 0x1D8BA) with a pair of tiny load/free helpers around the shared
+ * SFX bank pointer dword_53B0F:
+ *
+ *   0x1A7BD   reveal_bank_load  res_load(FDOTHER.DAT, NULL, 64) into
+ *                               dword_53B0F, guarded by the in-game flag
+ *                               byte_53AF9 (0x1E98C later plays samples out
+ *                               of that bank through svc_play_sfx)
+ *   0x1A7F1   reveal_bank_free  release the bank under the same guard
+ *
  * True ABI is cdecl.  The scratch buffer lives on the game heap (guest_mem.h);
  * every other dependency is an already-verified asset: res_draw_subimage
  * (0x15F0E), gfx_copy_rows (0x11EB0), dlg_snap_restore (0x15E71),
@@ -32,6 +42,13 @@
 
 /* 0x4EB59 - block-replicate 312x192 window, block x block cells. */
 void mosaic_blit(int block, uint8_t *dst, uint8_t *src);
+
+/* 0x1A7BD - (re)load the shared SFX bank into dword_53B0F; no-op when the
+ * scene did not set byte_53AF9. */
+void reveal_bank_load(void);
+
+/* 0x1A7F1 - release the bank reveal_bank_load placed in dword_53B0F. */
+void reveal_bank_free(void);
 
 /* 0x1F42D - one frame of the two sliding portrait strips at split `offset`. */
 void reveal_slide_draw(int offset, int index);

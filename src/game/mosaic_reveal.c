@@ -1,10 +1,10 @@
 /* mosaic_reveal.c - see mosaic_reveal.h.
  *
- * Direct translations of the machine code at 0x4EB59 / 0x1F42D / 0x1F1CC /
- * 0x1F30A.  The disassembly is the authority for the constants, the split
- * offsets and the mosaic addressing; the Hex-Rays output drops the important
- * detail that 0x4EB59 keeps the source row pointer and re-samples it on a
- * block x block lattice.
+ * Direct translations of the machine code at 0x1A7BD / 0x1A7F1 / 0x4EB59 /
+ * 0x1F42D / 0x1F1CC / 0x1F30A.  The disassembly is the authority for the
+ * constants, the split offsets and the mosaic addressing; the Hex-Rays output
+ * drops the important detail that 0x4EB59 keeps the source row pointer and
+ * re-samples it on a block x block lattice.
  */
 #include "fd2_game.h"
 #include "mosaic_reveal.h"
@@ -14,6 +14,27 @@
 
 #define REVEAL_MAP_OFF 0x8088u   /* dword_53A49 + 32904, the 456-stride window */
 #define REVEAL_STRIDE  456
+
+/* 0x1A7BD - (re)load the shared SFX bank that the 0x1A30B party-change loop
+ * hands to the map-frame handlers.  The machine clears dword_53B0F and passes
+ * NULL as res_load's old_buffer, i.e. it always allocates a fresh container
+ * FDOTHER.DAT sub-image 64; nothing happens unless byte_53AF9 (the in-game
+ * flag scene_core takes from the save header) is set. */
+void reveal_bank_load(void)
+{
+    if (byte_53AF9 == 0)
+        return;
+
+    dword_53B0F = 0;
+    dword_53B0F = (uint32_t)(uintptr_t)res_load(aFdotherDat, NULL, 64);
+}
+
+/* 0x1A7F1 - release the bank (original: `push dword_53B0F; call 0x3776E`). */
+void reveal_bank_free(void)
+{
+    if (byte_53AF9 != 0)
+        guest_free((void *)(uintptr_t)dword_53B0F);
+}
 
 /* 0x4EB59 - block-replicate blit of the 312x192 window at src+0x504 into
  * dst+0x504 on a block x block lattice (block == 1 copies 1:1).  Every output

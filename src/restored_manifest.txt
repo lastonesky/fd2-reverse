@@ -448,6 +448,11 @@
 0x1F1CC sub_1F1CC game/mosaic_reveal.h
 0x1F30A sub_1F30A game/mosaic_reveal.h
 
+# 0x1A30B party-change loop brackets its handler run (0x1D80B/0x1D8BA) with
+# this load/free pair around the shared SFX bank pointer dword_53B0F
+0x1A7BD sub_1A7BD game/mosaic_reveal.h
+0x1A7F1 sub_1A7F1 game/mosaic_reveal.h
+
 # location/place-menu helpers (drivers 0x2670E/0x279BC/0x2872B/0x28CBD/0x29300/0x29DAA/0x2A43E still pending)
 0x26A0D sub_26A0D game/place_menu.h
 0x2921A sub_2921A game/place_menu.h

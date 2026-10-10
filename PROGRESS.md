@@ -714,10 +714,28 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 - **返回值**：`fd2_funcs.h` 对 `0x2F631`/`0x2FE14` 的原型均为 `void`，Hex-Rays 亦为 `void`；调用点不读，C 侧声明 `void`。
 - 无对拍器，标“已还原未验证”。
 
+### 26) 队伍变更过渡的共享音效库加载/释放对 → `src/game/mosaic_reveal.c/.h`（本轮，2 函数）
+
+§17 留下的编排者 `0x1A30B`（队伍变更/肖像马赛克过渡）本轮只剩两个闭包就绪 callee——
+它在每段处理环（`0x1D80B`/`0x1D8BA`）前后成对调用它们：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1A7BD` | `reveal_bank_load` | `byte_53AF9 != 0` 时把 `dword_53B0F` 清 0 再 `res_load(aFdotherDat, NULL, 64)`；该全局是共享音效库（`0x1E98C` 把它当 `svc_play_sfx` 的 `bank` 实参用） |
+| `0x1A7F1` | `reveal_bank_free` | 同一 flag 门下释放 `dword_53B0F`（机器 `push ds:0x53B0F; call 0x3776E`）→ 走 `guest_free` 缝 |
+
+**陷阱 / 伪代码伪影**：
+- **`old_buffer` 是 NULL**：机器明确 `push 0` 作 `res_load` 第 2 实参（不是把 `dword_53B0F` 旧值传进去），
+  故每次都新分配；前一条 `mov ds:0x53B0F,0` 只是“载入期间清零”，C 侧照写以保序。
+- **chkstk**：两者皆 `push 0x10`/`push 8; call 0x3702F`，丢弃（`0x3702F` 不分配帧）。
+- **返回值**：两者 eax 残留（`res_load` 指针 / `free` 结果），调用点不读，C 侧声明 `void`。
+- **归属**：`0x1A30B` 的过渡即 `reveal_mosaic_out/in`（`push 0x52`/`0x50`），故两助手追加进
+  既有 `mosaic_reveal.c`（该模块仍无对拍器，保持“已还原未验证”）。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188**（本批 −2），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135**（本批 +2）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186**（本批 −2），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137**（本批 +2）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -737,8 +755,9 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 `0x1E856`(u2，仍待 `0x1E98C`/`0x1ECC7`)。
 本轮 §24 已拉出 `0x1C142`/`0x1C1C3`（`box_popup` 物品选择助手，同 caller `1BFFE`/`2872B`）。
 本轮 §25 已拉出 §21 `figure_view` 家族的另两个同胞 `0x2F631`/`0x2FE14`(u2)（驱动器 `0x2EBE1`/`0x2FB2C`）。
-现闭包就绪的游戏函数头名：`0x1A7BD`/`0x1A7F1`(u2，同 caller `0x1A30B` 的暂存/释放对)、
-`0x2B439`/`0x2B843`(u2，同 caller `sub_2AF28`)、`0x1CB94`/`0x1CD17`/`0x1EC2A`/`0x272D0`/`0x2A0C2`/`0x2A694`(u2)。
+本轮 §26 已拉出闭包就绪头名 `0x1A7BD`/`0x1A7F1`(u2，`0x1A30B` 的音效库加载/释放对)。
+现闭包就绪的游戏函数头名：`0x2B439`/`0x2B843`(u2，同 caller `sub_2AF28`)、
+`0x1CB94`/`0x1CD17`/`0x1EC2A`/`0x272D0`/`0x2A0C2`/`0x2A694`(u2)。
 
 **台账发现（待后续修正，本批不改）**：`function-map.csv` 把 `0x2BF83`(u2) 列为待还原，但该地址已在
 `src/game/fx.c` 实现为 `fx_advance`（`fx.h` 已声明），仅漏登 `restored_manifest.txt`；故它不应再被当成
