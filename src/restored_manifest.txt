@@ -621,3 +621,13 @@
 0x21364 sub_21364 game/map_action.h
 0x2137D sub_2137D game/map_action.h
 0x21494 sub_21494 game/map_action.h
+
+# funcs_1541F entries 4/5/6/7/9 + the shared 0x213B7 body.  The 0x21449/62/7B
+# tails jump into 0x21396's 0x213AA call site; 0x213B7/0x214AD end on the shared
+# 0x21190 epilogue inside 0x2111A (false callees).
+0x213B7 sub_213B7 game/map_action.h
+0x21396 sub_21396 game/map_action.h
+0x21449 sub_21449 game/map_action.h
+0x21462 sub_21462 game/map_action.h
+0x2147B sub_2147B game/map_action.h
+0x214AD sub_214AD game/map_action.h

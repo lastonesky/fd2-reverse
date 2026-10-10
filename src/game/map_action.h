@@ -128,4 +128,23 @@ int map_action_entry02(int a1, int count, const uint8_t *list);
 int map_action_entry03(int a1, int count, const uint8_t *list);
 int map_action_entry08(int a1, int count, const uint8_t *list);
 
+/* 0x213B7 - clear the status-queue flag, draw the animated party icons with
+ * shape bank `table_idx`, alternate the record-layer animation frames, charge
+ * cost `table_idx` via rec_sub_table5, then resolve action `table_idx` on each
+ * listed record and queue the dealt number.  Shared body of the funcs_1541F
+ * entries 4/5/6/7. */
+int map_action_resolve_layer(int a1, int table_idx, int count,
+                             const uint8_t *list);
+
+/* 0x21396 / 0x21449 / 0x21462 / 0x2147B - funcs_1541F entries 4/5/6/7:
+ * resolve action 4/5/6/7 on the list via map_action_resolve_layer. */
+int map_action_entry04(int a1, int count, const uint8_t *list);
+int map_action_entry05(int a1, int count, const uint8_t *list);
+int map_action_entry06(int a1, int count, const uint8_t *list);
+int map_action_entry07(int a1, int count, const uint8_t *list);
+
+/* 0x214AD - funcs_1541F entry 9: charge cost 9, then resolve action 9 on the
+ * first listed record only and queue the dealt number. */
+int map_action_entry09(int a1, int count, const uint8_t *list);
+
 #endif /* GAME_MAP_ACTION_H */

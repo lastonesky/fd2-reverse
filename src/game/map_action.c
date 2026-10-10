@@ -3,11 +3,11 @@
  * Direct translations of the machine code at the stated addresses.  The offline
  * disassembly is authoritative for the argument order, the constants and the
  * control flow.  All callees are already-restored assets:
- *   map_draw_party_icons(_anim) (0x1C2DA/0x1C4CC), map_draw_status_popups
- *   (0x1DF58), map_enqueue_status (0x1E0DB), map_view_update (0x11CAC),
- *   ev4_1E1DC (0x1E1DC), rec_sub_table5 (0x1CA89), rec_slot_remove (0x1B8E7),
- *   unit_metrics (0x1B750), unit_damage (0x1C81F) and the RNG util_rand
- *   (0x4EBE3).
+ *   map_draw_party_icons(_anim) (0x1C2DA/0x1C4CC), map_record_layer_blink
+ *   (0x1CAC7), map_draw_status_popups (0x1DF58), map_enqueue_status (0x1E0DB),
+ *   map_view_update (0x11CAC), ev4_1E1DC (0x1E1DC), rec_sub_table5 (0x1CA89),
+ *   rec_slot_remove (0x1B8E7), unit_metrics (0x1B750), unit_damage (0x1C81F)
+ *   and the RNG util_rand (0x4EBE3).
  *
  * The Watcom stack probe (`push size; call 0x3702F`) is dropped.  The two
  * shared epilogues (`jmp 0x1317D`, `jmp 0x22BBE`) and the Hex-Rays `_CHP()`
@@ -363,4 +363,82 @@ int map_action_entry03(int a1, int count, const uint8_t *list)
 int map_action_entry08(int a1, int count, const uint8_t *list)
 {
     return map_action_resolve_list(a1, 8, count, list);
+}
+
+/* 0x213B7 - shared effect body of the funcs_1541F entries 4/5/6/7: clear the
+ * status-queue flag, draw the animated party icons with shape bank `table_idx`,
+ * alternate the two record-layer animation frames, charge cost `table_idx` via
+ * rec_sub_table5, then resolve action `table_idx` on every listed record and
+ * queue the dealt number (or the idle cursor sprite on a miss).  Ends on the
+ * shared 0x21190 tail inside 0x2111A (map_view_update(0) +
+ * map_draw_status_popups), which IDA records as a false callee. */
+int map_action_resolve_layer(int a1, int table_idx, int count,
+                             const uint8_t *list)
+{
+    int i;
+
+    dword_53EC4 = 0;
+    map_draw_party_icons_anim(a1, table_idx, count, list);
+    map_record_layer_blink(a1, table_idx, count, list);
+    rec_sub_table5(a1, table_idx);
+
+    for (i = 0; i < count; ++i) {
+        int dmg = unit_action_damage(list[i], table_idx);
+
+        if (dmg != 0)
+            map_enqueue_status(dmg, 94, list[i]);
+        else
+            ev4_1E1DC(list[i]);
+    }
+
+    map_view_update(0);
+    map_draw_status_popups();
+    return 0;
+}
+
+/* 0x21396 - funcs_1541F entry 4: resolve action 4 on the list. */
+int map_action_entry04(int a1, int count, const uint8_t *list)
+{
+    return map_action_resolve_layer(a1, 4, count, list);
+}
+
+/* 0x21449 - funcs_1541F entry 5: resolve action 5 on the list. */
+int map_action_entry05(int a1, int count, const uint8_t *list)
+{
+    return map_action_resolve_layer(a1, 5, count, list);
+}
+
+/* 0x21462 - funcs_1541F entry 6: resolve action 6 on the list. */
+int map_action_entry06(int a1, int count, const uint8_t *list)
+{
+    return map_action_resolve_layer(a1, 6, count, list);
+}
+
+/* 0x2147B - funcs_1541F entry 7: resolve action 7 on the list. */
+int map_action_entry07(int a1, int count, const uint8_t *list)
+{
+    return map_action_resolve_layer(a1, 7, count, list);
+}
+
+/* 0x214AD - funcs_1541F entry 9: clear the status-queue flag, draw the animated
+ * party icons with shape bank 9, charge cost 9, then resolve action 9 on the
+ * first listed record only and queue the dealt number (or the idle cursor
+ * sprite).  Ends on the shared 0x21190 tail. */
+int map_action_entry09(int a1, int count, const uint8_t *list)
+{
+    int dmg;
+
+    dword_53EC4 = 0;
+    map_draw_party_icons_anim(a1, 9, count, list);
+    rec_sub_table5(a1, 9);
+
+    dmg = unit_action_damage(list[0], 9);
+    if (dmg != 0)
+        map_enqueue_status(dmg, 94, list[0]);
+    else
+        ev4_1E1DC(list[0]);
+
+    map_view_update(0);
+    map_draw_status_popups();
+    return 0;
 }
