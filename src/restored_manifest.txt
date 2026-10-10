@@ -1,0 +1,11 @@
+# restored_manifest.txt - functions already hand-restored in src/game|lib
+# format: <addr> <ida_name> <header>
+# fd2_funcs.h skips these; the module's own header is authoritative.
+0x111BA sub_111BA game/res.h
+0x25BF4 main game/boot.h
+0x37d3e AIL_startup lib/ail.h
+0x37ed8 AIL_shutdown lib/ail.h
+0x3908b AIL_install_DIG_INI lib/ail.h
+0x3aa72 AIL_install_MDI_INI lib/ail.h
+0x392d0 AIL_allocate_sample_handle lib/ail.h
+0x3aca3 AIL_allocate_sequence_handle lib/ail.h
