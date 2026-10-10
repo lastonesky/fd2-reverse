@@ -27,6 +27,7 @@
 #include "item_use.h"
 #include "kbd.h"
 #include "map.h"
+#include "map_interact.h"
 #include "map_units.h"
 #include "map_window.h"
 #include "menu_actions.h"

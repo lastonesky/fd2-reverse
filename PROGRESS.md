@@ -319,16 +319,26 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
   但 port/ 的 `dlg_wait_key` 声明为 `void`。为不动已验证资产，调用点改为
   `dlg_wait_key(0); key = byte_53A8E;`（行为等价，已写入注释）。
 
+### 10) 地图交互环 → `src/game/map_interact.c/.h`（本轮）—— P1 头号 u9 收口
+
+- `0x115B6` `map_pick_record`（u9，本轮最高）："选记录"交互环——`map_wait_key` 取键，
+  方向键走 `ev4_11B48/9B/FA/C59` 视窗步进 + `svc_play_sfx`，逗号/点号在 `list` 中轮换，
+  回车/空格按 `mode`（4/5/6）做不同确认（含 mode==6 的重复记录去重 + `rec_skip` 检查）。
+- `0x12DAC` `map_wait_key`：等键 + `pal_anim_step` + tick 变化时 `map_view_update(0)`。
+  （机器首轮读未初始化的 `esi`，已在 C 里定为 0，注释说明。）
+- `0x14742` `map_find_records`：曼哈顿半径内按 `rec[5]&1` 与 `rec[6]` 状态类收集，返回计数。
+- **Ghidra 结构比对**：`0x115B6` 的双层循环/`mode` 分支/重复去重与 C 版**逐分支一致**。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **276 → 246**，已还原未验证 **47 → 77**（+30）。
+- `function-map.csv`：待还原 **276 → 243**，已还原未验证 **47 → 80**（+33）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
-`0x115B6`(u9，只差 `12DAC/14742` 两个小函数)、`0x14B78`(u8)、`0x1C75E`(u7)、
-`0x14EF0/27D33/2E9A8`(u6)、`0x13A44/1741C`(u5) ……
-策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 的结构反编译辅助）。
+`0x14B78`(u8，888B，真依赖去掉伪 callee 后需 `13488/12EAA/1300D/13185/13315/146D1/14237` 等)、
+`0x1C75E`(u7，链 `1C81F`→`14121`→`14B78`)、`0x14EF0/27D33/2E9A8`(u6)、`0x13A44/1741C/176B4`(u5) ……
+策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 结构反编译辅助）。
 
 ---
 

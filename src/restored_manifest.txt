@@ -36,6 +36,9 @@
 0x184C0 sub_184C0 game/box_popup.h
 0x1B932 sub_1B932 game/box_popup.h
 0x1B9DE sub_1B9DE game/box_popup.h
+0x115B6 sub_115B6 game/map_interact.h
+0x12DAC sub_12DAC game/map_interact.h
+0x14742 sub_14742 game/map_interact.h
 0x13FD4 sub_13FD4 game/item_use.h
 0x1C916 sub_1C916 game/item_use.h
 0x1DA16 sub_1DA16 game/item_use.h
