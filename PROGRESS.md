@@ -1130,10 +1130,31 @@ callee——`0x2AE0E`/`0x2AC7D`/`0x2FB2C`——作为一簇（1350B，真闭包�
 - **chkstk / 返回**：三者首部 `push size; call 0x3702F` 丢弃；结论返回值仅供表分派、无调用者读取 → `int` 返回 0（与同模块 `map_action_clear_flag` 一致）。
 - 无对拍器，标“已还原未验证”；`sub_15311`/`sub_1CFF0` 及其余 `funcs_1541F` 条目仍待还原。
 
+### 44) `0x31266` → `fx_play`（本轮，1 函数）→ `src/game/fx.c/.h`（追加）
+
+按 playbook 闭包筛选：closure-ready 游戏头名（u1 小簇）里 `0x31266` 与 fx 分派表直接相关
+（`fx.h` 开头即注明它是两个 `call funcs_30469[reg*4]` 站点之一），其“伪 callee”（表条目
+`sub_2B996..2CE1A` 与尾跳目标 `sub_2FE14`）全部已在册，真依赖＝本函数 + 已还原的
+`gfx_copy_rows`/`res_blit`/`svc_wait_ticks`。
+
+| 原址 | 新名 | 模块 | 要点 |
+|---|---|---|---|
+| `0x31266` | `fx_play` | fx.c | 以 `work+18880`（0x49C0）为 640 跨距工作条，逐帧把 `background` 拷入 → 用 `funcs_30469[sel]` 选择符 4/5 各渲染一次 → 两条 `res_blit`（`layer0` 用 `layer0[0]-1` 索引、`layer1`/`layer2` 按 `35*i*step` 行偏移）→ 发布到 `0xA0000` → `svc_wait_ticks(1)`；首环 i=1..4、次环 j=4..0 共 9 帧。 |
+
+**ABI / 陷阱**：
+- **ABI＝cdecl 8 参**，由唯一直调点 `sub_2FF01` 的 `0x30870..0x3089d`（8 次 push + `add esp,0x20`）核实；
+  `sel==7||sel==3` 时背景源在 `scratch` 与 `scratch-640` 间交替（字节局部 `flip`）。
+- **共享尾声**：尾部 `jmp 0x2FE0C` 落在 `sub_2FE14` 体内，是标准收尾（`add esp,0xc; pop×4; ret`），
+  返回值无人读 → C 声明 `void`。
+- **step 符号**：记录 `dword_53A45[80*rec+6]` 为 0 取 +1 否则 −1（机器默认 −1 再按零置 1）。
+- **表条目为伪 callee**：`function-map` 把 `funcs_30469[sel]` 展开成 10 个 handler + `sub_2FE14`，
+  实为间接表调用与共享尾声，真依赖只有 `gfx_copy_rows`/`res_blit`/`svc_wait_ticks`。
+- 无对拍器，标“已还原未验证”；其唯一 caller `sub_2FF01`(u2，3876B) 仍待还原。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **148 → 145**（本轮 −3），已还原未验证 **175 → 178**（本轮 +3）。（基线取提交 `56abeb3` 的实测值；§42 文本中的 152 为记误。）
+- `function-map.csv`：待还原 **145 → 144**（本轮 §44 −1），已还原未验证 **178 → 179**（本轮 +1）。（计数取 §43 后实测基线。）
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 

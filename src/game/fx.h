@@ -64,4 +64,12 @@ int fx_dots16(int rec, const void *buf, void *dst, int pitch, int selector);
 /* funcs_30469[9]  0x2CE1A - two-frame flip, no particle array */
 int fx_toggle(int rec, const void *buf, void *dst, int pitch, int selector);
 
+/* 0x31266 - play emitter `sel` for nine frames over a saved background; the
+ * second `call funcs_30469[]` site (companion of the still-pending sub_2FF01).
+ * `layer0`(=byte index at layer0[0]-1) / `layer1` / `layer2` are the caller's
+ * LMI buffers stamped on top of the 640-stride work stripe 18880 bytes into
+ * `work`; `background` is copied in first and each frame is published to VGA. */
+void fx_play(int rec, const void *buf, const void *layer0, const void *layer1,
+             void *work, const void *background, const void *layer2, int sel);
+
 #endif /* GAME_FX_H */

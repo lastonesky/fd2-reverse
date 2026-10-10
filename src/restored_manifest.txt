@@ -573,3 +573,7 @@
 0x22A85 sub_22A85 game/map_action.h
 0x22BC6 sub_22BC6 game/map_action.h
 0x22AA8 sub_22AA8 game/map_action.h
+
+# 0x31266 is the second `call funcs_30469[reg*4]` site: it plays an emitter
+# over a saved background. Restored as fx_play (all callees already restored).
+0x31266 sub_31266 game/fx.h

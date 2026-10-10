@@ -42,6 +42,9 @@
 #include <string.h>
 #include <math.h>
 #include "../include/fd2_globals.h"
+#include "gfx.h"
+#include "res.h"
+#include "svc.h"
 
 /* --- services (original entry points) ---------------------------------- */
 typedef int      (*res_blit_fn)(const void *buf, int index, void *dst,
@@ -850,5 +853,66 @@ int fx_dots5(int rec, const void *buf, void *dst, int pitch, int selector)
                          pitch, -1);
             }
         }
+    }
+}
+
+/* 0x31266 - play effect `sel` for nine frames over a saved background.
+ *
+ * The second `call funcs_30469[reg*4]` site (see fx.h) and the companion of
+ * sub_2FF01. The machine code runs the `sel`-th emitter twice per frame - once
+ * with selector 4 and once with selector 5 - over a 640-stride work stripe
+ * 18880 bytes past `work`, copying `background` into it first and publishing
+ * each composed frame to VGA (0xA0000). Two res_blits stamp the caller's own
+ * LMI buffers on top: `layer0` at the byte index `layer0[0] - 1`, and
+ * `layer1`/`layer2` (the first/second half of the loop) at a per-frame row
+ * offset. A one-tick wait paces the animation.
+ *
+ * ABI = cdecl, eight stack arguments, decoded from the pushes of the single
+ * call site in sub_2FF01 (0x30870..0x3089d: eight pushes, `add esp,0x20`).
+ * The tail `jmp 0x2FE0C` is the shared epilogue of sub_2FE14 (plain return),
+ * so the result is discarded and the function returns void. The `sel == 7 ||
+ * sel == 3` paths alternate the background source between the stripe and the
+ * stripe minus one 640-byte row (the flip toggle kept in a byte local).
+ * Hand restored against analysis/cseg01_disasm.txt; no differential harness. */
+void fx_play(int rec, const void *buf, const void *layer0, const void *layer1,
+             void *work, const void *background, const void *layer2, int sel)
+{
+    uint8_t *scratch = (uint8_t *)work + 18880;
+    int idx = ((const uint8_t *)layer0)[0] - 1;
+    int step = (((uint8_t *)dword_53A45)[80 * rec + 6] == 0) ? 1 : -1;
+    uint8_t flip = 0;
+    int i;
+
+    for (i = 1; i < 5; ++i) {
+        if (sel == 7 || sel == 3) {
+            flip ^= 1;
+            gfx_copy_rows(scratch - 640 * flip, 640, background, 320, 320, 200);
+        } else {
+            gfx_copy_rows(scratch, 640, background, 320, 320, 200);
+        }
+        ((int (*)(int, const void *, void *, int, int))funcs_30469[sel])(
+            rec, buf, scratch, 640, 4);
+        res_blit((void *)layer0, idx, scratch, 640, -1);
+        res_blit((void *)layer1, 0, scratch + step * 35 * i, 640, -1);
+        ((int (*)(int, const void *, void *, int, int))funcs_30469[sel])(
+            rec, buf, scratch, 640, 5);
+        gfx_copy_rows((void *)0xA0000, 320, scratch, 640, 320, 200);
+        svc_wait_ticks(1);
+    }
+    for (i = 4; i >= 0; --i) {
+        if (sel == 7 || sel == 3) {
+            flip ^= 1;
+            gfx_copy_rows(scratch - 640 * flip, 640, background, 320, 320, 200);
+        } else {
+            gfx_copy_rows(scratch, 640, background, 320, 320, 200);
+        }
+        ((int (*)(int, const void *, void *, int, int))funcs_30469[sel])(
+            rec, buf, scratch, 640, 4);
+        res_blit((void *)layer0, idx, scratch, 640, -1);
+        res_blit((void *)layer2, 0, scratch + step * 35 * i, 640, -1);
+        ((int (*)(int, const void *, void *, int, int))funcs_30469[sel])(
+            rec, buf, scratch, 640, 5);
+        gfx_copy_rows((void *)0xA0000, 320, scratch, 640, 320, 200);
+        svc_wait_ticks(1);
     }
 }
