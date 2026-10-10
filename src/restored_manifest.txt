@@ -434,3 +434,8 @@
 0x22960 sub_22960 game/map_action.h
 0x22997 sub_22997 game/map_action.h
 0x22C04 sub_22C04 game/map_action.h
+
+# password / code-entry screen (0x117E7 unlocks it; dead wrong-password bailout)
+0x33FAF sub_33FAF game/password.h
+0x34366 sub_34366 game/password.h
+0x344B4 sub_344B4 game/password.h

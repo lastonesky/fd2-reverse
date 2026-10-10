@@ -440,19 +440,49 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 - **返回值**：`0x22C04`/`0x22721`/`0x22997` 尾声处的 eax 是 `map_view_update`/`map_draw_status_popups`
   的残留（均 void），调用点不读，C 侧返回 0。六者无对拍器，标“已还原未验证”。
 
+### 16) 密码输入屏 → `src/game/password.c/.h`（本轮，3 函数）
+
+地图视图处理器 `0x117E7` 解锁的密码屏整簇（`0x344B4`(u5) 为闭包就绪头部）：
+
+- `0x33FAF` → `password_screen_run`：`guest_malloc(0xFA00)` 屏幕缓冲 → `res_load` FDOTHER 96/97/98
+  → `rle_decode`(97) 到缓冲并释放 → `util_rand()%100` 取随机两位数密码 → 按该值查 `0x60181`
+  的 3 字节记录（`util_rec3`）→ `ev5_34317` 解出 6 个字型索引 → `password_frame_draw` →
+  `pal_fade_in` → 键循环（INT 16h，AH=0x10；E0/52/39→1C、53→1）：左/右（4B/4D）移动光标 0..5、
+  回车（1C）追加字型（最多 3 个）、退格（01）删除，各带 `svc_play_sfx` → 释放、`pal_fade_out`
+  → `memset(0xA0000,0,0xFA00)` → `map_view_update(1)` → `pal_fade_in`。
+- `0x34366` → `password_frame_draw`：拷屏到新缓冲 → `sprintf(buf,"%02d",n)` 拆两位数 → 逐字型
+  `password_glyph_blit`（两位数 col 150/162、row 75；6 个轮盘字型 col 25i+86、row 132；
+  已选字型 col 32i+116、row 97；光标 `dword_53A4D` 的 0 号子图 col 25·sel+86、row 132）
+  → 拷回 0xA0000。
+- `0x344B4` → `password_glyph_blit`：单字型 `sprite24_plain`，源 `img+*(int*)(img+4*index+6)`、
+  目标 `surface+stride*row+col`（机器 ABI 即 `(img,index,surface,stride,col,row)`）。
+
+**陷阱 / 伪代码伪影**：
+- **死代码（关键发现）**：`0x34215..0x3423A` 把 3 个已输入字型与密码比较，但不等分支 `0x34233`
+  是**无条件跳转**（字节 `39 D8 EB E9` = `cmp eax,ebx; jmp 0x3421E`），故置失败标志的 `0x34235`
+  不可达、`0x34243` 整段“密码错误”路径（`rle_decode`(98) + `j___delay(1000)` + 重试计数
+  `0x34274` + `AIL_shutdown` + INT 10h 文字模式 + `printf("Sorry your password is wrong !!!")` +
+  `exit(1)`）是**死代码**；Hex-Rays 亦整段省略。本 C 未翻译该死段（屏幕恒通过），仍按机器保留
+  98 号资源的载入/释放。已核 `0x34235`/`0x34243` 无任何跳转/调用目标。
+- **chkstk**：三者皆 `push size; call 0x3702F`，丢弃。
+- **局部 REGS**：INT 16h 用局部 REGS 块（AX 在偏移 0），扫描码取高字节（偏移 1）；其余键读取器
+  用全局 `word_53A8D`。
+- **资源 98**：仅死段使用，本 C 仍载入并在收尾释放（保持分配序列一致）。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **226 → 220**，已还原未验证 **97 → 103**（+6）。
+- `function-map.csv`：待还原 **220 → 217**，已还原未验证 **103 → 106**（+3）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
 本轮 §13 已拉出 `0x12EAA/1300D/13185/13315/13488/13A44`（它们是 `0x14B78` 与 `0x18890` 的直接 callee），
 故 `0x14B78`(u8) 的真闭包已缩小，但仍含 `146D1/14237/1DEBE/15055/15311/1548E/1567E/1598A…`，>8 函数，暂跳。
 `0x1C75E`(u7，链 `1C81F`→`14121`→`14B78`，同上跳过)、`0x14EF0/2E9A8`(u6)。
-闭包就绪的头部单函数现为 `0x344B4`(u5，`sub_4E22A`），随后是
-`0x1B6B7/1F42D/2921A/3645D`(u4) 与 `0x149F8/17643/1E739/1F558/22721`(u3)。
-（`0x2DF01/1FF79/1F73F` 已由 §14 按“同 callee 簇”整体拉出。）
+闭包就绪的头部单函数现为 `0x1B6B7`(u4)，随后是
+`0x1F42D/2921A/3645D`(u4) 与 `0x149F8/17643/1E739/1F558`(u3)。
+（`0x344B4` 已由 §16 连同其上游 `0x34366`/`0x33FAF` 整簇拉出；`0x2DF01/1FF79/1F73F` 已由 §14 拉出。）
 策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 结构反编译辅助）。
 （`0x2921A`＝地点菜单退场缩放（上批 §11 遗留）；`0x1B1E7`(地图队伍面板编排者，6 个 callee 已在 §12 还原）
 现已闭包就绪，惟其内层读未初始化的 ebp，需先定性 tick 基线。）

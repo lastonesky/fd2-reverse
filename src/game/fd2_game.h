@@ -36,6 +36,7 @@
 #include "menu_select.h"
 #include "msg.h"
 #include "party_panel.h"
+#include "password.h"
 #include "path.h"
 #include "rec.h"
 #include "res.h"
