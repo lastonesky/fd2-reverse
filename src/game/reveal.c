@@ -147,3 +147,50 @@ int portrait_reveal_cell(int rec, int radius, int step)
     map_view_update(0);
     return 0;
 }
+
+/* 0x21EB1 - zoom variant of the cell reveal: the circle is centred on the map
+ * cell (dword_53AB9, dword_53ABD) and grows by `step` for nine frames, then
+ * seven more frames repeat at the last radius, then the view is refreshed. */
+int portrait_reveal_zoom(int radius, int step)
+{
+    int      vx = 24 * dword_53AB9 + 12;
+    int      vy = 24 * dword_53ABD + 16;
+    uint8_t *scratch = (uint8_t *)guest_malloc(0x25680u);
+    int      i;
+
+    map_render_view(scratch + REVEAL_MAP_OFF, REVEAL_STRIDE, 13, 8,
+                    (int)qword_53AA9, dword_53AAD);
+
+    for (i = 9; i > 0; --i) {
+        const void *tbl = (const void *)(dword_53A6D +
+                                         *(const int32_t *)(const void *)
+                                             (dword_53A6D + 4 * i + 6));
+
+        memmove(dword_53A49, scratch, 0x25680u);
+        reveal_band(vx, vy, radius, 0, 192, tbl);
+        gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + REVEAL_MAP_OFF,
+                      REVEAL_STRIDE, 0x138, 192);
+        radius += step;
+        j___delay(5);
+    }
+
+    j___delay(200);
+    radius -= step;
+
+    for (i = 3; i < 10; ++i) {
+        const void *tbl = (const void *)(dword_53A6D +
+                                         *(const int32_t *)(const void *)
+                                             (dword_53A6D + 4 * i + 6));
+
+        memmove(dword_53A49, scratch, 0x25680u);
+        reveal_band(vx, vy, radius, 0, 192, tbl);
+        gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + REVEAL_MAP_OFF,
+                      REVEAL_STRIDE, 0x138, 192);
+        j___delay(5);
+    }
+
+    guest_free(scratch);
+    map_view_update(0);
+    j___delay(200);
+    return 0;
+}

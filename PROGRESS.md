@@ -283,16 +283,28 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 - **ABI 注**：机器向 `0x4E127` 多压一个实参，但被调方从不读第 4 参（`[ebp+0x14]` 无引用）；
   已对拍验证的 `sprite24_const` 只取 3 参，故 C 丢弃多余实参。
 
+### 7) `0x21EB1` + `0x27816` + `0x278E7`（本轮）+ Ghidra 交叉验证
+
+- `0x21EB1` → `portrait_reveal_zoom`（追加 `reveal.c`）：以格 `(0x53AB9,0x53ABD)` 为中心，
+  半径从 `radius` 每帧 `+=step` 共 9 帧，然后再在末半径上重复 7 帧（`i=3..9`）。
+- `0x27816`/`0x278E7` → `screen_band_forward/backward`（追加 `screen_fx.c`）：284 字节带
+  在 `0xA8FCA` 与两个后备拷贝 `0xA974A`/`0xA99CA` 之间三步搬运 + `0xAEC4A`/`0xAE9CA` 填充。
+- **Ghidra MCP 交叉验证**（与 IDA 互补）：对 `0x2C67D / 0x2189A / 0x21EB1 / 0x27816 / 0x278E7 /
+  0x1DA16` 分别用 Ghidra 反编译比对，**结构/常量/公式全一致**（特别是 `0x2C67D` 的
+  `cos·byte_540C9+v23` 与 `sin·byte_540C9·1.2+30.0`、`0x1DA16` 的视图边界式、以及两条
+  屏幕带循环的 `0x140/0x11C/0xa8fca/0xa974a/0xa99ca` 常量）。Ghidra 不恢复 chkstk 后的
+  栈参，故用于**结构/常量互证**而非 ABI。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **276 → 258**，已还原未验证 **47 → 65**（+18）。
+- `function-map.csv`：待还原 **276 → 255**，已还原未验证 **47 → 68**（+21）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
-`0x115B6`(u9)、`0x14B78`(u8)、`0x1C75E`(u7，链 `0x1C81F`→`0x14121`→`0x14B78`)、
+`0x115B6`(u9，真闭包去掉伪 `0x190AC` 后为 `12DAC/14742/1B932 簇`)、`0x14B78`(u8)、`0x1C75E`(u7)、
 `0x14EF0/1B932/26EDA/27D33/2E9A8`(u6) ……
-策略不变：**按 callee 簇整体拉出**（一个模块一次做完），并先剔除共享尾声造成的伪 callee。
+策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 的结构反编译辅助）。
 
 ---
 

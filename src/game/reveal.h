@@ -38,4 +38,7 @@ int portrait_reveal(int col, int row, int offset, int step);
 /* 0x2189A */
 int portrait_reveal_cell(int rec, int radius, int step);
 
+/* 0x21EB1 */
+int portrait_reveal_zoom(int radius, int step);
+
 #endif /* GAME_REVEAL_H */
