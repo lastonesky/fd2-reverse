@@ -78,7 +78,6 @@ int sub_1A7BD(void);
 void sub_1A7F1(void);
 int sub_1A813(int);
 int sub_1A866(int);
-int sub_1AA1D(int, int, int);
 char *sub_1AF1E(int, int);
 void sub_1AF99(int, int);
 int sub_1B019(int, int);

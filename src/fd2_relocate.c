@@ -26,6 +26,7 @@
 #include "game/ev4.h"
 #include "game/ev5.h"
 #include "game/ev6.h"
+#include "game/ev_script.h"
 #include "game/fade.h"
 #include "game/fx.h"
 #include "game/gfx.h"

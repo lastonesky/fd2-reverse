@@ -167,6 +167,28 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 
 ---
 
+## 0-J. 解释器簇起步 + `0x16559` ABI 定论（本轮）
+
+**1) `0x1AA1D` 还原为 `ev_script_run`**（`src/game/ev_script.c`）
+事件脚本解释器：`(rec_index, steps, script)`，逐条 3 字节 `{op,u16 arg}`：
+- `op0` 头像对话（`dword_53AD9=arg+181`）→ `rec_slot_claim` 失败时开框/等键/跑 `0x19953`+`map_draw_text_window`，成功且 `dword_53C57==0` 时走 `rec_field_byte`/`rec_slot_remove` 并 `continue`；
+- `op1` 头像脚本（`dword_53AE1=arg` → `vm_run(sub 435)` → blit/等键/关框 → `dword_53BF3 += arg`）；
+- `op2` `j___delay(200)` + `funcs_1199C[arg](rec_index)`；`op3` `vm_run(sub=arg)`；
+- 尾声 `0x22BBE` = 纯返回（帧匹配）。
+
+**2) `0x16559` ABI 定论（原先的不确定项，已解决）**
+- 机器码**真 ABI = 1 个实参**（DATO 子图索引，`eax=[esp+8]`；缓冲 `dword_53A85` 与框位 `dword_53C67` 在**函数内部**读取）——全段 20 个调用点均只压 1 个 0，无一例外；`0x16559` 本体反汇编逐条核实。
+- port/ 的 `dlg_blit_dato(dato_buf, box_pos, idx)` 是**行为等价的测试友好重构**（把两个全局显式化），其调用点显式传 `(dword_53A85, dword_53C67, idx)`。
+- 处置：保留 port/ 的 3 参 API（避免改动已验证资产与其检查器），新调用点同样传三参；不确定性登记改为已解决。
+
+**3) 顺带核查**：`0x197E5` **早已是已验证资产**（`map_draw_text_window`，mapcheck 122500）——旧"解释器簇待办"清单含它是过期信息。
+
+**4) 新增全段离线反汇编资产**：`analysis/cseg01_disasm.txt`（79691 行，`objdump --adjust-vma=0x10000`），后续核 ABI/指令边界/立即数陷阱可直接 grep，不必依赖 IDA 通道。
+
+**余下解释器簇**：`0x19953`(1188B)、`0x1DB65`(857B)。
+
+---
+
 ## 0-C. 下一步（按 module-map P0 执行）
 
 1. **P0 主状态机链**：`sub_25EBB`/`sub_117E7`/`sub_26152`/`sub_22E5C` + `funcs_25E23` 剩余 ~19 项

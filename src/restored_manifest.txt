@@ -367,3 +367,4 @@
 0x336A0 sub_336A0 game/scene_enter.h
 0x33AF1 sub_33AF1 game/scene_enter.h
 0x3231B sub_3231B game/scene_enter.h
+0x1AA1D sub_1AA1D game/ev_script.h
