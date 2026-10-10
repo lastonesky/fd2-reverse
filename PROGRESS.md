@@ -1085,10 +1085,34 @@ callee——`0x2AE0E`/`0x2AC7D`/`0x2FB2C`——作为一簇（1350B，真闭包�
 - **chkstk**：两者皆 `push size; call 0x3702F`（不分配帧），丢弃（假 callee）。
 - **归属/别名**：新建 `map_attack`；被调方均以语义名调用（`rec_slot_find`/`rec_field_byte`/`rec_skip`/`tbl_ptr`/`tbl_u32`/`svc_play_sfx`/`view_draw_unit_sprite`/`res_draw_subimage`/`dlg_snap_restore`/`pal_fade_add`/`ev5_203BD`/`util_rand`/`map_cell_info`），无需 `#define` 别名。无对拍器，标"已还原未验证"。
 
+### 42) 攻击结算/状态叠加/升级屏家族（本轮，4 函数）→ `map_attack.c`/`map_status.c` 追加 + 新建 `src/game/map_levelup.c/.h`
+
+本轮 closure-ready 游戏头名是 `0x1E856`(u2)——`sub_1548E`（攻击/升级结算驱动器，待还原）的
+闭包头名。其同 caller 家族还有 `0x1EB05`(u1)、`0x1E292`(u2) 与后者的私有助手 `0x1D79C`(u1)；
+四者真闭包＝自身（callee 全在册/已验证），合为一个连贯簇（合 1377B）。拉出后 `sub_1548E` 的
+待还原 callee 由 4 归零（该驱动器已闭包就绪）。
+
+| 原址 | 新名 | 模块 | 要点 |
+|---|---|---|---|
+| `0x1E856` | `map_attack_bar_drain` | map_attack.c | 逐帧把 `defender`（记录 `dword_53A45+80*a2`）的血条从攻击前段数 `70*cur/max` 排到 `map_attack_resolve` 返回剩余 HP 对应的 `69*rem/max+1`：每 tick `ui_meter_fixed(pos[0]+320*(pos[1]+6)+0xA0000+7,320,v8)` + `j___delay(8)`，段数递减；`attacker` 手持道具的 `[9]==3` 或 `rand%100<3` 时整体重复一次（机器 v10 count-down do/while）。 |
+| `0x1EB05` | `map_status_overlay_play` | map_status.c | 用 `map_status_anchor` 填 target（`&dword_53A30`）；`ev5_1F0DC==1` 时再填 actor（`&dword_53A38`）否则 `dword_53A38=-1`；10 帧把头像子图 39..48 `res_draw_subimage` 贴到 `0xA0000`（actor 帧用 `dword_53A38/3C`），前 9 帧 `dlg_snap_restore`，末尾 `guest_free`；返回 `&dword_53A30`。 |
+| `0x1E292` | `map_levelup_run` | **map_levelup.c（新）** | 升级屏：XP(`dword_53EC8`)为 0、`rec[5]&1`、或已达上限（职业 30/31→99，否则 40）直接返回；否则取职业表 `0x4E821`、累计 `xp=rec[60]+dword_53EC8`；`kbd_flush`+`msg_open_portrait`+vm488+`dlg_blit_dato`；`while(xp>=100)`：`++rec[33]`、vm489、5 条 `msg_show_page(rec+0x37/39/3e/42/46, tbl+2i, 490..494, page)`、职业增益表 `0x4E7F2[rec[10]]` 命中等级则置 `dword_53AD9=gain+441` + `map_levelup_mark_gain` + vm587(`6080*page+0xA951F`)、`unit_metrics`、`xp-=100`（满级清零）；收尾 `ev5_1E5C0(11)`/`ev4_196CB`、`rec[60]=xp`、`dword_53EC8=0`。 |
+| `0x1D79C` | `map_levelup_mark_gain` | map_levelup.c | 置记录标志位：`rec[26 + gain/8] |= mask[gain%8]`，掩码表 `fd2_data1[0x2024]`＝{01,02,04,08,10,20,40,80}。 |
+
+**陷阱 / 伪代码伪影**：
+- **ABI（chkstk/冻结原型骗过反编译器）**：`0x1EB05` 的 `fd2_funcs.h` 原型为 `int(int)`，Hex-Rays 把第 2 实参标成未初始化局部 `v5`；机器读 `[esp+0x18]`（arg2），唯一调用点 `0x1548E` 压两参，故真为 `(actor,target)`。`0x1E856` 的 `0x1ECC7`/`0x1E98C` 调用点各压两参（`push [esp+0x24]` 连续两次，第二次因入栈后偏移回落而读到 arg1），真为 `(a1,a2)`。
+- **共享尾声（伪 callee）**：`0x1E856` 尾 `jmp 0x1317D`、`0x1E292` 尾 `jmp 0x1317D`、`0x1D79C` 尾 `jmp 0x114FF` 均落在他函数体内＝普通 `return`；`function-map` 对后两者误列 `sub_1300D`/`sub_1145A`。
+- **`sub_1E292` 的 IDA 名仍被调用**：`scene_core.c`（已还原）以 `sub_1E292(sel)` 调用，故 `map_levelup.h` 保留 `#define sub_1E292 map_levelup_run`（同 `map_units.h` 的 `sub_1DB65/sub_22253`）；`fd2_funcs.h` 冻结不改。
+- **原始表访问器**：`0x4E821`（职业表 base 0x620A1/stride 11）、`0x4E7F2`（增益表 base 0x626B3/stride 12）按 playbook 改用 `tbl_ptr(&fd2_data2[…],…)`；掩码表直接用 `&fd2_data1[0x2024]`（globals 只暴露标量 `unk_52024/28`）。
+- **`__CFSHL__`**：`0x1D79C` 的 `gain/8`/`gain%8` 在 Hex-Rays 里被渲染成 `__CFSHL__`；调用点传入的是 `(u8)` 值（0..255），C 侧普通 `/`、`%`。
+- **返回值**：`0x1E856` 尾声 eax 残留、无调用者读取 → `void`；`0x1E292` 声明 `int` 返回 0（与冻结原型一致）；`0x1EB05` 返回 `&dword_53A30`。
+- **chkstk**：四者皆 `push size; call 0x3702F`（不分配帧），丢弃；CRT `free`→`guest_free`。
+- 无对拍器，标“已还原未验证”；caller `sub_1548E`/`sub_117E7` 的其余部分仍待还原。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → … → 159 → 157 → 154 → 152**（本批 −2），已还原未验证 **115 → … → 164 → 166 → 169 → 171**（本批 +2）。
+- `function-map.csv`：待还原 **208 → … → 159 → 157 → 154 → 152**（本轮 −4），已还原未验证 **115 → … → 164 → 166 → 169 → 171 → 175**（本轮 +4）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1145,6 +1169,10 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 本轮 §41 继而把这个同 caller（`sub_1E856`）对 `0x1E98C`/`0x1ECC7` 拉出（新建 `map_attack`），故 `sub_1E856` 已闭包就绪；
 下一游戏头名回落至 u1 小簇 `0x1D6C8`/`0x1D79C`/`0x1DEBE`/`0x1EB05`/`0x22AA8`/`0x24BDE`/`0x28632`/`0x2A07A`/`0x2F7B6` 等
 （分别闭簇其 caller），其间 `0x1B1E7`(u1) 因内层读未初始化暂跳。
+本轮 §42 把这个家族里仍 closure-ready 的 `0x1D79C`/`0x1EB05`/`0x1E856`（连同需它的 `0x1E292`）
+整体拉出（`map_attack`/`map_status` 追加 + 新建 `map_levelup`），故 `sub_1548E` 已闭包就绪；下一游戏头名
+回落至 u1 小簇 `0x1D6C8`(sub_1CFF0)/`0x1DEBE`(sub_14237)/`0x22AA8`(sub_22A85)/`0x24BDE`(sub_24754)/
+`0x28632`(sub_2825B)/`0x2A07A`(sub_2A43E)/`0x2F7B6`(sub_2EBE1)/`0x31266`(sub_2FF01) 等（分别闭簇其 caller）。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交

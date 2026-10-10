@@ -29,4 +29,16 @@ void map_status_frame(const int *pos, int actor, int target);
 /* 0x1EC2A - write the {x, y} screen anchor of record `rec` into out[0]/out[1]. */
 void map_status_anchor(int *out, int rec);
 
+/* 0x1EB05 - animate the actor/target status overlays: fill the two screen
+ * anchors via map_status_anchor, then flash 10 frames of the portrait sprite
+ * (res_draw_subimage sub-images 39..48) over the VGA page, each frame saved and
+ * restored through dlg_snap_restore.  `actor` is drawn only when the pair
+ * helper ev5_1F0DC reports a partner; returns the address of the target anchor
+ * block dword_53A30 (the caller reads pos[0..3]).
+ *
+ * ABI note: Hex-Rays drops the second argument because the frozen prototype in
+ * fd2_funcs.h says `int sub_1EB05(int)`; the machine reads [esp+0x18] (arg 2)
+ * and the only caller (0x1548E) pushes both, so it is (int actor, int target). */
+int *map_status_overlay_play(int actor, int target);
+
 #endif /* GAME_MAP_STATUS_H */

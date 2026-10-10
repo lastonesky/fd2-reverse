@@ -165,3 +165,47 @@ int map_attack_resolve(int attacker, int defender)
 
     return v28;
 }
+
+/* 0x1E856 - drain the defender's HP bar after an attack.
+ *
+ * Direct translation of the machine code at 0x1E856; the offline disassembly
+ * (analysis/cseg01_disasm.txt) is authoritative.  The Watcom stack probe
+ * (`push 0x2c; call 0x3702F`) is dropped and the tail `jmp 0x1317D` is the
+ * shared epilogue of other functions (a plain return).
+ *
+ * `defender`'s record supplies the HP word (+0x40 current / +0x42 max); the
+ * pre-attack bar length is 70*cur/max segments, the target after each
+ * map_attack_resolve is 69*remaining/max + 1.  The bar is drawn as decreasing
+ * ui_meter_fixed segments at pos[0] + 320*(pos[1]+6) + 0xA0000 + 7.  The whole
+ * drain repeats a second time when the attacker's item effect type is 3 or a
+ * 3% roll hits (the machine's count-down do/while). */
+void map_attack_bar_drain(int attacker, int defender, int *pos)
+{
+    const uint8_t *r = (const uint8_t *)(uintptr_t)dword_53A45
+                       + 80u * (uint32_t)defender;
+    const uint8_t *eff =
+        item_entry(rec_field_byte(attacker, rec_slot_find(attacker, 0)));
+    int count = (eff[9] == 3 || (util_rand() % 100u) < 3u) ? 2 : 1;
+
+    for (;;) {
+        int v9, v8, rem;
+
+        if (count == 0)
+            break;
+        --count;
+
+        v9 = *(const uint16_t *)(const void *)(r + 66); /* max HP (word 33) */
+        v8 = 70 * *(const uint16_t *)(const void *)(r + 64) / v9; /* cur 64 */
+        rem = map_attack_resolve(attacker, defender);
+        map_attack_sprite(attacker, defender);
+
+        while (v8 >= 69 * rem / v9 + 1) {
+            ui_meter_fixed(pos[0] + 320 * (pos[1] + 6) + 655360 + 7, 320, v8);
+            j___delay(8);
+            --v8;
+        }
+
+        if (rem == 0)
+            break;
+    }
+}

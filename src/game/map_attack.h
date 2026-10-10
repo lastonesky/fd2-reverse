@@ -1,9 +1,9 @@
-/* map_attack.h - the unit attack result helpers (original 0x1E98C / 0x1ECC7).
+/* map_attack.h - the unit attack result helpers (original 0x1E98C / 0x1ECC7)
+ * and the HP-bar drain driver 0x1E856.
  *
- * The two callees of the still-pending attack driver 0x1E856, both operating
- * on the 80-byte character table dword_53A45.  `attacker` selects the acting
- * record (whose held item 0x4E8BC entry picks the effect), `defender` the
- * target record whose HP word (+0x40) is reduced:
+ * All three operate on the 80-byte character table dword_53A45.  `attacker`
+ * selects the acting record (whose held item 0x4E8BC entry picks the effect),
+ * `defender` the target record whose HP word (+0x40) is reduced:
  *
  *   0x1E98C  map_attack_sprite   play the attack's frame script - the SFX and
  *            the 24x24 target sprite come from the item's animation table
@@ -27,5 +27,12 @@ void map_attack_sprite(int attacker, int defender);
 /* 0x1ECC7 - resolve one attack (RNG hit roll + damage) and return the
  * defender's remaining HP word. */
 int map_attack_resolve(int attacker, int defender);
+
+/* 0x1E856 - animate the defender's HP bar draining from the pre-attack value
+ * to the remaining HP returned by map_attack_resolve.  `pos` is the two-int
+ * screen block {x, y} of the bar's top-left cell (from map_status_*); the bar
+ * is drawn one ui_meter_fixed segment per tick.  Runs once, or twice for a
+ * "double" effect (item byte 9 == 3) or a 3% roll. */
+void map_attack_bar_drain(int attacker, int defender, int *pos);
 
 #endif /* GAME_MAP_ATTACK_H */

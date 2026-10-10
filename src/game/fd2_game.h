@@ -34,6 +34,7 @@
 #include "map_attack.h"
 #include "map_cursor.h"
 #include "map_interact.h"
+#include "map_levelup.h"
 #include "map_records.h"
 #include "map_scroll.h"
 #include "map_shape.h"
