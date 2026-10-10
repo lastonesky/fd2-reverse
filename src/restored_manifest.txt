@@ -413,3 +413,11 @@
 0x1B0AD sub_1B0AD game/party_panel.h
 0x1B14B sub_1B14B game/party_panel.h
 0x1B41D sub_1B41D game/party_panel.h
+
+# map view scroll steps (single-cell record move + camera follow)
+0x12EAA sub_12EAA game/map_scroll.h
+0x1300D sub_1300D game/map_scroll.h
+0x13185 sub_13185 game/map_scroll.h
+0x13315 sub_13315 game/map_scroll.h
+0x13488 sub_13488 game/map_scroll.h
+0x13A44 sub_13A44 game/map_scroll.h
