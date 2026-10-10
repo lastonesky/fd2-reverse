@@ -802,10 +802,39 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
   `0x1BBDC`（物品盒驱动，`sub_53C57==2` 分支）与 `0x28EFE`（商店菜单）仍待还原。无对拍器，
   标“已还原未验证”。
 
+### 30) 存档场景加载 + 章节开场 → `src/game/scenario_load.c/.h`（本轮，1 函数）
+
+`scenario_menu`（0x25EBB，已还原）第三分支与地图驱动器 `0x19DF7`（待还原）共用的
+“读 FD2.SAV → 载入章节资源 → 播放开场”整链；也是 module-map §2 的“存档唯一入口”。
+本轮 `function-map.csv` 闭包就绪游戏函数头名（u2，1552B；真闭包＝自身——callee 全在册，
+含被伪列出的 `sub_22AF6`）。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x10010` | `scenario_load()` | 读 FD2.SAV(0x59CB) → `util_deobfuscate` → `util_sum_tail4` 与尾 dword（+0x59C7）比对，不符则播“读档失败”卡（`msg_open_portrait(75)`+`vm_run(436,…)`+`dlg_blit_dato`+`dlg_wait_key`+`ev4_196CB`）。随后：`memmove` 队伍表（源 +0x8A3，0xA00）→ `res_load` FDOTHER[0]/FDFIELD[3·s+2] → 释放并重分配 'p'(0x53A55, 0x8A3) 拷入 → `world_load_tiles` → FDTXT[s+1]/FDFIELD[3s]/FDSHAP[2·p[0]][] → `util_fix_records` → 记录表 dword_53A45 重分配 0x1E00、拷入 80·records 与 0x20 额外块 → 释放 'buf'(0x53A61) 并以 FDICON.B24 经 `unit_entry_data` 重建图集（`dword_53BDF=0`）→ `fwrite` FD2.TMP(0x32A00) → 从 +0x30C3 的 18 字节场景字段写一批全局（dword_53BEF/53C03/53AB9/53ABD/53BFB/53BF3、`qword_53AA9`/`qword_53AB1`、byte_53AF9/51AAB/51E61/51E62）→ 释放两缓冲 → `bgm_play`/`map_view_update(1)`/`pal_fade_in` → 开场两段（9 步带淡入，x=84，j>6 画数字；4 步地图窗淡入，k=2/3/4/9）→ `map_view_update(0)`/`j___delay(200)`/`kbd_flush`。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声（伪 callee）**：尾 `jmp 0x22BBE` 落在 `sub_22AF6`（`item_apply`）体内的共享尾声
+  （`add esp,0x4; pop ebp/edi/esi/ebx; ret`；与 `0x10010` 前言 `push ebx/esi/edi/ebp; sub esp,4`
+  完全同帧）⇒ 普通 `return`；`function-map` 遂误列 `sub_22AF6`。
+- **qword 伪视图**：Hex-Rays 把相邻 dword `0x53AA9/0x53AAD`、`0x53AB1/0x53AB5` 并成
+  `qword_53AA9`/`qword_53AB1`；机器分两次写 32 位零扩展字节，C 侧按两字节打包进 64 位单元
+  （`(uint64_t)field[3] | ((uint64_t)field[4]<<32)`）。
+- **宏视图**：`dword_53A5D` 展开为 `uint8_t *`（非 `**`），`res_load` 返回值直接赋入。
+- **OOM 三路径同形**：`word_53A8D=3; int386(0x10,&word_53A8D,&word_53A8D); printf(msg); exit(1);`
+  折叠为文件内静态 `oom_exit`（三段消息 aOutOfMemory/_0/_1 见 dsi 0x04/0x23/0x37）。
+- **字符串**：FD2.SAV 的 name/mode 无 `fd2_globals` 宏（dsi 0x1B/0x18），模块内以
+  `(const char*)&fd2_data1[...]` 直取；FDICON/TMP 用既有 aFdiconB24/aFd2Tmp。
+- **图集重建**：'buf'(0x53A61) 先 `guest_free`（未置空），随后 `unit_entry_data` 因 `dword_53BDF==0`
+  重新 `guest_malloc(0x32A00)`；FD2.TMP 的 `fwrite` 用重建后的图集。
+- **chkstk**：`push 0x3C; call 0x3702F`（不分配帧，仅探守卫页），丢弃；CRT fopen/fread/fwrite/fclose
+  → libc（同 scene_core），malloc/free → `guest_malloc`/`guest_free`。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180**（本批 −1；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143**（本批 +1）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180 → 179**（本批 −1；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143 → 144**（本批 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -829,7 +858,8 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 本轮 §27 已拉出闭包就绪头名 `0x2B439`/`0x2B843`(u2，同 caller `sub_2AF28` 的队伍名册助手)。
 本轮 §28 已拉出闭包就绪头名 `0x1CB94`/`0x1CD17`(u2，`map.c` 的 0x1C2DA/0x1C4CC 同族；地图视口记录精灵族现只剩调用者 `0x1CAC7` 与格坐标 `0x1EC2A`)。
 本轮 §29 已拉出闭包就绪头名 `0x1BFFE`(u2，物品盒编排环，`box_popup` 家族闭合；其 caller `0x1BBDC`/`0x28EFE` 仍待还原)。
-现闭包就绪的游戏函数头名：`0x1EC2A`(u2，格坐标/标记锚点)
+本轮 §30 已拉出 `0x10010`(u2，FD2.SAV 存档加载/章节开场链；真闭包＝自身)，故当前闭包就绪
+游戏头名新增 `0x1399C`(u2，此前被 `0x10010` 挡住的闭包)，另有 `0x1EC2A`(u2，格坐标/标记锚点)
 /`0x272D0`/`0x2A0C2`/`0x2A694`(u2，名册行绘制；同一 `sub_2670E`/`2872B`… 商店屏家族)
 /`0x1CAC7`(u2，§28 `map_draw_record_layer` 的驱动器)；
 另有多组同 caller 的小簇（均 u1）：`0x1C9DD`(sub_20C6F)、`0x22470`/`0x22547`/`0x22656`(sub_22253)、

@@ -504,3 +504,7 @@
 
 # item sub-menu loop that drives the box_popup helpers (callers 0x1BBDC / 0x28EFE still pending)
 0x1BFFE sub_1BFFE game/box_popup.h
+
+# scenario (FD2.SAV) load + chapter intro (caller scenario_menu 0x25EBB is already
+# restored and calls it under its IDA name; map driver 0x19DF7 still pending)
+0x10010 sub_10010 game/scenario_load.h
