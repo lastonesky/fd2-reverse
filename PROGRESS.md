@@ -62,6 +62,34 @@
 
 **下一批**：`funcs_25E23` 余 24 项（scene_state_* 模板批量）→ `funcs_25E3A` 余 10 项（`0x3231B/32D18/32E8C/32FB2/33049/336A0/33AF1/33C9D/33DBA/33E3C`）→ 启动 309 资产迁入。
 
+## 0-E. `funcs_25E23` handler 批量还原：batch 1（本轮）
+
+**已还原**（`src/game/scene_states.c/.h`，每一条都逐指令核对了离线反汇编）：
+
+| 索引 | 原址 | 新名 | 行为 |
+|---|---|---|---|
+| [5] | `0x23296` | `scene_state_05` | `unit_add(13); 0x10B4E(3); 0x135DD(5,14); 0x1366A(27); vm(6); refresh; ++state` |
+| [8] | `0x235BC` | `scene_state_08` | `rec[11].+5=0; 0x135DD(6,1); 0x10B4E(4); 0x1366A(36); vm(4); refresh; ++state` |
+| [24] | `0x24DF2` | `scene_state_24` | `vm(6); 0x135DD(4,16); 0x10B4E(2); 0x1366A(75); vm(7); unit_add(26); refresh; unit_add(29); ++state` |
+| [27] | `0x25464` | `scene_state_27` | 空体：`vm(7); refresh; ++state` |
+
+**共享尾声解码表（离线反汇编，全部已解）**
+
+| 尾声地址 | 语义 | 归属 |
+|---|---|---|
+| `0x231C6` / `0x231DF` | `vm_run(stream, sub, 0xA0000,320,205,76,74,19,1) + unit_refresh + ++state`（sub 由跳转者压栈；0x231DD 的 `push 4` 属 sub_231BC 自身） | sub_231BC 体内 |
+| `0x231F2` | `++state; retn` | sub_231BC 体内 |
+| `0x2327D` / `0x2328A` | `unit_add(arg)+refresh+++state` / `++state`（**是 sub_230F2 自己的尾声**） | sub_230F2 体内 |
+| `0x237C8` | `unit_add(arg)+++state` | sub_23790 体内 |
+| `0x239AC` / `0x239B1` | `refresh+++state` / `++state` | sub_239BD 体内 |
+| `0x15487` / `0x1B5EA` | 其他模块的纯 epilogue（`return <eax>`） | 外部函数 |
+
+**已备好但待写**（需 `scene_place_records`（0x233C6，已验证资产）先迁入）：
+idx [2] `sub_230F2`（三张 7 字节表 0x520BA/C1/C8 = xs{8,7,9,6,10,8,8}/ys{3,3,3,2,2,4,1}/kind{2,2,2,3,1,2,0}；`rec_flag(6)` 分支→vm6 或 place_records(...,0,6,0,0,0,0,2)+vm7）、
+idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}；place_records(...,0,6,41,12,8,0,origin=0x400000006)+vm9+unit_add(10)+refresh+ ++state）。
+
+**余量**：`funcs_25E23` 待还原 24→**20**；`function-map.csv` 已更新。
+
 ---
 
 ## 0-C. 下一步（按 module-map P0 执行）

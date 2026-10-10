@@ -19,6 +19,7 @@
 #include "game/boot.h"
 #include "game/res.h"
 #include "game/scene_core.h"
+#include "game/scene_states.h"
 #include "lib/ail.h"
 extern void j___sys_init_387_emulator(void); /* register-ABI target, address-taken only */
 #ifndef FD2_GUEST_FIXED
