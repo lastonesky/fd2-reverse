@@ -1227,10 +1227,31 @@ callee——`0x2AE0E`/`0x2AC7D`/`0x2FB2C`——作为一簇（1350B，真闭包�
 - 无对拍器，标“已还原未验证”。拉出后下一游戏头名回落至 u1 小簇
   `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2AA00`(sub_29DAA)/`0x2F7B6`(sub_2EBE1) 等。
 
+### 48) 记录伤害/动作效果 leaf 簇（本轮，2 函数）→ `src/game/item_use.c/.h`（追加）
+
+closure-ready 游戏头名 `0x1C81F`(u3) 及其唯一待还原 callee/caller 交叉项：`0x1C75E`(u7)
+是它的直接 caller（`sub_20C6F` 行动路由与 `sub_2111A`/`sub_21227`/`0x213B7`/`0x214AD`/`0x21548`/
+`sub_2FF01` 共用），其真闭包＝ `0x1C81F` + 既有资产（`rec_skip`/`tbl_ptr`/`util_rand`）。
+两者与 §15/§39 已还原的 `unit_heal`(0x1C916)/`unit_heal_by_action`(0x1C8ED)/`unit_restore_mp`(0x1C9DD)
+同族（同一 `tbl_619FD` 行动表、同一 80 字节记录表、同一 `dword_53EC8` 经验记账），故追加进 `item_use`：
+
+| 原址 | 新名 | 行为 |
+|---|---|---|
+| `0x1C81F` | `unit_damage` | 对记录 `rec` 扣除 `amount` 伤害：`9*amount/10 + (rand%100)*amount/1000`，从 +64 HP 减去（截 0）；`rec[7]>=0x44` 时按 `tbl_61AF9(rec[7]-68)` 的 byte 9 × `rec[33]`（存活者再乘 `dmg/maxhp`）记入 `dword_53EC8`；返回造成的伤害。 |
+| `0x1C75E` | `unit_action_damage` | 解析行动 `action` 对记录的效果：拷 0x51F96 的 28 个 dword 职业功率表，取 `tbl_619FD[action]` word0 × `tbl[rec[32]-1] / 10` 作基础伤害，`action∈10..12` 且 `rec_skip(rec)` 命中时丢弃，否则以该表 byte2 为概率调用 `unit_damage`；返回造成的伤害（未命中为 0）。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声（伪 callee）**：`0x1C81F` 尾 `jmp 0x14230` 落在 `sub_14121`（`map_move_to_marked`）体内——`0x14230` 是 `mov eax,ebp; jmp 0x10B46` 的共享收尾（`0x10B46` 为外部纯 `ret`），故 `function-map` 把 `sub_14121` 记成伪 callee；真正返回的是本函数算出的伤害 `ebp`，C 侧直接 `return dmg;`。
+- **Hex-Rays 放回未初始化寄存器**：`0x1C75E` 的调用者伪代码把其返回值渲染成 `if (v6 != 0)` 的未初始化 `v6`（因 `0x1C75E` 被渲染成 `void`）；机器上两条返回路径一条 `jmp` 掠过 `xor eax,eax`（保留 `unit_damage` 的 eax），一条 `xor eax,eax`，故 `0x1C75E` 返回的正是造成的伤害，C 侧按 `int` 还原。
+- **LOWORD 伪影**：`0x1C81F` 的 `LOWORD(v4)=sub_4EBE3()` 只是 IDA 对 `%100` 的截断视图；反汇编为全 32 位 `idiv`，C 侧按 `(int32_t)util_rand() % 100` 保留有符号语义。
+- **chkstk**：两者皆 `push size; call 0x3702F`，丢弃。
+- 无对拍器，标“已还原未验证”。拉出后下一游戏头名仍为 u1 小簇
+  `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2AA00`(sub_29DAA)/`0x2F7B6`(sub_2EBE1) 等。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **137 → 134**（本轮 §47 −3），已还原未验证 **186 → 189**（本轮 +3）。
+- `function-map.csv`：待还原 **134 → 132**（本轮 §48 −2），已还原未验证 **189 → 191**（本轮 +2）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 

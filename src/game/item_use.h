@@ -8,6 +8,13 @@
  *            experience in dword_53EC8; returns the amount added.
  *   0x1C8ED  unit_heal_by_action  the same, with `amount` taken from word 0
  *            of the tbl_619FD entry of the action.
+ *   0x1C75E  unit_action_damage   resolve action `action` on a record: word 0
+ *            of the action's tbl_619FD entry scaled by record+32's tbl_51F96
+ *            power over 10, applied with the entry's chance byte (action
+ *            10..12 dropped on a skipped record); returns the damage dealt.
+ *   0x1C81F  unit_damage         deal `amount` damage to a record (90% fixed
+ *            + up to 10% random, clamped at zero) and book the experience in
+ *            dword_53EC8; returns the damage dealt.
  *   0x1C9DD  unit_restore_mp      the magic-point analogue of unit_heal on
  *            the record's second pool (+68, max at +70).
  *   0x1DA16  view_draw_unit_sprite  blit a unit's 24x24 sprite into the map
@@ -36,6 +43,12 @@ int unit_heal_by_action(int rec, int action);
 
 /* 0x1C9DD */
 int unit_restore_mp(int rec, int amount);
+
+/* 0x1C75E */
+int unit_action_damage(int rec, int action);
+
+/* 0x1C81F */
+int unit_damage(int rec, int amount);
 
 /* 0x1DA16 */
 int view_draw_unit_sprite(int dst, int pitch, int rec, int mode, int field);
