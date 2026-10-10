@@ -42,6 +42,7 @@
 #include "mosaic_reveal.h"
 #include "msg.h"
 #include "party_panel.h"
+#include "party_roster.h"
 #include "password.h"
 #include "path.h"
 #include "place_menu.h"

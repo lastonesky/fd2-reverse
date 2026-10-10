@@ -732,10 +732,34 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 - **归属**：`0x1A30B` 的过渡即 `reveal_mosaic_out/in`（`push 0x52`/`0x50`），故两助手追加进
   既有 `mosaic_reveal.c`（该模块仍无对拍器，保持“已还原未验证”）。
 
+### 27) 队伍名册成员助手 → `src/game/party_roster.c/.h`（本轮，2 函数）
+
+`0x2AF28`（队伍变更/编成屏，仍待还原）的两个闭包就绪 callee，即本轮 `function-map.csv`
+闭包就绪头名（均 u2、同 caller）：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2B439` | `party_member_present(count,id)` | 扫记录表 1（`dword_53A45`）槽 1..count 的 id 字节（+8），命中返回 1；未命中则播招募肖像序列（`msg_open_portrait(75)` → `vm_run(dword_53A7D,657,0xA951F,320,205,76,74,19,1)` → `dlg_blit_dato(dword_53A85,dword_53C67,0)` → `dword_53A51` 置 1 哨兵 → `dlg_wait_key(0)` → 清 0 → `msg_close_portrait`），返回 0。 |
+| `0x2B843` | `party_member_move_front(id)` | 扫表 1 找 id 字节命中的槽（全表扫、取最后一个匹配）；把表 2（`dword_53BF7`）的该记录搬到槽 1 并顺移紧凑其余槽（`guest_malloc(0xA00)` 暂存整表 → 三条 `memmove`）→ 释放暂存 + 释放 DATO 精灵库 `buf`（`dword_53A61`）→ `fopen(FDICON.B24,"rb")` 逐队员 `unit_entry_data(+7,fp)` 重建图集 → `fclose`（返回 fclose 结果，调用点不读）。 |
+
+**陷阱 / 伪代码伪影**：
+- **Hex-Rays 索引折算**：`0x2B439` 的 `dword_53A45 + 80*i + 88` 实为槽 `i+1` 的 `+8` 字节
+  （机器 `lea ebx,[edx+1]; ... shl 4` 得 `80*(i+1)`），C 侧直接写槽 1..count。
+- **无符号字节比较**：两者对记录 +8 与实参 id 均用 `movzx`（零扩展 `cmp`），故 C 侧 `(uint8_t)id`；id>255 永不命中。
+- **`dword_53AD9`**：机器 `movzx; inc` ⇒ `(uint32_t)(uint8_t)id + 1`（32 位写入）。
+- **`dword_53A51` 哨兵**：`0x2B439` 等待键期间把它置 1、随后清 0（`dlg_wait_key` 读它选文本基址），
+  与 `scene_core.c` 同写法——此路径是“哨兵”用法而非地图格表用法。
+- **`buf`（0x53A61）释放**：机器 `push ds:0x53A61; call 0x3776E`，走 `guest_free` 缝
+  （该单元由 `res_load` 的 `guest_malloc` 分配）；`dword_53BF7` 由 boot.c 初始化、此处不释放。
+- **fopen/fclose**：机器直接调 CRT `0x37324/0x3759C`；本 C 用 `fopen(aFdiconB24_6,aRb_10)`
+  （即 `fd2_data1` 的 `"FDICON.B24"`/`"rb"`）与 libc `fclose`（同 `scene_core.c` 的 FDICON 重载段）。
+- **chkstk**：二者皆 `push size; call 0x3702F`，丢弃。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186**（本批 −2），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137**（本批 +2）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183**（本批 −2；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140**（本批 +2）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -756,12 +780,15 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 本轮 §24 已拉出 `0x1C142`/`0x1C1C3`（`box_popup` 物品选择助手，同 caller `1BFFE`/`2872B`）。
 本轮 §25 已拉出 §21 `figure_view` 家族的另两个同胞 `0x2F631`/`0x2FE14`(u2)（驱动器 `0x2EBE1`/`0x2FB2C`）。
 本轮 §26 已拉出闭包就绪头名 `0x1A7BD`/`0x1A7F1`(u2，`0x1A30B` 的音效库加载/释放对)。
-现闭包就绪的游戏函数头名：`0x2B439`/`0x2B843`(u2，同 caller `sub_2AF28`)、
-`0x1CB94`/`0x1CD17`/`0x1EC2A`/`0x272D0`/`0x2A0C2`/`0x2A694`(u2)。
+本轮 §27 已拉出闭包就绪头名 `0x2B439`/`0x2B843`(u2，同 caller `sub_2AF28` 的队伍名册助手)。
+现闭包就绪的游戏函数头名：`0x1CB94`(u2，地图视口记录精灵)/`0x1CD17`(u2，地图单位帧闪烁)
+/`0x1EC2A`(u2，`map_status` 格坐标)/`0x272D0`/`0x2A0C2`/`0x2A694`(u2，名册行绘制)；
+另有多组同 caller 的小簇（均 u1）：`0x1C9DD`(sub_20C6F)、`0x22470`/`0x22547`/`0x22656`(sub_22253)、
+`0x2AC7D`/`0x2AE0E`/`0x2FB2C`(sub_2AA00)、`0x1E98C`/`0x1ECC7`(sub_1E856)、`0x1B1E7`(sub_19DF7)。
 
-**台账发现（待后续修正，本批不改）**：`function-map.csv` 把 `0x2BF83`(u2) 列为待还原，但该地址已在
-`src/game/fx.c` 实现为 `fx_advance`（`fx.h` 已声明），仅漏登 `restored_manifest.txt`；故它不应再被当成
-可拉出的游戏函数（本批已避开），建议下批把 `0x2BF83 sub_2BF83 game/fx.h` 补入 manifest 后重跑生成器。
+**台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
+`src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交
+`4d27e6e` 补入 `0x2BF83 sub_2BF83 game/fx.h` 并重跑生成器，该项现转为“已还原未验证”。
 （`0x344B4` 已由 §16 连同其上游 `0x34366`/`0x33FAF` 整簇拉出；`0x2DF01/1FF79/1F73F` 已由 §14 拉出。）
 策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 结构反编译辅助）。
 （`0x2921A`＝地点菜单退场缩放（上批 §11 遗留）；`0x1B1E7`(地图队伍面板编排者，6 个 callee 已在 §12 还原）

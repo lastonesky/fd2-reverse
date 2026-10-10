@@ -492,3 +492,7 @@
 # sibling 0x1E856 shares ui_meter_fixed and is still pending)
 0x1E7F6 sub_1E7F6 game/map_status.h
 0x1E611 sub_1E611 game/map_status.h
+
+# party-roster membership helpers (callees of the party-change screen 0x2AF28, still pending)
+0x2B439 sub_2B439 game/party_roster.h
+0x2B843 sub_2B843 game/party_roster.h
