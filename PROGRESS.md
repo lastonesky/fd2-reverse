@@ -885,10 +885,36 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 - **归属**：新建模块；三块 0xFA00 暂存仍走 `guest_malloc`（`menu_select.c`/`msg.c`/`box_popup.c` 共用同一全局）。
 - 无对拍器，标“已还原未验证”；caller（`0x2872B/28CBD/28F65/2A43E/2AA00`）仍待还原。
 
+### 33) 地图视图 / 形状库助手簇（本轮，3 函数）→ `map_shape.c/.h`（新）+ `map_sprites.c`/`map_status.c` 追加
+
+本轮 `function-map.csv` 闭包就绪游戏头名三个 u2（真闭包＝自身；三个都属地图视图渲染族）：
+
+| 原址 | 新名 | 模块 | 要点 |
+|---|---|---|---|
+| `0x1399C` | `map_shape_lib_decode` | **map_shape.c（新）** | 把当前的 `dword_53A5D` 形状库（头 `{u16 24,u16 24,u16 count}` + `count` 个 u32 流偏移（+6 起）+ RLE 流）解码为**连续的原始 24×24 位图库**（新头 + `count`×576B），返回新指针；调用方 `0x2000A`/`0x21548` 把旧指针存起、把新指针写回 `dword_53A5D`，再建 64×64 指针表供 `map_zoom_draw` 采样。 |
+| `0x1CAC7` | `map_record_layer_blink` | map_sprites.c | 两次 `map_draw_record_layer`（帧 74 画入 `dword_53A49`、帧 75 画入 `guest_malloc(0x25680)` 暂存）→ 4 轮交替把两幅 312×192 窗发布到 `0xA0504`（每半轮 `j___delay(90)`）→ `map_view_update(0)` + 释放暂存。 |
+| `0x1EC2A` | `map_status_anchor` | map_status.c | 记录 `rec` 在当前地图视图里的两 int `{x,y}` 锚点（`24*(rec[0]-dword_53AA9)+4`、`24*(rec[1]-dword_53AAD)`），再按 `rec[3]` 分支向 320×200 框内微调；驱动 `0x1EB05`（`0x1548E` 的状态叠加层）调用两次填 `dword_53A30`/`dword_53A38` 的 actor/target 两半 `pos`。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声（伪 callee）**：`0x1399C` 尾 `jmp 0x10C49` 落在 `0x10B4E`（`unit_sprites_build`）体内的共享尾声
+  （`add esp,4; pop edi; pop esi; pop ebx; ret`）⇒ 普通 `return`（eax = 新库指针）；`0x1CAC7` 尾 `jmp 0x14B72`
+  落在 `ev5_14B16`（0x14B16）体内共享尾声（`add esp,4; pop esi; pop ebx; ret`）⇒ 普通 `return`。两者均写进 C，不模拟跳转。
+- **OOM 尾不同形**：`0x1399C` 的失败路径是 `push aOutOfMemoryAtR(0x50122); jmp 0x10056`——即
+  `printf; exit(1)`，**不含** `scenario_load` 的 `word_53A8D/int386(0x10)` 文本模式切换（后者在 `0x10034`）。
+- **ABI（chkstk 骗过反编译器）**：`0x1CAC7` 的机器帧只读第 3/4 实参（`[esp+0x1c]` 两次＝`count`/`list`），
+  **第 1/2 实参从不读**；两次调用均为 `map_draw_record_layer(base, count, list, 74/75)`（`base` 先 `dword_53A49` 后暂存）。
+- **无符号字节比较**：`0x1EC2A` 的 `rec[3]` 判据机器为 `movzx; cmp 2; jge`，值域 0..255，C 侧写 `r[3] < 2u`；
+  `dword_53AA9` 机器按 **32 位 dword** 读进 24 位算式（`(int)dword_53AA9` 取 qword 视图低位），`dword_53AAD` 为 `int32_t`。
+- **返回值**：三者尾声 eax 均被调用点忽略（`0x1399C` 例外——调用方把 eax 存回 `dword_53A5D`），
+  故 `0x1CAC7`/`0x1EC2A` 声明 `void`、`0x1399C` 声明 `uint8_t *`。
+- **chkstk**：三者皆 `push size; call 0x3702F`（不分配帧），丢弃。
+- **归属**：`map_sprites.h`/`map_status.h` 已在伞头；新增 `map_shape.h`，伞头字母序插在 `map_scroll.h` 与 `map_sprites.h` 之间。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180 → 179 → 176 → 172**（本批 −4；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143 → 144 → 147 → 151**（本批 +4）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180 → 179 → 176 → 172 → 169**（本批 −3；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143 → 144 → 147 → 151 → 154**（本批 +3）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -923,6 +949,10 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 作为同族整体拉出（`src/game/shop_screen.c`，真闭包＝自身），故闭包就绪游戏头名转为
 `0x1399C`(u2)、`0x1EC2A`(u2)、`0x1CAC7`(u2)；商店屏族的下一层调用者 `0x2872B`/`0x28CBD`/`0x28F65`/
 `0x2A43E`/`0x2AA00` 仍待还原；
+本轮 §33 已把这个头名三元组 `0x1399C`/`0x1CAC7`/`0x1EC2A`(u2) 整体拉出（`map_shape` 新建 + `map_sprites`/`map_status` 追加），
+闭包就绪游戏头名转为 `0x15880`(u1)、`0x15DA2`(u1)，其后同层 u1 的小簇（同 caller）仍以
+`0x22470`/`0x22547`/`0x22656`(sub_22253，拉出后 u5 的 `sub_22253` 即闭包就绪) 为最优候选；
+CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0x36FAC` 小库函数按既定策略跳过；
 另有多组同 caller 的小簇（均 u1）：`0x1C9DD`(sub_20C6F)、`0x22470`/`0x22547`/`0x22656`(sub_22253)、
 `0x2AC7D`/`0x2AE0E`/`0x2FB2C`(sub_2AA00)、`0x1E98C`/`0x1ECC7`(sub_1E856)、`0x1B1E7`(sub_19DF7)。
 

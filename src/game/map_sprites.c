@@ -1,7 +1,7 @@
 /* map_sprites.c - map-view record/unit sprite overlays.  See map_sprites.h.
  *
- * Direct translations of the machine code at 0x1CB94 and 0x1CD17; the offline
- * disassembly (analysis/cseg01_disasm.txt) is authoritative.  Uses the
+ * Direct translations of the machine code at 0x1CB94, 0x1CD17 and 0x1CAC7;
+ * the offline disassembly (analysis/cseg01_disasm.txt) is authoritative.  Uses the
  * already-verified map_render_view (0x11EEE), rle2_blit_trans (0x4EBAB),
  * sprite24_plain (0x4E22A), sprite24_ramp (0x4DF84), gfx_copy_rows (0x11EB0)
  * and svc_wait_ticks (0x17AA9), the guest heap (0x3706E/0x3776E) and the
@@ -109,5 +109,37 @@ void map_blink_units(int unused, int colour, int count, const uint8_t *list)
 
     gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
                   scratch + 32904u, 456, 312, 192);
+    guest_free(scratch);
+}
+
+/* 0x1CAC7 - draw the record layer twice (animation frames 74 and 75, the
+ * second into a scratch buffer) then blink the two 312x192 windows on
+ * 0xA0504 four times.  The first two arguments are part of the 4-argument
+ * ABI but are never read; the tail `jmp 0x14B72` is ev5_14B16's shared
+ * epilogue (plain return). */
+void map_record_layer_blink(int unused1, int unused2, int count,
+                            const uint8_t *list)
+{
+    uint8_t *scratch;
+    int      i;
+
+    (void)unused1;
+    (void)unused2;
+
+    map_draw_record_layer(dword_53A49, count, list, 74);
+
+    scratch = (uint8_t *)guest_malloc(0x25680u);
+    map_draw_record_layer(scratch, count, list, 75);
+
+    for (i = 0; i < 4; ++i) {
+        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
+                      dword_53A49 + 0x8088u, 456, 312, 192);
+        j___delay(90);
+        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
+                      scratch + 0x8088u, 456, 312, 192);
+        j___delay(90);
+    }
+
+    map_view_update(0);
     guest_free(scratch);
 }

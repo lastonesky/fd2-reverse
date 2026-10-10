@@ -1,5 +1,6 @@
-/* map_sprites.h - map-view record/unit sprite overlays (original 0x1CB94 and
- * 0x1CD17; the same family as map.c's 0x1C2DA/0x1C4CC party-icon draws).
+/* map_sprites.h - map-view record/unit sprite overlays (original 0x1CB94,
+ * 0x1CD17 and 0x1CAC7; the same family as map.c's 0x1C2DA/0x1C4CC
+ * party-icon draws).
  *
  *   0x1CB94  map_draw_record_layer(base, count, list, frame)
  *            render the 13x8 map window into base+0x8088, then stamp the
@@ -15,6 +16,12 @@
  *            named in `list` with the rotating sprite24_ramp base colour
  *            byte_52006[colour], publishing each frame to 0xA0504 and waiting
  *            one BIOS tick; finally restores the snapshot and frees it.
+ *
+ *   0x1CAC7  map_record_layer_blink(a1, a2, count, list)
+ *            composite the record layer twice - frame 74 onto dword_53A49 and
+ *            frame 75 into a 0x25680 scratch buffer - then alternate the two
+ *            312x192 windows onto 0xA0504 four times with a 90-unit delay per
+ *            half; ends with map_view_update(0) and frees the scratch.
  *
  * ABI = cdecl, decoded from the offline disassembly (analysis/cseg01_disasm.txt).
  * 0x1CB94's tail `jmp 0x1317D` is the shared epilogue inside 0x1300D (a plain
@@ -36,5 +43,10 @@ void map_draw_record_layer(uint8_t *base, int count, const uint8_t *list,
 /* 0x1CD17 - blink the records in `list` ten times over the map view, ramping
  * their palette through byte_52006[colour]. */
 void map_blink_units(int unused, int colour, int count, const uint8_t *list);
+
+/* 0x1CAC7 - blink the records in `list` by alternating the two record-layer
+ * animation frames (74/75).  `unused1`/`unused2` are never read. */
+void map_record_layer_blink(int unused1, int unused2, int count,
+                            const uint8_t *list);
 
 #endif /* GAME_MAP_SPRITES_H */

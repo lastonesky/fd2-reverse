@@ -1,5 +1,6 @@
 /* map_status.h - the map-view status frame: record sprites + HP gauges drawn
- * over the live map view (original 0x1E611 and its gauge helper 0x1E7F6).
+ * over the live map view (original 0x1E611, its gauge helper 0x1E7F6 and the
+ * anchor helper 0x1EC2A).
  *
  *   0x1E611  map_status_frame   render the 13x8 view window, draw the target
  *            (and, when present, the actor) record sprite with
@@ -11,7 +12,8 @@
  * `pos` is a four-int screen-pixel block {x0, y0, x1, y1}; the first pair
  * belongs to `target`, the second to `actor`.  The layout mirrors
  * map_view_update (0x11CAC): same view offset dword_53A49+0x8088, same 456
- * stride and the same 0xA0504 publish.  Driven by 0x1548E (still pending).
+ * stride and the same 0xA0504 publish.  Driven by 0x1548E (still pending),
+ * whose 0x1EB05 helper fills the pos block via map_status_anchor (0x1EC2A).
  * Hand-restored and compile-verified; no differential harness yet.
  */
 #ifndef GAME_MAP_STATUS_H
@@ -23,5 +25,8 @@ void map_status_gauge(int dst, int pitch, int rec, const int *pos);
 
 /* 0x1E611 - draw the full status frame for the actor/target record pair. */
 void map_status_frame(const int *pos, int actor, int target);
+
+/* 0x1EC2A - write the {x, y} screen anchor of record `rec` into out[0]/out[1]. */
+void map_status_anchor(int *out, int rec);
 
 #endif /* GAME_MAP_STATUS_H */

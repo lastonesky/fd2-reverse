@@ -1,7 +1,8 @@
-/* map_status.c - the map-view status frame (original 0x1E611 + 0x1E7F6).
+/* map_status.c - the map-view status frame (original 0x1E611 + 0x1E7F6 +
+ * 0x1EC2A).
  *
- * Direct translation of the machine code at 0x1E611/0x1E7F6; the offline
- * disassembly (analysis/cseg01_disasm.txt) is authoritative.
+ * Direct translation of the machine code at 0x1E611/0x1E7F6/0x1EC2A; the
+ * offline disassembly (analysis/cseg01_disasm.txt) is authoritative.
  *
  *   - the Watcom stack probe (`push size; call 0x3702F`) is dropped;
  *   - 0x1E611's tail `jmp 0x11D2C` lands inside map_view_update (0x11CAC): it
@@ -11,6 +12,11 @@
  *     (and its callees) are false dependencies;
  *   - 0x1E611's Hex-Rays prototype says `int`, but the only value is whatever
  *     gfx_copy_rows leaves in eax and no caller reads it, so it returns void.
+ *
+ *   - 0x1EC2A's Hex-Rays prototype says `int`; the machine leaves a computed
+ *     value in eax but the only caller (0x1EB05) discards it, so it is void
+ *     here.  Its `r[3] >= 2` test is a `movzx; cmp 2; jge` over a byte, so the
+ *     unsigned `r[3] < 2` below is exact.
  */
 #include "fd2_game.h"
 #include "map_status.h"
@@ -56,4 +62,37 @@ void map_status_frame(const int *pos, int actor, int target)
     }
 
     gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, view, 456, 312, 192);
+}
+
+/* 0x1EC2A - compute the two-int {x, y} screen anchor of record `rec` in the
+ * current map view, nudged toward the 320x200 frame.  `out[0]`/`out[1]` are
+ * filled directly; the driver 0x1EB05 calls this twice to build the actor /
+ * target halves of the status `pos` block (dword_53A30 / dword_53A38). */
+void map_status_anchor(int *out, int rec)
+{
+    const uint8_t *r =
+        (const uint8_t *)(uintptr_t)dword_53A45 + 80u * (uint32_t)rec;
+
+    out[0] = 24 * ((int)r[0] - (int)dword_53AA9) + 4;
+    out[1] = 24 * ((int)r[1] - (int)dword_53AAD);
+
+    if (r[3] < 2u) {
+        if (out[1] - 18 >= 0)
+            out[1] -= 18;
+        else
+            out[1] += 5;
+        if (out[0] + 108 > 319)
+            out[0] -= 86;
+        else
+            out[0] += 28;
+    } else {
+        if (out[1] + 37 <= 199)
+            out[1] += 22;
+        else
+            out[1] += 5;
+        if (out[0] - 86 < 0)
+            out[0] += 28;
+        else
+            out[0] -= 88;
+    }
 }

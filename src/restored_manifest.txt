@@ -522,3 +522,10 @@
 0x27738 sub_27738 game/shop_screen.h
 0x2A29D sub_2A29D game/shop_screen.h
 0x2A857 sub_2A857 game/shop_screen.h
+
+# map-view helper cluster (all three are the top closure-ready game functions
+# by usage; their drivers 0x2000A/0x21548, 0x2111A/0x213B7 and 0x1EB05 are
+# still pending)
+0x1399C sub_1399C game/map_shape.h
+0x1CAC7 sub_1CAC7 game/map_sprites.h
+0x1EC2A sub_1EC2A game/map_status.h
