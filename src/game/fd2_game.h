@@ -33,6 +33,7 @@
 #include "map_interact.h"
 #include "map_records.h"
 #include "map_scroll.h"
+#include "map_status.h"
 #include "map_units.h"
 #include "map_window.h"
 #include "map_zoom.h"

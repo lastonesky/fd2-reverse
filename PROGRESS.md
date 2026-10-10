@@ -659,10 +659,29 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 - **chkstk**：四者皆 `push size; call 0x3702F`，丢弃。
 - 无对拍器，标“已还原未验证”。
 
+### 23) 地图状态叠加帧（本轮，2 函数）→ `map_status.c/.h`（新）
+
+本轮 closure-ready 头名是 `0x1E7F6`(u4)——§22 拉出 `0x1E739` 后它才就绪；其唯一 caller `0x1E611`(u1)
+的其余 callee 均已在册，故作为同簇整体拉出。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1E611` | `map_status_frame(pos,actor,target)` | 地图视图状态帧：`map_render_view(dword_53A49+0x8088,456,13,8,dword_53AA9,dword_53AAD)` → `dlg_portraits_refresh()` → 目标记录精灵 `res_draw_subimage(dword_53AD1,view,456,pos0-4,pos1-4,48)` → 上方 55 段 `ui_meter_fixed(view+456*(pos1+2)+pos0+3,456,55)` → 目标 HP 表 `map_status_gauge(dword_53A49+0x7964,456,target,pos)`；`pos[2]!=-1` 时再画 actor 精灵并 `map_status_gauge(...,actor,pos+2)`；末 `gfx_copy_rows(0xA0504,320,view,456,312,192)` 发布。 |
+| `0x1E7F6` | `map_status_gauge(dst,pitch,rec,pos)` | 记录 HP 表：读 `record+0x40` 当前 / `+0x42` 最大（均 u16），当前为 0 直接返回；否则 `ui_meter_fixed(dst+pos0+pitch*(pos1+6)+7, pitch, 69*cur/max+1)`。 |
+
+- **入口定位**：`pos` 为 4 个 int 的屏幕像素块 `{x0,y0,x1,y1}`，`pos[0..1]` 属 `target`（call 站点第 3 实参 `dword_53C4B`），`pos[2..3]` 属 `actor`（第 2 实参）；由 `0x1EB05` 填（`&dword_53A30`）。
+
+**陷阱 / 伪代码伪影**：
+- **伪 callee（共享尾声）**：`0x1E611` 尾 `jmp 0x11D2C` 落进 `map_view_update`(0x11CAC，已验证) 的共享尾声，实为 `gfx_copy_rows(0xA0504,320,view,456,312,192)` + `return`；`function-map` 误列 `sub_11CAC`（及其全部 callee）。
+- **`jle` vs `!=0`**：`0x1E7F6` 的 `movzx` u16 后 `test/jle`，值域 `[0,65535]`，故“当前==0 才返回”与 `!= 0` 等价。
+- **返回值**：`0x1E611` 的 `fd2_funcs.h` 原型为 `int`，但仅 eax 残留 `gfx_copy_rows`、无调用点读取，C 侧声明 `void`；`0x1E7F6` 同为 `void`。
+- **chkstk**：二者皆 `push size; call 0x3702F`，丢弃。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194**（本批 −4），已还原未验证 **115 → 118 → 122 → 125 → 129**（本批 +4）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192**（本批 −2），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131**（本批 +2）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -678,6 +697,8 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 库区不投资源，同 module-map §2）；`0x2E95B`(u3) 同样因需 CRT `fread`（`sub_373CA`）而暂跳。
 本轮 §21 已把同属 `sub_2CF30` 的 `0x2F4D4/30E25/30E9D`(u3/u2) 作为一簇拉出。
 本轮 §22 已拉出当前 closure-ready 头名四个 u3：`0x1E739`/`0x1F558`/`0x2282F`/`0x265EC`。
+本轮 §23 已拉出 `0x1E7F6`(u4) 及其 caller `0x1E611`（`map_status`），故地图状态叠加族只剩
+`0x1E856`(u2，仍待 `0x1E98C`/`0x1ECC7`)。
 现闭包就绪的游戏函数头名：`0x1A7BD`/`0x1A7F1`(u2，同 caller `0x1A30B` 的暂存/释放对)、`0x1C142`/`0x1C1C3`(u2，同 caller `sub_1BFFE`/`sub_2872B`)、
 `0x2B439`/`0x2B843`(u2，同 caller `sub_2AF28`)、`0x1CB94`/`0x1CD17`/`0x1EC2A`/`0x272D0`/`0x2A0C2`/`0x2A694`/`0x2BF83`/`0x2F631`/`0x2FE14`(u2)。
 （`0x344B4` 已由 §16 连同其上游 `0x34366`/`0x33FAF` 整簇拉出；`0x2DF01/1FF79/1F73F` 已由 §14 拉出。）

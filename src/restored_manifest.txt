@@ -475,3 +475,8 @@
 0x1F558 sub_1F558 game/map_zoom.h
 0x2282F sub_2282F game/map_action.h
 0x265EC sub_265EC game/scene_core.h
+
+# map-view status frame: record sprites + HP gauges (driver 0x1548E still pending;
+# sibling 0x1E856 shares ui_meter_fixed and is still pending)
+0x1E7F6 sub_1E7F6 game/map_status.h
+0x1E611 sub_1E611 game/map_status.h

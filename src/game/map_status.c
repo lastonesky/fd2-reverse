@@ -1,0 +1,59 @@
+/* map_status.c - the map-view status frame (original 0x1E611 + 0x1E7F6).
+ *
+ * Direct translation of the machine code at 0x1E611/0x1E7F6; the offline
+ * disassembly (analysis/cseg01_disasm.txt) is authoritative.
+ *
+ *   - the Watcom stack probe (`push size; call 0x3702F`) is dropped;
+ *   - 0x1E611's tail `jmp 0x11D2C` lands inside map_view_update (0x11CAC): it
+ *     is that function's shared epilogue, which runs gfx_copy_rows(0xA0504,
+ *     320, view, 456, 312, 192) and then returns.  It is reproduced here as
+ *     that call plus a plain return, so function-map's 0x1E611 callee sub_11CAC
+ *     (and its callees) are false dependencies;
+ *   - 0x1E611's Hex-Rays prototype says `int`, but the only value is whatever
+ *     gfx_copy_rows leaves in eax and no caller reads it, so it returns void.
+ */
+#include "fd2_game.h"
+#include "map_status.h"
+
+#include <stdint.h>
+
+#define STATUS_VIEW_OFF  0x8088u /* dword_53A49 + 32904  (13x8 tile window)   */
+#define STATUS_GAUGE_OFF 0x7964u /* dword_53A49 + 31076 (record gauge strip) */
+
+/* 0x1E7F6 */
+void map_status_gauge(int dst, int pitch, int rec, const int *pos)
+{
+    const uint8_t *r =
+        (const uint8_t *)(uintptr_t)dword_53A45 + 80u * (uint32_t)rec;
+    uint32_t cur = *(const uint16_t *)(uintptr_t)(r + 0x40);
+    uint32_t max = *(const uint16_t *)(uintptr_t)(r + 0x42);
+
+    if (cur != 0)
+        ui_meter_fixed(dst + pos[0] + pitch * (pos[1] + 6) + 7, pitch,
+                       (int)(69u * cur / max) + 1);
+}
+
+/* 0x1E611 */
+void map_status_frame(const int *pos, int actor, int target)
+{
+    uint8_t *view  = dword_53A49 + STATUS_VIEW_OFF;
+    void    *gauge = dword_53A49 + STATUS_GAUGE_OFF;
+    int      bar;
+
+    map_render_view(view, 456, 13, 8, (int)dword_53AA9, dword_53AAD);
+    dlg_portraits_refresh();
+
+    res_draw_subimage((const void *)(uintptr_t)dword_53AD1, view, 456,
+                      pos[0] - 4, pos[1] - 4, 48);
+    bar = (int)(uintptr_t)view + 456 * (pos[1] + 2) + pos[0] + 3;
+    ui_meter_fixed(bar, 456, 55);
+    map_status_gauge((int)(uintptr_t)gauge, 456, target, pos);
+
+    if (pos[2] != -1) {
+        res_draw_subimage((const void *)(uintptr_t)dword_53AD1, view, 456,
+                          pos[2] - 4, pos[3] - 4, 48);
+        map_status_gauge((int)(uintptr_t)gauge, 456, actor, pos + 2);
+    }
+
+    gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, view, 456, 312, 192);
+}
