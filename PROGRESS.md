@@ -248,15 +248,27 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
   的 `jmp 0x1317D` 落在 `0x1300D` 体内），故不要按该近似的闭包直接展开——真依赖只需
   本 4 个函数。
 
+### 4) `0x219AD` + `0x22046` + `0x24618` → `src/game/reveal.c/.h`（扩张圆开图）
+
+- `0x24618`（u8，本轮最高）= `portrait_reveal`：`ev5_1D4CB` → malloc 0x25680 →
+  `map_render_view(13×8)` → 循环 i=9..1（`memmove` 暂存 → `reveal_band(col*24+12,row*24+16)`
+  → `gfx_copy_rows(0xA0504, 312×192)` → x+=step → delay5）→ `free` → delay500 →
+  `pal_fade_add(0,255,j)` 步进 → `ev5_1D4CB`。
+- `0x22046` = `reveal_band`：两次 `reveal_arc`（第二次 y 从圆心起，中间夹 `dlg_portraits_refresh`）
+  + 下半 `(int)(radius*1.6)` 半宽的实心带；`0x219AD` = `reveal_arc`：逐行
+  `half=(int)(sqrt(r²-dy²)*16/10)` 并按 312 裁剪，`util_translate` 输出。（常量 `0x501F0`=10.0、
+  `0x50208`=1.6 经段镜像核出。）
+- **closure 校正（再次）**：`0x219AD` 的 `jmp 0x1951B` 落在 `0x190AC` 体内、`0x24618` 的
+  `jmp 0x10B46` 属外部尾声——两者都是伪 callee，真依赖只要本 3 个函数。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **276 → 267**，已还原未验证 **47 → 56**（+9）。
+- `function-map.csv`：待还原 **276 → 264**，已还原未验证 **47 → 59**（+12）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
-`0x115B6`(u9)、`0x14B78`(u8)、`0x24618`(u8，→`0x22046`/`0x1B932`)、`0x1C75E`(u7，→`0x1C81F`)、
-`0x13FD4/14EF0/2189A/22046/26CE4/26EDA`(u6) ……
+`0x115B6`(u9)、`0x14B78`(u8)、`0x1C75E`(u7，→`0x1C81F`)、`0x13FD4/14EF0/2189A/26CE4/26EDA`(u6) ……
 策略不变：**按 callee 簇整体拉出**（一个模块一次做完），并先剔除共享尾声造成的伪 callee。
 
 ---

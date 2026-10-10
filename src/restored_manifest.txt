@@ -19,6 +19,9 @@
 0x18795 sub_18795 game/ui_meter.h
 0x18C6D sub_18C6D game/ui_meter.h
 0x2FACD sub_2FACD game/ui_meter.h
+0x219AD sub_219AD game/reveal.h
+0x22046 sub_22046 game/reveal.h
+0x24618 sub_24618 game/reveal.h
 0x25EBB sub_25EBB game/scene_core.h
 0x117E7 sub_117E7 game/scene_core.h
 0x26152 sub_26152 game/scene_core.h

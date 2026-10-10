@@ -32,6 +32,7 @@
 #include "path.h"
 #include "rec.h"
 #include "res.h"
+#include "reveal.h"
 #include "rle.h"
 #include "rle2.h"
 #include "scene.h"
