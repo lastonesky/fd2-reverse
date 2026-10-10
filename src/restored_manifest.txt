@@ -357,3 +357,13 @@
 0x25757 sub_25757 game/scene_states.h
 0x24754 sub_24754 game/scene_states.h
 0x2548C sub_2548C game/scene_states.h
+0x32FB2 sub_32FB2 game/scene_enter.h
+0x33049 sub_33049 game/scene_enter.h
+0x33C9D sub_33C9D game/scene_enter.h
+0x33DBA sub_33DBA game/scene_enter.h
+0x32D18 sub_32D18 game/scene_enter.h
+0x32E8C sub_32E8C game/scene_enter.h
+0x33E3C sub_33E3C game/scene_enter.h
+0x336A0 sub_336A0 game/scene_enter.h
+0x33AF1 sub_33AF1 game/scene_enter.h
+0x3231B sub_3231B game/scene_enter.h

@@ -40,6 +40,7 @@
 #include "game/rle2.h"
 #include "game/scene.h"
 #include "game/scene_core.h"
+#include "game/scene_enter.h"
 #include "game/scene_states.h"
 #include "game/sprite24.h"
 #include "game/svc.h"
