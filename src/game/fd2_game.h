@@ -58,6 +58,7 @@
 #include "scene_enter.h"
 #include "scene_states.h"
 #include "screen_fx.h"
+#include "shop_rows.h"
 #include "sprite24.h"
 #include "status_screen.h"
 #include "svc.h"

@@ -831,10 +831,34 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
   → libc（同 scene_core），malloc/free → `guest_malloc`/`guest_free`。
 - 无对拍器，标“已还原未验证”。
 
+### 31) 商店/地点菜单列表行绘制 → `src/game/shop_rows.c/.h`（本轮，3 函数）
+
+`0x2670E`（地点菜单，待还原）派生的商店屏家族（`0x279BC`→`0x2872B/28CBD/28F65`→
+`0x27738/275E6`；`0x2AF28`→`0x2A29D`；`0x2AA00`→`0x2A857`）共用的三个行绘制器；
+本轮 `function-map.csv` 闭包就绪游戏函数头名（三者的 callee 全在册，真闭包＝自身）。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x272D0` | `shop_item_rows(count,items,cursor,dst,half_price)` | 最多 6 条（两列，列偏移 148，行基 26）物品行：按 `tbl_ptr(0x602AD,23)` 物品项的 `[0]` 选类型块 59/60/61；名字流 `idx+181`；按类型画子块 64/65/66/67（其余走 `res_blit6` t41）配带符号 16 位数字（`[+1]/[+5]/[+14]`，base 42，3 位）；末块 t15 + 5 位数字（`[+19..20]`，base 119），`half_price` 时数字取 `3*v>>2`。 |
+| `0x2A0C2` | `shop_party_bar_rows(count,dst,cursor,members)` | 最多 3 条队伍行：单位精灵（bank 0x53A61，帧 `12*rec + dword_53F72`，`==3`→1）、名字 `rec[8]+1`、标签 `rec[31]+140`/`rec[32]+150`、末条 t15 + 5 位数字 `rec[33] * (int16)word_52399[rec[32]-1]`（base 119）。 |
+| `0x2A694` | `shop_party_equip_rows(count,dst,cursor,members,equip)` | 最多 3 条队伍行：同单位精灵与前三条流，第 4 条流经设备表 `tbl_ptr(0x615FE,2,idx,-64)`（`(idx-0x20)*2`）取 `[0]+150`；行基 26，名字列 +40/+130/+175/+239。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声（伪 callee）**：`0x2A0C2` 尾 `jmp 0x26E30` 是 `add esp,0x14; pop ebp/edi/esi/ebx; ret`
+  的共享尾声，与本函数前言（`push ebx/esi/edi/ebp; sub esp,0x14`）同帧 ⇒ 普通 `return`（写进 C，不模拟跳转）。
+- **返回值**：三函数 Hex-Rays 声明 `int`，但返回的只是最后一次 callee 的 eax 残留，调用点均不读
+  ⇒ C 侧声明 `void`。
+- **原始表访问器**：`0x4E8BC`（物品项 base 0x602AD/stride 23）与 `0x4E7DD`（设备 base 0x615FE/stride 2/offset -64）
+  按 playbook 改用 `tbl_ptr`；`sprite24_plain49(0x4E29C)`/`dlg_frame_tile(0x1685C)`/`res_blit6(0x16886)`/
+  `dlg_draw_number(0x187D6)`/`vm_run(0x15F84)` 用语义名。
+- **有符号度**：物品项 `[+1]/[+5]/[+14]` 与 `word_52399[]` 均为**带符号 16 位**（机器 `movsx`），
+  `[+19..20]`/`word_52399[tier]` 的 `tier=rec[32]-1` 为**无符号字 / 有符号索引（可为 -1）**。
+- 无对拍器，标“已还原未验证”；caller（`0x275E6/27738/2A29D/2A857`）仍待还原。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180 → 179**（本批 −1；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143 → 144**（本批 +1）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180 → 179 → 176**（本批 −3；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143 → 144 → 147**（本批 +3）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -862,6 +886,9 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 游戏头名新增 `0x1399C`(u2，此前被 `0x10010` 挡住的闭包)，另有 `0x1EC2A`(u2，格坐标/标记锚点)
 /`0x272D0`/`0x2A0C2`/`0x2A694`(u2，名册行绘制；同一 `sub_2670E`/`2872B`… 商店屏家族)
 /`0x1CAC7`(u2，§28 `map_draw_record_layer` 的驱动器)；
+本轮 §31 已把 §30 列出的商店屏行绘制三件套 `0x272D0`/`0x2A0C2`/`0x2A694`(u2) 整体拉出
+（`src/game/shop_rows.c`，真闭包＝自身），闭包就绪游戏头名转为 `0x1399C`(u2)、`0x1EC2A`(u2)、
+`0x1CAC7`(u2)，及商店屏族里仍被上游挡住的 `0x275E6`/`0x27738`/`0x2A29D`/`0x2A857`；
 另有多组同 caller 的小簇（均 u1）：`0x1C9DD`(sub_20C6F)、`0x22470`/`0x22547`/`0x22656`(sub_22253)、
 `0x2AC7D`/`0x2AE0E`/`0x2FB2C`(sub_2AA00)、`0x1E98C`/`0x1ECC7`(sub_1E856)、`0x1B1E7`(sub_19DF7)。
 

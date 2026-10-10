@@ -508,3 +508,9 @@
 # scenario (FD2.SAV) load + chapter intro (caller scenario_menu 0x25EBB is already
 # restored and calls it under its IDA name; map driver 0x19DF7 still pending)
 0x10010 sub_10010 game/scenario_load.h
+
+# shop/place-menu list row painters (callers 0x275E6/0x27738/0x2A29D/0x2A857
+# still pending; part of the sub_2670E shop-screen family)
+0x272D0 sub_272D0 game/shop_rows.h
+0x2A0C2 sub_2A0C2 game/shop_rows.h
+0x2A694 sub_2A694 game/shop_rows.h
