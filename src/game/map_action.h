@@ -24,6 +24,12 @@
  *                         machine), then run 0x22721 / 0x22866 / 0x22997; the
  *                         funcs_1541F entry 25 is 0x22C04 itself.
  *
+ *   0x22A85  +20 table    charge the 0x619FD entry-20 cost, then run
+ *                        item_apply over the list with effect byte 37 (rec+37)
+ *   0x22BC6  +21 table    the same with entry-21 cost and effect byte 38
+ *   0x22AA8               the shared body both of the above jump into
+ *                        (charge cost, item_apply, then drain the status queue)
+ *
  * ABI = cdecl, arguments decoded from the pushes (the offline disassembly is
  * the authority).  Record fields index the 80-byte table dword_53A45; the
  * shared epilogues `jmp 0x1317D` / `jmp 0x22BBE` are plain returns here.  Hand
@@ -67,5 +73,17 @@ int map_action_grow_y_cost(int index, int count, const uint8_t *list);
 
 /* 0x22960 - charge the 0x619FD entry-19 cost, then run map_action_widen. */
 int map_action_widen_cost(int index, int count, const uint8_t *list);
+
+/* 0x22AA8 - charge the 0x619FD entry-`index` cost, run item_apply over `list`
+ * with per-record effect byte `field`, then drain the queued status numbers.
+ * Shared body of the funcs_1541F entries 20/21 (see map_action_entry20/21). */
+int map_action_charge_apply(int a1, int index, int count, const uint8_t *list,
+                            int field);
+
+/* 0x22A85 - funcs_1541F entry 20: charge cost index 20, effect byte 37. */
+int map_action_entry20(int a1, int count, const uint8_t *list);
+
+/* 0x22BC6 - funcs_1541F entry 21: charge cost index 21, effect byte 38. */
+int map_action_entry21(int a1, int count, const uint8_t *list);
 
 #endif /* GAME_MAP_ACTION_H */

@@ -567,3 +567,9 @@
 0x1EB05 sub_1EB05 game/map_status.h
 0x1E292 sub_1E292 game/map_levelup.h
 0x1D79C sub_1D79C game/map_levelup.h
+
+# the funcs_1541F entries 20/21 (0x22A85/0x22BC6) and their shared body
+# 0x22AA8; the wrappers push their constants and jump into 0x22AA8's tail
+0x22A85 sub_22A85 game/map_action.h
+0x22BC6 sub_22BC6 game/map_action.h
+0x22AA8 sub_22AA8 game/map_action.h

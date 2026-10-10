@@ -196,3 +196,30 @@ int map_action_widen_cost(int index, int count, const uint8_t *list)
     rec_sub_table5(index, 19);
     return map_action_widen(index, count, list);
 }
+
+/* 0x22AA8 - charge the 0x619FD entry-`index` cost, run item_apply on the
+ * list with the per-record effect byte `field`, then drain the status queue.
+ * This is the shared body of the funcs_1541F entries 20 and 21: 0x22A85 and
+ * 0x22BC6 push their constants and `jmp 0x22A9B` (the tail inside this body). */
+int map_action_charge_apply(int a1, int index, int count, const uint8_t *list,
+                            int field)
+{
+    dword_53EC4 = 0;
+    rec_sub_table5(a1, index);
+    item_apply(a1, index, count, list, field);
+    if (dword_53EC4 != 0)
+        map_draw_status_popups();
+    return 0;
+}
+
+/* 0x22A85 - funcs_1541F entry 20: charge index 20, apply effect byte 37. */
+int map_action_entry20(int a1, int count, const uint8_t *list)
+{
+    return map_action_charge_apply(a1, 20, count, list, 37);
+}
+
+/* 0x22BC6 - funcs_1541F entry 21: charge index 21, apply effect byte 38. */
+int map_action_entry21(int a1, int count, const uint8_t *list)
+{
+    return map_action_charge_apply(a1, 21, count, list, 38);
+}

@@ -1109,10 +1109,31 @@ callee——`0x2AE0E`/`0x2AC7D`/`0x2FB2C`——作为一簇（1350B，真闭包�
 - **chkstk**：四者皆 `push size; call 0x3702F`（不分配帧），丢弃；CRT `free`→`guest_free`。
 - 无对拍器，标“已还原未验证”；caller `sub_1548E`/`sub_117E7` 的其余部分仍待还原。
 
+### 43) `funcs_1541F` 条目 20/21 + 共享体（本轮，3 函数）→ `src/game/map_action.c/.h`（追加）
+
+按 playbook 的闭包筛选：closure-ready 游戏函数按 usage 排序后，u4 以上只剩 CRT/库包装（跳过），
+高用量小簇中 `0x22A85`(u3,35B) 的闭包最小（`{0x22A85,0x22AA8}`=113B，3 单位 u3）；其兄弟
+`0x22BC6`(u3,27B) 是同一尾部的另一个入口，二者合为连贯簇（真闭包＝`{0x22A85,0x22AA8,0x22BC6}`
+=140B，callee 全在册：`rec_sub_table5` 0x1CA89 / `item_apply` 0x22AF6 / `map_draw_status_popups`
+0x1DF58）。二者均属 `funcs_1541F` 分派表条目 20/21（`sub_15311`/`sub_1CFF0` 调用），归入
+`map_action` 模块（该头文档范围 0x21082..0x22C04）。
+
+| 原址 | 新名 | 模块 | 要点 |
+|---|---|---|---|
+| `0x22AA8` | `map_action_charge_apply` | map_action.c | `dword_53EC4=0; rec_sub_table5(a1,index); item_apply(a1,index,count,list,field); if(dword_53EC4) map_draw_status_popups();` 尾 `jne 0x1DF58` 为共享尾声，非独立调用。 |
+| `0x22A85` | `map_action_entry20` | map_action.c | funcs_1541F 条目 20：`push 37/a3/a2/20` → 落穿 0x22A9B → `map_action_charge_apply(a1, 20, count, list, 37)`。 |
+| `0x22BC6` | `map_action_entry21` | map_action.c | funcs_1541F 条目 21：`push 38/a3/a2/21` → `jmp 0x22A9B` → `map_action_charge_apply(a1, 21, count, list, 38)`。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享体内跳（Hex-Rays `JUMPOUT`）**：`0x22BC6` 的伪代码只有 `JUMPOUT(0x22A9B)`；离线反汇编显示它压 `38/a3/a2/21` 后 `jmp 0x22A9B`，而 `0x22A85` 是压 `37/a3/a2/20` 后**落穿**同一地址，之后 0x22A9B 再 `push [esp+0x14](a1)` 并 `call 0x22AA8`。故二入口参数映射 `(a1,index,count,list,field)` 分别为 `(·,20,·,·,37)`/`(·,21,·,·,38)`（按 push 深度逐条核算，与 `rec_sub_table5`/`item_apply` 的解压一致）。
+- **冻结原型**：`fd2_funcs.h` 仍声明 `void sub_22A85(...)`/`void sub_22AA8(...)`/`int sub_22BC6(...)`；已还原模块中无调用点，故不追加 `#define` 别名（playbook：只用语义名）。
+- **chkstk / 返回**：三者首部 `push size; call 0x3702F` 丢弃；结论返回值仅供表分派、无调用者读取 → `int` 返回 0（与同模块 `map_action_clear_flag` 一致）。
+- 无对拍器，标“已还原未验证”；`sub_15311`/`sub_1CFF0` 及其余 `funcs_1541F` 条目仍待还原。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → … → 159 → 157 → 154 → 152**（本轮 −4），已还原未验证 **115 → … → 164 → 166 → 169 → 171 → 175**（本轮 +4）。
+- `function-map.csv`：待还原 **148 → 145**（本轮 −3），已还原未验证 **175 → 178**（本轮 +3）。（基线取提交 `56abeb3` 的实测值；§42 文本中的 152 为记误。）
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1173,6 +1194,11 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 整体拉出（`map_attack`/`map_status` 追加 + 新建 `map_levelup`），故 `sub_1548E` 已闭包就绪；下一游戏头名
 回落至 u1 小簇 `0x1D6C8`(sub_1CFF0)/`0x1DEBE`(sub_14237)/`0x22AA8`(sub_22A85)/`0x24BDE`(sub_24754)/
 `0x28632`(sub_2825B)/`0x2A07A`(sub_2A43E)/`0x2F7B6`(sub_2EBE1)/`0x31266`(sub_2FF01) 等（分别闭簇其 caller）。
+本轮 §43 把该列表里的 `0x22A85`/`0x22BC6`（`funcs_1541F` 条目 20/21，u3）连同其共享体 `0x22AA8`
+整体拉出（`map_action.c` 追加），故同族 `funcs_1541F` 只剩 `0x22BE1`/`0x22CBF`/`0x22E41`（均需 `sub_22D1B`
+→ `sub_1C81F`，闭包 >8 暂跳）与表中其余大片条目；下一游戏头名仍为 u1 小簇
+`0x1D6C8`(sub_1CFF0)/`0x1DEBE`(sub_14237)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/
+`0x2A07A`(sub_2A43E)/`0x2F7B6`(sub_2EBE1)/`0x31266`(sub_2FF01) 等。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交
