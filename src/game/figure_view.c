@@ -8,6 +8,11 @@
  *   ui_status_panel_at(0x2FACD)  rle_decode(0x4E98D)  rle_decode_lut(0x4E8D3)
  *   res_blit(0x2EB9F)        gfx_copy_rows(0x11EB0)   svc_play_sfx(0x25A96)
  *   svc_wait_ticks(0x17AA9)  outp/j___delay (CRT)     memset
+ *
+ * Two further helpers of the same family are used by the sibling figure
+ * drivers sub_2EBE1 (0x2EBE1) and sub_2FB2C (0x2FB2C): 0x2F631 is the
+ * figure_bg_scroll variant that also stamps the portrait strip, 0x2FE14 plays
+ * a figure group frame by frame.
  */
 #include "fd2_game.h"
 #include "figure_view.h"
@@ -159,5 +164,75 @@ void figure_play(int unit, int mode, const void *figure, const void *base,
             }
             svc_wait_ticks(1);
         }
+    }
+}
+
+/* 0x2F631 - like figure_bg_scroll but also stamps the strip `portrait` at
+ * (164,157) before the status panel and the figure.  `unit` selects the status
+ * panel, `bg` is the background strip decoded at (0,50), `screen` the 0xFA00
+ * 320-stride buffer and `work` the 640-stride 0x1F400 work buffer.  The first
+ * pass scrolls the rotating BG strips into work+320 and publishes a window per
+ * step; after the panel/figure stamp the second pass cycles the strips through
+ * work.  Called by sub_2EBE1 as (unit, figure, portrait, screen, work, bg). */
+void figure_bg_scroll_portrait(int unit, const void *figure,
+                               const void *portrait, void *screen, void *work,
+                               const void *bg)
+{
+    uint8_t *wrk = (uint8_t *)work;
+    uint8_t *scr = (uint8_t *)screen;
+    int      i;
+
+    for (i = 1; i < 10; ++i) {
+        rle_decode((const void *)(uintptr_t)dword_5413F[i % 3], 0, 50,
+                   wrk + 320, 640, -1);
+        gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, wrk + 32 * i, 640,
+                      320, 200);
+    }
+    memset(wrk, 0, WORK_SIZE);
+    memset(scr, 0, SCR_SIZE);
+    rle_decode(bg, 0, 50, scr, 320, -1);
+    rle_decode(portrait, 164, 157, scr, 320, -1);
+    ui_status_panel_at((int)(uintptr_t)scr, unit);
+    gfx_copy_rows(wrk + 320, 640, scr, 320, 320, 200);
+    res_blit((void *)(uintptr_t)figure, 0, wrk + 320, 640, -1);
+    for (i = 1; i <= 10; ++i) {
+        rle_decode((const void *)(uintptr_t)dword_5413F[(i + 1) % 3], 0, 50,
+                   wrk, 640, -1);
+        gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, wrk + 32 * i, 640,
+                      320, 200);
+    }
+}
+
+/* 0x2FE14 - play `frames` animation frames of the figure group `figure` over
+ * the cycling BG strips dword_5413F into the 640-stride work buffer `work`,
+ * publishing a 320x200 window to VGA and waiting one tick per frame.  The
+ * sub-sprite count is figure[0]; the sub-sprite at figure + *(uint32*)(figure +
+ * 4*sub + 8) holds its frame count at +6.  Called by sub_2FB2C as
+ * (figure, work, frames). */
+void figure_frame_run(const void *figure, void *work, int frames)
+{
+    const uint8_t *fig     = (const uint8_t *)figure;
+    uint8_t       *wrk     = (uint8_t *)work;
+    int            strip   = 0;
+    int            sub     = 0;
+    int            counter = 0;
+    int            i;
+
+    for (i = 0; i < frames; ++i) {
+        const uint8_t *s;
+
+        memset(wrk, 0, WORK_SIZE);
+        strip = (strip + 1) % 3;
+        rle_decode((const void *)(uintptr_t)dword_5413F[strip], 0, 50, wrk, 640,
+                   -1);
+        res_blit((void *)(uintptr_t)fig, sub, wrk, 640, -1);
+        gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, wrk, 640, 320, 200);
+        s = fig + *(const uint32_t *)(fig + 4 * sub + 8);
+        if (++counter == s[6]) {
+            counter = 0;
+            if (++sub == fig[0])
+                sub = 0;
+        }
+        svc_wait_ticks(1);
     }
 }

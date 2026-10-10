@@ -694,10 +694,30 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 - **返回值**：`0x1C142` 尾声 eax＝第二实参（slot），Hex-Rays 亦返 `a2`；`0x1C1C3` 返回 0/1。调用点 `1BFFE` 读取，C 侧均声明 `int`。
 - **归属**：追加进既有 `box_popup.c`（物品盒 `1BFFE` 的私有选择助手；`sub_2872B` 商店亦复用）。无对拍器，标“已还原未验证”。
 
+### 25) 人物图形视图的另两个同胞助手（本轮，2 函数）→ `src/game/figure_view.c/.h`（追加）
+
+`sub_2CF30` 家族（§21 的 `figure_view`）的另两个“人物动画演示”渲染器，分别被驱动器
+`sub_2EBE1`(0x2EBE1，2291B) 与 `sub_2FB2C`(0x2FB2C，744B) 调用；两者皆 closure-ready，
+真依赖全部已还原（`rle_decode`/`res_blit`/`gfx_copy_rows`/`ui_status_panel_at`/`svc_wait_ticks`）：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2F631` | `figure_bg_scroll_portrait(unit,figure,portrait,screen,work,bg)` | `figure_bg_scroll`(0x2F4D4) 的变体：先 `i=1..9` 轮转 `dword_5413F[i%3]` 解到 `work+320` 并逐帧发布；再 `memset` 两缓冲 → 在 `screen` 上解 `bg`(0,50) 与 `portrait`(164,157) → `ui_status_panel_at(screen,unit)` → `gfx_copy_rows(work+320,640,screen,320,320,200)` → `res_blit(figure,0,work+320,640,-1)` → 第二趟 `i=1..10` 轮转 `dword_5413F[(i+1)%3]` 解到 `work` 并逐帧发布。 |
+| `0x2FE14` | `figure_frame_run(figure,work,frames)` | 逐 `frames` 帧播放人物组 `figure`：每帧 `memset(work,0,0x1F400)` → 轮转 `dword_5413F[strip]`(strip=(strip+1)%3) 解到 `work`(640) → `res_blit(figure,sub,work,640,-1)` → `gfx_copy_rows(0xA0000,320,work,640,320,200)`；`figure[0]`=子精灵数、子精灵 `+6`=该子精灵帧数（`counter` 到则 `sub++`，回绕清零）→ `svc_wait_ticks(1)`。 |
+
+**陷阱 / 伪代码伪影**：
+- **ABI 由离线反汇编定案**：`0x2F631` 的 `mov ebp,[esp+0x24]`（chkstk 不分配帧 + 4 push 后）= 第 5 实参 = `work`；调用点 `0x2EBE1` 的压栈序列
+  `sub_2F631(unit, figure, portrait, screen, work, bg)` 与之吻合，且 `0x2F4D4` 同处调用为 `(unit,figure,screen,tmp,bg)`，故 `a3`=`portrait`（解在 (164,157)，同 `figure_play` 的 `tai`）。
+- **`0x2FE14` 的 `sub esp,8` 帧**：三个实参在 `[esp+0x1c/0x20/0x24]`（4 push + `sub esp,8` 后）；`res_blit` 的 5 个实参经 `push [esp+0x28]` 的求值时机核为 `(figure,sub,work,640,-1)`。
+- **`%3` 与 `counter 回绕`**：两处 `idiv 3`/`xor` 序列为无符号取余与“相等即清零”（`v4^=v5`/`v3^=v6`），因被除数非负，C 侧直接 `(x+1)%3`、`++counter==count` 且相等时置 0。
+- **chkstk**：二者皆 `push size; call 0x3702F`，丢弃（`0x3702F` 不分配帧）。
+- **返回值**：`fd2_funcs.h` 对 `0x2F631`/`0x2FE14` 的原型均为 `void`，Hex-Rays 亦为 `void`；调用点不读，C 侧声明 `void`。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190**（本批 −2），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133**（本批 +2）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188**（本批 −2），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135**（本批 +2）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -716,8 +736,13 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 本轮 §23 已拉出 `0x1E7F6`(u4) 及其 caller `0x1E611`（`map_status`），故地图状态叠加族只剩
 `0x1E856`(u2，仍待 `0x1E98C`/`0x1ECC7`)。
 本轮 §24 已拉出 `0x1C142`/`0x1C1C3`（`box_popup` 物品选择助手，同 caller `1BFFE`/`2872B`）。
+本轮 §25 已拉出 §21 `figure_view` 家族的另两个同胞 `0x2F631`/`0x2FE14`(u2)（驱动器 `0x2EBE1`/`0x2FB2C`）。
 现闭包就绪的游戏函数头名：`0x1A7BD`/`0x1A7F1`(u2，同 caller `0x1A30B` 的暂存/释放对)、
-`0x2B439`/`0x2B843`(u2，同 caller `sub_2AF28`)、`0x1CB94`/`0x1CD17`/`0x1EC2A`/`0x272D0`/`0x2A0C2`/`0x2A694`/`0x2BF83`/`0x2F631`/`0x2FE14`(u2)。
+`0x2B439`/`0x2B843`(u2，同 caller `sub_2AF28`)、`0x1CB94`/`0x1CD17`/`0x1EC2A`/`0x272D0`/`0x2A0C2`/`0x2A694`(u2)。
+
+**台账发现（待后续修正，本批不改）**：`function-map.csv` 把 `0x2BF83`(u2) 列为待还原，但该地址已在
+`src/game/fx.c` 实现为 `fx_advance`（`fx.h` 已声明），仅漏登 `restored_manifest.txt`；故它不应再被当成
+可拉出的游戏函数（本批已避开），建议下批把 `0x2BF83 sub_2BF83 game/fx.h` 补入 manifest 后重跑生成器。
 （`0x344B4` 已由 §16 连同其上游 `0x34366`/`0x33FAF` 整簇拉出；`0x2DF01/1FF79/1F73F` 已由 §14 拉出。）
 策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 结构反编译辅助）。
 （`0x2921A`＝地点菜单退场缩放（上批 §11 遗留）；`0x1B1E7`(地图队伍面板编排者，6 个 callee 已在 §12 还原）

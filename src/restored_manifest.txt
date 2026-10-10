@@ -471,6 +471,10 @@
 0x2F4D4 sub_2F4D4 game/figure_view.h
 0x30E9D sub_30E9D game/figure_view.h
 
+# figure-view siblings used by the drivers 0x2EBE1 / 0x2FB2C
+0x2F631 sub_2F631 game/figure_view.h
+0x2FE14 sub_2FE14 game/figure_view.h
+
 # map view / zoom / gauge frame-buffer helpers (drivers 0x2000A, 0x21548 and the
 # map status overlay family 0x1E611/1E7F6/1E856 still pending)
 0x1E739 sub_1E739 game/ui_meter.h

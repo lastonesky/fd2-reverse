@@ -6,7 +6,9 @@
  * portrait strip (TAI.DAT).  Its three closure-ready helpers live here; the
  * fourth callee, sub_2E95B (0x2E95B), only re-reads FD2.TMP through the CRT
  * fread wrapper sub_373CA and is therefore left out of this batch (library
- * zone, see module-map.md).
+ * zone, see module-map.md).  Two sibling helpers of the same family, used by
+ * the drivers sub_2EBE1 (0x2EBE1) and sub_2FB2C (0x2FB2C), are restored here
+ * too.
  *
  *   0x30E25  figure_bg_pick    pick the BG.DAT sub-image index for the shown
  *                              unit: start from byte_52470[dword_53C03] and,
@@ -23,6 +25,12 @@
  *                              compositing the 640-stride buffer to VGA; flash
  *                              the DAC with the mode's palette entry and wait a
  *                              tick per frame.
+ *   0x2F631  figure_bg_scroll_portrait  figure_bg_scroll variant used by
+ *                              sub_2EBE1: also stamps the portrait strip at
+ *                              (164,157) before the status panel and figure.
+ *   0x2FE14  figure_frame_run play N frames of a figure group over the cycling
+ *                              BG strips into the 640-stride work buffer,
+ *                              publishing one 320x200 window per frame.
  *
  * ABI is cdecl; argument order and the constants were decoded from the offline
  * disassembly (analysis/cseg01_disasm.txt), which is authoritative.  Every real
@@ -58,5 +66,16 @@ void figure_bg_scroll(int unit, const void *figure, void *screen, void *tmp,
  * all callers ignore it. */
 void figure_play(int unit, int mode, const void *figure, const void *base,
                  void *tmp, void *screen, const void *bg, const void *tai);
+
+/* 0x2F631 - figure_bg_scroll variant that also stamps the strip `portrait` at
+ * (164,157) before the status panel and the figure; `work` is the 640-stride
+ * work buffer.  `unit` selects the status panel, `bg` the background strip. */
+void figure_bg_scroll_portrait(int unit, const void *figure,
+                               const void *portrait, void *screen, void *work,
+                               const void *bg);
+
+/* 0x2FE14 - play `frames` animation frames of the figure group `figure` over
+ * the cycling BG strips into `work` (640-stride), waiting one tick per frame. */
+void figure_frame_run(const void *figure, void *work, int frames);
 
 #endif /* GAME_FIGURE_VIEW_H */
