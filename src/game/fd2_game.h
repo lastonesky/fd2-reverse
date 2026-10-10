@@ -39,6 +39,7 @@
 #include "scene_core.h"
 #include "scene_enter.h"
 #include "scene_states.h"
+#include "screen_fx.h"
 #include "sprite24.h"
 #include "svc.h"
 #include "tables.h"

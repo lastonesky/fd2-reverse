@@ -35,4 +35,7 @@ void reveal_band(int cx, int cy, int radius, int y0, int y1,
 /* 0x24618 */
 int portrait_reveal(int col, int row, int offset, int step);
 
+/* 0x2189A */
+int portrait_reveal_cell(int rec, int radius, int step);
+
 #endif /* GAME_REVEAL_H */

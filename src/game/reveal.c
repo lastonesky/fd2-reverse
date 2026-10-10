@@ -115,3 +115,35 @@ int portrait_reveal(int col, int row, int offset, int step)
     ev5_1D4CB();
     return 0;
 }
+
+/* 0x2189A - same reveal, centred on the map cell of record `rec` instead of a
+ * 24-px view cell: the circle starts at `radius` and grows by `step` for ten
+ * frames, then the map view is fully refreshed. */
+int portrait_reveal_cell(int rec, int radius, int step)
+{
+    const uint8_t *r = (const uint8_t *)dword_53A45 + 80u * (uint32_t)rec;
+    int      vx = (r[0] - (int)qword_53AA9) * 24 + 12;
+    int      vy = (r[1] - dword_53AAD) * 24 + 18;
+    uint8_t *scratch = (uint8_t *)guest_malloc(0x25680u);
+    int      i;
+
+    map_render_view(scratch + REVEAL_MAP_OFF, REVEAL_STRIDE, 13, 8,
+                    (int)qword_53AA9, dword_53AAD);
+
+    for (i = 0; i < 10; ++i) {
+        const void *tbl = (const void *)(dword_53A6D +
+                                         *(const int32_t *)(const void *)
+                                             (dword_53A6D + 4 * i + 6));
+
+        memmove(dword_53A49, scratch, 0x25680u);
+        reveal_arc(vx, vy, radius, 12, 0, 192, tbl);
+        dlg_portraits_refresh();
+        gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + REVEAL_MAP_OFF,
+                      REVEAL_STRIDE, 0x138, 192);
+        radius += step;
+    }
+
+    guest_free(scratch);
+    map_view_update(0);
+    return 0;
+}

@@ -22,6 +22,8 @@
 0x219AD sub_219AD game/reveal.h
 0x22046 sub_22046 game/reveal.h
 0x24618 sub_24618 game/reveal.h
+0x2189A sub_2189A game/reveal.h
+0x26CE4 sub_26CE4 game/screen_fx.h
 0x25EBB sub_25EBB game/scene_core.h
 0x117E7 sub_117E7 game/scene_core.h
 0x26152 sub_26152 game/scene_core.h
