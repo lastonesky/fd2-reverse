@@ -44,6 +44,7 @@
 #include "unit.h"
 #include "unit_load.h"
 #include "util.h"
+#include "ui_meter.h"
 #include "vm.h"
 #include "world_load.h"
 

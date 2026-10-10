@@ -208,7 +208,7 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 
 ---
 
-## 0-L. P1 启动（本轮）：`funcs_30469` 收尾 + 滑动合成簇
+## 0-L. P1 启动（本轮）：fx 收尾 + 两簇源码化
 
 ### 1) `0x2C67D` → `fx_dots5`（`src/game/fx.c`）——P1 头号项，fx 分派表闭合
 
@@ -235,16 +235,29 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 - ABI=`(int x, char *dst, char *src[, char *saved])`；负 x 移位并按 `-x` 裁剪字节数，
   逐指令核对。无对拍器，标“已还原未验证”。
 
+### 3) `0x2FACD` + `0x18C6D`/`0x18795`/`0x17D6F` → `src/game/ui_meter.c/.h`
+
+- `0x2FACD`（u15，当时 P1 剩余最高用量）= `ui_status_panel_at`：选 HUD 槽位（+1451 或
+  +49280；`dword_53C03==24 && rec==17` 强制 +49280）后转 `ui_status_panel`。
+- `0x18C6D` = 状态面板：`rle2_blit` 背景 → 两条 `ui_meter_bar`（记录 +64/66 与 +68/70 的
+  `int16` 值/上限）→ `dlg_draw_number`(+33, base 31, 2)/`dlg_draw_number_pair`×2
+  → 9 参 `vm_run`（名字流）；末 `jmp 0x1317D` = 普通 `return`。
+- `0x18795` = 值/上限→段数（有符号 `101*value/max+1`）；`0x17D6F` = 按段画 tile
+  （`dlg_frame_tile`，tile / +1 / +2；count==0 时固定 101 段 29/30）。
+- **closure 校正**：`16 进制` 的“共享尾声跳转”会被 `function-map` 算成 callee（`0x18C6D`
+  的 `jmp 0x1317D` 落在 `0x1300D` 体内），故不要按该近似的闭包直接展开——真依赖只需
+  本 4 个函数。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **276 → 271**，已还原未验证 **47 → 52**（+5）。
+- `function-map.csv`：待还原 **276 → 267**，已还原未验证 **47 → 56**（+9）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
-`0x2FACD`(u15，需先带 `0x18C6D`)、`0x115B6`(u9)、`0x14B78`(u8)、`0x24618`(u8，→`0x22046`)、
-`0x1C75E`(u7，→`0x1C81F`)、`0x13FD4/14EF0/1B932/2189A/22046/26CE4/26EDA`(u6) ……
-策略不变：**按 callee 簇整体拉出**（一个模块一次做完），不逐函数孤立处理。
+`0x115B6`(u9)、`0x14B78`(u8)、`0x24618`(u8，→`0x22046`/`0x1B932`)、`0x1C75E`(u7，→`0x1C81F`)、
+`0x13FD4/14EF0/2189A/22046/26CE4/26EDA`(u6) ……
+策略不变：**按 callee 簇整体拉出**（一个模块一次做完），并先剔除共享尾声造成的伪 callee。
 
 ---
 

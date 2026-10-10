@@ -15,6 +15,10 @@
 0x18312 sub_18312 game/fb_slide.h
 0x1839B sub_1839B game/fb_slide.h
 0x18409 sub_18409 game/fb_slide.h
+0x17D6F sub_17D6F game/ui_meter.h
+0x18795 sub_18795 game/ui_meter.h
+0x18C6D sub_18C6D game/ui_meter.h
+0x2FACD sub_2FACD game/ui_meter.h
 0x25EBB sub_25EBB game/scene_core.h
 0x117E7 sub_117E7 game/scene_core.h
 0x26152 sub_26152 game/scene_core.h
