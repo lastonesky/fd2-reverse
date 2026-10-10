@@ -18,9 +18,12 @@
  *                                    dword_53C33..dword_53C3F.
  *   0x15B77  map_ai_action_score     rate a list of target records for the
  *                                    action whose tbl_619FD entry is `action`.
+ *   0x1598A  map_ai_pick_action_target for each usable action slot of
+ *                                    `actor`, flood-fill the reachable cells
+ *                                    from the actor and keep the best-scoring
+ *                                    target in dword_53C23..dword_53C2F.
  *
- * The action-target picker 0x1598A (this module's fifth sibling) and the
- * decision driver 0x14EF0 are still pending.
+ * The decision driver 0x14EF0 is still pending.
  *
  * ABI = cdecl, decoded from the offline disassembly
  * (analysis/cseg01_disasm.txt), which is the authority for the argument order
@@ -50,5 +53,11 @@ int map_ai_pick_item_target(int actor, int require_empty);
 /* 0x15B77 - rate the records named by `list` (count) as the targets of the
  * action whose tbl_619FD (0x619FD / stride 7) entry is `action`. */
 int map_ai_action_score(int action, int count, const uint8_t *list);
+
+/* 0x1598A - for each usable action slot of `actor`, mark the cells reachable
+ * from the actor and keep the best-scoring target cell (dword_53C27/2B),
+ * action id (dword_53C2F) and score (dword_53C23).  `require_empty` selects
+ * the reachable-cell filter.  Always returns 0. */
+int map_ai_pick_action_target(int actor, int require_empty);
 
 #endif /* GAME_MAP_AI_H */

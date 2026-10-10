@@ -218,3 +218,67 @@ int map_ai_pick_item_target(int actor, int require_empty)
     guest_free(p);
     return 0;
 }
+
+/* 0x1598A */
+int map_ai_pick_action_target(int actor, int require_empty)
+{
+    const uint8_t *base = (const uint8_t *)dword_53A45;
+    const uint8_t *r = base + REC_STRIDE * (uint32_t)actor;
+    uint8_t items[12];
+    uint8_t cells[32];
+    void *cost_row;
+    void *p;
+    int x, y, limit, n_items, i, j;
+    int best = 0;   /* machine reads an uninitialised stack slot in the tie-break */
+
+    dword_53C23 = 0;
+    cost_row = tbl_ptr((void *)&fd2_data2[0x1646], 20, 0, 0);   /* 0x4E8A5(0) */
+    x = r[0];
+    y = r[1];
+    p = guest_malloc(0x190u);
+    limit = *(const uint16_t *)(const void *)(r + 68);
+    n_items = rec_collect_slot_bits(actor, items);
+    if (n_items == 0 || r[39] != 0)
+        return 0;   /* original leaks p here; kept for fidelity */
+
+    for (i = 0; i < n_items; ++i) {
+        const uint8_t *act = action_entry(items[i]);
+        int n;
+
+        if (act[5] > limit)
+            continue;
+        path_mark((int)(uintptr_t)cost_row, x, y, act[3], (void *)dword_53A51,
+                  (const void *)(uintptr_t)dword_53A69);
+        n = ev5_14B16((uint8_t *)p);
+        util_fix_records(dword_53A51);
+
+        for (j = 0; j < n; ++j) {
+            const uint8_t *cell = (const uint8_t *)p + 2u * (uint32_t)j;
+            int cx = cell[0];
+            int cy = cell[1];
+            int filter, cnt, score;
+
+            if (require_empty != 0)
+                filter = act[6];
+            else
+                filter = (act[6] == 0);
+            cnt = map_reveal_reachable(cx, cy, cells, act[4], 0, filter);
+            util_fix_records(dword_53A51);
+            if (cnt == 0)
+                continue;
+
+            score = map_ai_action_score(items[i], cnt, cells);
+            if (score > (int)dword_53C23 ||
+                (score == (int)dword_53C23 &&
+                 *(const uint16_t *)(const void *)act > best)) {
+                dword_53C23 = (uint32_t)score;
+                dword_53C27 = (uint32_t)cx;
+                dword_53C2B = (uint32_t)cy;
+                dword_53C2F = (uint32_t)items[i];
+                best = *(const uint16_t *)(const void *)act;
+            }
+        }
+    }
+    guest_free(p);
+    return 0;
+}

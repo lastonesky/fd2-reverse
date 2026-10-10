@@ -1003,10 +1003,28 @@ TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 call
 - **`0x1567E` 早期返回不 free**：`rec_slot_free==0` 时机器直接返回（跳过 `free(p)`），C 侧照写（原泄漏行为）。
 - **归属/别名**：新建 `map_ai`；现有还原模块无按 IDA 名调用这四者（`0x1598A`/`0x14EF0` 仍待还原），故无需 `#define` 别名。无对拍器，标“已还原未验证”。
 
+### 38) 单位 AI 行动目标挑选器（本轮，1 函数）→ `src/game/map_ai.c/.h`（追加）
+
+本轮 closure-ready 游戏头名是 `0x1598A`(u3)——`map_ai` 同簇、callee 全在册（`rec_collect_slot_bits`/
+`path_mark`/`ev5_14B16`/`util_fix_records`/`map_reveal_reachable`/`map_ai_action_score` + `tbl_ptr`）。调用量
+更高的闭包头名 `0x3645D`(u4)/`0x2E95B`(u3)/`0x365DA`(u2) 仍是 CRT/库包装（read/fread/int386），按
+module-map §2 既定策略跳过。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1598A` | `map_ai_pick_action_target(actor,require_empty)` | `dword_53C23=0`；`cost_row=tbl_61646(0)`；`p=guest_malloc(0x190)`；`limit=word[rec+68]`；`rec_collect_slot_bits(actor,items)=n`（`n==0` 或 `rec[39]!=0` 直接返回 0，原泄漏 p）；对 i<n：`act=tbl_619FD(items[i])`，`act[5]>limit` 跳过；`path_mark(cost_row,x,y,act[3],dword_53A51,dword_53A69)` → `ev5_14B16(p)` 取候选格 → 逐格 `flag=require_empty?act[6]:(act[6]==0)` → `map_reveal_reachable(cx,cy,cells,act[4],0,flag)` → 非空则 `map_ai_action_score(items[i],cnt,cells)`；`score>dword_53C23 || (score==dword_53C23 && word[act]>best)` 时存 `dword_53C23/27/2B/2F`；收尾 `guest_free`，返回 0。 |
+
+**陷阱 / 伪代码伪影**：
+- **未初始化的 tie-break 槽**：机器首次比较时读未初始化的 `[esp+0x48]`（仅成功更新后才写回 `word[act]`）；C 侧定为 `best=0` 并注释。
+- **`sub_3702F` chkstk**：`push 0x84; call 0x3702F`（不分配帧），丢弃。
+- **早期返回不 free**：`n_items==0` 或 `rec[39]!=0` 时机器跳过 `free(p)` 直接返回 0，C 侧照写（原泄漏行为）。
+- **无符号 word**：`movzx word[esi]`/`word[esi+0x44]` 零扩展，C 侧按 `uint16_t` 读取。
+- **归属/别名**：追加至既有 `map_ai`；被调方均以语义名调用（`path_mark`/`map_reveal_reachable`/`map_ai_action_score`），无需新增 `#define` 别名。无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180 → 179 → 176 → 172 → 169 → 166 → 165 → 164 → 160**（本批 −4；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143 → 144 → 147 → 151 → 154 → 157 → 158 → 159 → 163**（本批 +4）。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180 → 179 → 176 → 172 → 169 → 166 → 165 → 164 → 160 → 159**（本批 −1；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143 → 144 → 147 → 151 → 154 → 157 → 158 → 159 → 163 → 164**（本批 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1052,7 +1070,8 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 本轮 §36 继而把 `0x22253` 的唯一在册 caller `0x2218A`(u4) 拉出（`map_units` 追加），单位移动族自顶闭合；
 本轮 §37 再把 closure-ready 头名 `0x15880`/`0x15DA2`(u1) 连同其 driver `0x1567E`(u2)/`0x15B77`(u1) 整体拉出
 （新建 `map_ai`），故该模块只剩行动目标挑选器 `0x1598A`(u3) 与决策驱动 `0x14EF0`(u6)；
-游戏头名转为 `0x1598A`(u3，`map_ai` 同簇、callee 全在册)，其后为 `0x1c8ed`/`0x1c9dd`(u1，`sub_1C916`/`sub_4EBE3` 小簇)。
+本轮 §38 继而把该头名 `0x1598A`(u3) 拉出（`map_ai` 追加），故 `map_ai` 只剩决策驱动 `0x14EF0`(u6)；
+游戏头名转为 `0x1c8ed`/`0x1c9dd`(u1，`sub_1C916`/`sub_4EBE3` 小簇)。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交
