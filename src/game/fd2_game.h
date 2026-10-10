@@ -10,6 +10,7 @@
 #include "anim.h"
 #include "bgm.h"
 #include "boot.h"
+#include "box_popup.h"
 #include "dlg.h"
 #include "ev.h"
 #include "ev2.h"

@@ -306,15 +306,28 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 - Ghidra 对 `27079/2810B/184C0` 的结构反编译**逐分支一致**（尤其确认 `184C0` 的
   `rec[2*i+10] & 0x80` 循环条件，澄清了 IDA 的 `v15>=0` 写法）。
 
+### 9) 消息/道具弹框簇 → `src/game/box_popup.c/.h`（本轮，6 函数）
+
+- `0x17FC0` `box_status_draw`：两血条 + 数字 + 三条 `vm_run` 名字流 + 框图块。
+- `0x184C0` `box_items_draw`：逐槽跳 `rec[2*i+10]&0x80`，按道具类型（`tbl_ptr` base
+  `&fd2_data2[0x2AD]`/stride 23）选 tile 64..67 + 数字，`+0x40` 位加 3。
+- `0x17EEF` `box_open_init`：`res_load(DATO.DAT)` → `dlg_box_stage` → 两条 mask 条 → 面板。
+- `0x17E0B` `box_open_anim`：三块 0xFA00 暂存 + `box_open_init`/`box_items_draw` + 12 步 `fb_slide_step`。
+- `0x1B9DE` `box_input`：上/下/翻页 + 确认（经道具表 `[13]` 检查），ESC 返回 -1。
+- `0x1B932` `box_popup`：循环到确认/取消，滑出，释放三块暂存（返回 `ret != -1`）。
+- **发现并绕过已验证资产的缺口**：`0x16C57` 机器码**返回扫描码**（`movzx eax,[0x53A8E]`），
+  但 port/ 的 `dlg_wait_key` 声明为 `void`。为不动已验证资产，调用点改为
+  `dlg_wait_key(0); key = byte_53A8E;`（行为等价，已写入注释）。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **276 → 252**，已还原未验证 **47 → 71**（+24）。
+- `function-map.csv`：待还原 **276 → 246**，已还原未验证 **47 → 77**（+30）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
-`0x115B6`(u9，真闭包去掉伪 `0x190AC` 后为 `12DAC/14742/1B932 簇`)、`0x14B78`(u8)、`0x1C75E`(u7)、
-`0x14EF0/1B932/27D33/2E9A8`(u6) ……
+`0x115B6`(u9，只差 `12DAC/14742` 两个小函数)、`0x14B78`(u8)、`0x1C75E`(u7)、
+`0x14EF0/27D33/2E9A8`(u6)、`0x13A44/1741C`(u5) ……
 策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 的结构反编译辅助）。
 
 ---
