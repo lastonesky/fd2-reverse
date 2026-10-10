@@ -585,3 +585,10 @@
 0x28EFE sub_28EFE game/shop_screen.h
 0x2A43E sub_2A43E game/shop_screen.h
 0x2A07A sub_2A07A game/shop_screen.h
+
+# AI reach-target picker + its shared map helpers, driven alongside the other
+# scorers by the still-pending 0x14EF0; 0x146D1 is also called by the
+# still-pending 0x14B78 / 0x18890, 0x1DEBE only by 0x14237.
+0x14237 sub_14237 game/map_ai.h
+0x146D1 sub_146D1 game/map_ai.h
+0x1DEBE sub_1DEBE game/map_ai.h

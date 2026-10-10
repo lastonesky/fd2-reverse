@@ -1,5 +1,5 @@
 /* map_ai.h - the unit-AI target/action scorer (original 0x1567E, 0x15880,
- * 0x15B77, 0x15DA2).
+ * 0x15B77, 0x15DA2, 0x14237, 0x146D1, 0x1DEBE).
  *
  * Before the decision driver 0x14EF0 picks what a unit does, it evaluates the
  * reachable cells and the usable actions and remembers the best score.  This
@@ -22,6 +22,18 @@
  *                                    `actor`, flood-fill the reachable cells
  *                                    from the actor and keep the best-scoring
  *                                    target in dword_53C23..dword_53C2F.
+ *   0x14237  map_ai_pick_reach_target flood-fill the movement-reachable region
+ *                                    for `actor`'s item and score every record
+ *                                    the item can hit, keeping the best in
+ *                                    dword_53C43..dword_53C4F.
+ *
+ * Two shared map helpers:
+ *
+ *   0x146D1  map_exclude_record_cells set the cells of the records whose +6
+ *                                    status matches `mode` to 0xFF so ev5_14B16
+ *                                    drops them from the reachable-cell scan.
+ *   0x1DEBE  map_ai_target_adjacent  1 when a record is orthogonally adjacent
+ *                                    to a cell and carries a weak-slot item.
  *
  * The decision driver 0x14EF0 is still pending.
  *
@@ -59,5 +71,21 @@ int map_ai_action_score(int action, int count, const uint8_t *list);
  * action id (dword_53C2F) and score (dword_53C23).  `require_empty` selects
  * the reachable-cell filter.  Always returns 0. */
 int map_ai_pick_action_target(int actor, int require_empty);
+
+/* 0x14237 - for the item in the first claimed slot of `actor`, flood-fill the
+ * movement-reachable region and score every record the item can hit, storing
+ * the best target cell (dword_53C43/47), record index (dword_53C4B) and score
+ * (dword_53C4F).  `mode` selects the occupied-cell exclusion (see
+ * map_exclude_record_cells) and the reachable-cell filter.  Always returns 0. */
+int map_ai_pick_reach_target(int actor, int mode);
+
+/* 0x146D1 - set the cells of every record whose +6 status matches `mode`
+ * (0: +6 == 0, else +6 != 0) to 0xFF, so ev5_14B16 drops them.  Skips `actor`
+ * and any record whose +5 bit 0 is set. */
+void map_exclude_record_cells(int actor, int mode);
+
+/* 0x1DEBE - 1 when record `target` is orthogonally adjacent to cell (x,y) and
+ * carries a weak (effect byte +11 <= 1) item in its first slot; else -1. */
+int map_ai_target_adjacent(int target, int x, int y);
 
 #endif /* GAME_MAP_AI_H */

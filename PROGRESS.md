@@ -1182,10 +1182,33 @@ callee——`0x2AE0E`/`0x2AC7D`/`0x2FB2C`——作为一簇（1350B，真闭包�
 - **`0x2A07A` 私有助手**：唯一 caller `0x2A43E`，按 `map_levelup_mark_gain` 先例在头文件声明（非 static）。
 - 无对拍器，标“已还原未验证”；`0x279BC`/`0x29DAA`/`0x2872B`/`0x28F65`/`0x29300`/`0x29620`/`0x2AA00` 等上层仍待还原。
 
+### 46) AI 到达目标挑选器 + 共享地图助手（本轮，3 函数）→ `src/game/map_ai.c/.h`（追加）
+
+§45 后 closure-ready 游戏头名只剩 u1 小簇；本轮取其中**同族最连贯**的一组：AI 决策驱动
+`sub_14EF0`（仍待还原）并调的三个评分器 `0x14237`/`0x1598A`/`0x1567E` 中的第三个 `0x14237`
+（前两者的模块即 `map_ai`），及其两个共享助手 `0x146D1`/`0x1DEBE`。真闭包＝自身
+（callee 全在册：`rec_slot_find`(0x1B83D)、`rec_field_byte`(0x1B722)、`rec_skip`(0x1F183)、
+`path_mark`(0x4E390)、`unit_mark_nearby`(0x145CD)、`map_reveal_reachable`(0x14818)、
+`map_cell_info`(0x12E38)、`ev5_14B16`(0x14B16)、`util_fix_records`(0x4DF4C)，及
+`tbl_ptr(0x602AD,23)`/`tbl_ptr(0x61646,20)`）；合计 1185 B，3 函数，同属 AI 目标评分族。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x14237` | `map_ai_pick_reach_target` | 取 actor 首槽道具（`rec_slot_find(actor,0)`→`rec_field_byte`→`item_entry` 得 range=item[12]/radius=item[11]），`unit_mark_nearby(mode)` 后 `path_mark` 铺行动可达区，`0x146D1` 排除占用格；对每个剩余可达格（`ev5_14B16` 收集）用道具 range/radius 扫目标记录并打分，最优存 `dword_53C43/47`（格）/`dword_53C4B`（记录）/`dword_53C4F`（分）。`mode` 同时选排除/过滤分支。 |
+| `0x146D1` | `map_exclude_record_cells` | 把 `+6` 匹配 `mode`（0: +6==0，否则 +6!=0）的记录所在格（`dword_53A51 + 7 + 4*(y*W+x)`）置 0xFF，使 `ev5_14B16`（跳过 0xFF 格）剔除其格；跳过 actor 与 `+5&1` 者。 |
+| `0x1DEBE` | `map_ai_target_adjacent` | 记录 `target` 与格 (x,y) 曼哈顿相邻（`|dx|+|dy|==1`）、`+38==0`、且其首槽道具 effect `+11<=1` 时返回 1，否则 -1。 |
+
+**陷阱 / 伪代码伪影**：
+- **伪 callee（0x146D1→0x14237）**：`function-map.csv` 把 `0x146D1` 记为调用 `sub_14237`，实为尾跳 `JUMPOUT(0x145C9)`——落入 `sub_14237` 自身的共享尾声（`0x145c3..0x145cc`＝`xor eax,eax; add esp,0x54; pop ebp; pop edi; pop esi; pop ebx; ret`，供 `0x145c9` 处多条跳入），即普通 `return`，非跨函数调用。
+- **反编译器伪影**：`sub_12E38` 写 8 字节 cell 缓冲，Hex-Rays 只声明 `_BYTE v18[5]` 并另立 `v19=cell[5]`；C 侧用 `uint8_t cell[8]` 读 `cell[5]`。
+- **缩放表**：`dword_51A12`/`dword_51A2A`（dseg02、`const int32_t*`）按 `cell[5]` 取百分比；乘 `imul` 与 `idiv 100` 按有符号 32 位还原（`v*table/100`）。
+- **堆**：`0x3706E`/`0x3776E` → `guest_malloc`/`guest_free`；Watcom 栈探针（`push size; call 0x3702F`）剔除。
+- 无对拍器，标“已还原未验证”。拉出后 `0x14B78`(u8) 的真闭包去除 `146D1/14237/1DEBE` 三项，但仍含 `15055/15311/1548E/1567E/1598A…` >8 函数；下一游戏头名仍为 u1 小簇（`0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2AA00`(sub_29DAA)/`0x2F7B6`(sub_2EBE1) 等）。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **144 → 140**（本轮 §45 −4），已还原未验证 **179 → 183**（本轮 +4）。（计数取 §44 后实测基线。）
+- `function-map.csv`：待还原 **140 → 137**（本轮 §46 −3），已还原未验证 **183 → 186**（本轮 +3）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
