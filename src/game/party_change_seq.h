@@ -45,6 +45,13 @@
  * res_draw_subimage, dlg_snap_restore, dlg_draw_number, ev5_13536,
  * party_change_wave_dispatch, party_change_class_apply, j___delay).  No
  * differential harness yet (unverified).
+ *
+ * 0x13565  party_change_maybe_run()
+ *            run party_change_map_seq() only when the party is settled: scan
+ * the records for one whose +5 flag byte has neither bit 0 nor bit 7 set, whose
+ * +6 status class is 2 and whose +38 ailment counter is zero.  While any such
+ * record remains the sequence is skipped; otherwise it is bracketed by
+ * byte_51AAC / dword_51A83 being cleared and restored.
  */
 #ifndef GAME_PARTY_CHANGE_SEQ_H
 #define GAME_PARTY_CHANGE_SEQ_H
@@ -61,5 +68,9 @@ void party_change_wave_dispatch(int phase);
 /* 0x1A866 - apply the ailment HP drop and decrement the effect counters of the
  * records whose +6 status class is `cls`. */
 void party_change_class_apply(int cls);
+
+/* 0x13565 - run the party-change map sequence when no class-2, unflagged,
+ * ailment-free record is left. */
+void party_change_maybe_run(void);
 
 #endif /* GAME_PARTY_CHANGE_SEQ_H */

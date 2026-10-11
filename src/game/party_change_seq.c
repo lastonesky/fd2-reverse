@@ -1,8 +1,9 @@
 /* party_change_seq.c - see party_change_seq.h.
  *
- * Direct translations of the machine code at 0x1A30B, 0x1A813 and 0x1A866.  The
- * disassembly is the authority: Hex-Rays spells the frame index of the first
- * pass's compared class as an uninitialised local `v10`, but the instruction
+ * Direct translations of the machine code at 0x1A30B, 0x1A813, 0x1A866 and
+ * 0x13565.  The disassembly is the authority: Hex-Rays spells the frame index
+ * of the first pass's compared class as an uninitialised local `v10`, but the
+ * instruction
  * at 0x1A8A3/0x1A988 compares the record byte +6 against [esp+0x14], i.e. the
  * single cdecl argument `cls` (the Watcom stack probe at 0x3702F allocates no
  * frame - it is `xchg eax,[esp+4]; call probe; ret 4` - so [esp+0x14] is the
@@ -217,5 +218,32 @@ void party_change_map_seq(void)
         dword_51A83 = 1;
         dlg_portrait_glide(0);
         kbd_flush();
+    }
+}
+
+/* 0x13565 - run the party-change map sequence only when the party is settled:
+ * scan the 80-byte records at dword_53A45 (count dword_53BEB) for one whose +5
+ * flag byte has neither bit 0 nor bit 7 set, whose +6 status class is 2 and
+ * whose +38 ailment counter is zero.  While any such record remains the
+ * sequence is skipped; otherwise it is bracketed by byte_51AAC / dword_51A83
+ * being cleared and restored around party_change_map_seq().  The Watcom stack
+ * probe (`push 8; call 0x3702F`) allocates no frame and is dropped. */
+void party_change_maybe_run(void)
+{
+    int i;
+    int needs_seq = 1;
+
+    for (i = 0; i < dword_53BEB; i++) {
+        const uint8_t *rec = rec_at(i);
+
+        if ((rec[5] & 0x81) == 0 && rec[6] == 2 && rec[38] == 0)
+            needs_seq = 0;
+    }
+    if (needs_seq) {
+        byte_51AAC = 0;
+        dword_51A83 = 0;
+        party_change_map_seq();
+        dword_51A83 = 1;
+        byte_51AAC = 1;
     }
 }

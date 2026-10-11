@@ -1021,3 +1021,11 @@
 # return), not calls; the uninitialised `[esp]` local pinned as 0 is the always-
 # zero argument svc_wait_ticks reads.  No differential harness.
 0x1A30B sub_1A30B game/party_change_seq.h
+
+# 0x13565 - the trigger around 0x1A30B: it scans the records at dword_53A45 for
+# one whose +5 flag byte has bits 0/7 clear, whose +6 status class is 2 and
+# whose +38 ailment counter is zero, and runs party_change_map_seq() only when
+# none exists (bracketing it with byte_51AAC / dword_51A83).  Called by the
+# event tick 0x117E7.  The Watcom stack probe (`push 8; call 0x3702F`) is
+# dropped; no differential harness.
+0x13565 sub_13565 game/party_change_seq.h
