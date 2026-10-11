@@ -973,3 +973,16 @@
 # stack probe, dropped.  No differential harness.
 0x1D80B sub_1D80B game/map_turn.h
 0x1D8BA sub_1D8BA game/map_turn.h
+
+# 0x1CFF0 - the action-menu driver (action_menu_run), closing the
+# 0x17AED/0x1CEED/0x1D51D panel family.  Snapshots VGA into three 0xFA00
+# scratch buffers, opens the box frame + action list, slides it in, runs
+# action_menu_select until the player confirms/cancels, slides out, blits the
+# snapshot back and executes the selected action: the +3/high-id (+6) branch
+# for the 0x17 slot (portrait glide + double reveal), the empty-slot (+3==0)
+# branch, or the plain action branch.  Execution is figure_effect_play, or the
+# funcs_1541F effect table for ids 9..0x1B; it then collects the +49 scripts
+# (map_collect_scripts) and runs ev_script_run.  True closure = itself (all
+# callees in the manifest); the `int(int)` prototype is a chkstk artifact,
+# 0x3702F is the Watcom stack probe.  No differential harness.
+0x1CFF0 sub_1CFF0 game/action_menu.h

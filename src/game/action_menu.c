@@ -176,3 +176,115 @@ int action_menu_select(int rec)
         return 0;
     }
 }
+
+/* 0x1CFF0 - the action-menu driver: open the record's command panel, run the
+ * selection loop (action_menu_select) and execute the chosen action.  See
+ * action_menu.h for the decoded behaviour and the decompiler artifacts. */
+int action_menu_run(int rec)
+{
+    uint8_t list[100];      /* machine v19: target list / figure work area  */
+    uint8_t scripts[100];   /* machine v20: +49 3-byte script entries       */
+    uint8_t slots[12];      /* machine v21: rec_collect_slot_bits output    */
+    const uint8_t *e;       /* selected action's 7-byte 0x619FD entry       */
+    int i, sel, choice, step, count, v9, v15, lo, hi;
+
+    dword_53C5B = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    dword_53C5F = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    dword_53C63 = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    memmove((void *)(uintptr_t)dword_53C5F,
+            (const void *)0xA0000u, 0xFA00u);
+    memmove((void *)(uintptr_t)dword_53C63,
+            (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
+
+    box_open_init(rec, (int)dword_53C63);
+    action_menu_draw(rec, -1, (int)dword_53C63);
+    for (i = 11; i >= 0; --i) {
+        fb_slide_step(i, (char *)(uintptr_t)dword_53C5B,
+                      (char *)(uintptr_t)dword_53C63,
+                      (char *)(uintptr_t)dword_53C5F);
+    }
+
+    dword_53C57 = 0;
+    do {
+        choice = action_menu_select(rec);
+    } while (choice == 0);
+
+    for (i = 0; i <= 11; ++i) {
+        fb_slide_step(i, (char *)(uintptr_t)dword_53C5B,
+                      (char *)(uintptr_t)dword_53C63,
+                      (char *)(uintptr_t)dword_53C5F);
+    }
+    memmove((void *)0xA0000u, (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
+    guest_free((void *)(uintptr_t)dword_53C5B);
+    guest_free((void *)(uintptr_t)dword_53C5F);
+    guest_free((void *)(uintptr_t)dword_53C63);
+
+    if (choice == -1)
+        return -1;
+
+    rec_collect_slot_bits(rec, slots);
+    sel = (int)dword_53C57;
+    e = action_entry(slots[sel]);
+    dword_51A83 = e[4] + 2;
+
+    lo = (int)qword_53AB1;                  /* target cell x (qword low)    */
+    hi = (int)(qword_53AB1 >> 32);          /* target cell y (qword high)   */
+
+    if (e[3] != 0 && slots[sel] == 0x17) {
+        step = map_reveal_reachable(lo, hi, list, e[3], 1, e[6]);
+        v9 = map_pick_record(e[6], step, (int)(intptr_t)list);
+        util_fix_records(dword_53A51);
+        count = map_reveal_reachable(lo, hi, list, e[4], 0, e[6]);
+        util_fix_records(dword_53A51);
+        if (v9 != -1)
+            v9 = map_pick_record(6, list[0], 0);
+        if (v9 != -1) {
+            qword_51CF9 = qword_53AB1;
+            dword_51A83 = 0;
+            dlg_portrait_glide(rec);
+            dword_51A83 = 1;
+        }
+    } else if (e[3] == 0) {
+        int radius = dword_51A83 - 2;
+        dword_51A83 = 1;
+        count = map_reveal_reachable(lo, hi, list, radius, 0, 0);
+        v15 = 4;
+        if (count == 0)
+            v15 = 5;
+        v9 = map_pick_record(v15, 0, (int)(intptr_t)list);
+    } else {
+        step = map_reveal_reachable(lo, hi, list, e[3], 0, e[6]);
+        v9 = map_pick_record(e[6], step, (int)(intptr_t)list);
+        util_fix_records(dword_53A51);
+        if (slots[sel] == 0x1E)
+            count = map_scan_records(lo, hi, list, lo, hi, e[3] - 16, 1);
+        else
+            count = map_reveal_reachable(lo, hi, list, e[4], 0, e[6]);
+    }
+
+    util_fix_records(dword_53A51);
+    if (v9 == -1) {
+        dword_51A83 = 0;
+        dlg_portrait_glide(rec);
+        dword_51A83 = 1;
+        return 0;
+    }
+
+    dword_51A83 = 0;
+    map_view_update(0);
+    if (slots[sel] < 9u || slots[sel] == 0x18u || slots[sel] > 0x1Bu) {
+        figure_effect_play(rec, slots[sel], count, list);
+    } else {
+        ev5_1D4CB();
+        pal_flash_entry(slots[sel]);
+        ((int (*)(int, int, const uint8_t *))funcs_1541F[slots[sel]])
+            (rec, count, list);
+        menu_stop_and_free_music();
+    }
+
+    step = map_collect_scripts(scripts);
+    map_units_animate();
+    ev_script_run(rec, step, (int)(intptr_t)scripts);
+    dword_51A83 = 1;
+    return 1;
+}

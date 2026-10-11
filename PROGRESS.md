@@ -2444,11 +2444,39 @@ playbook 批选（闭包就绪、usage 降序、剔除 CRT/库包装与伪函数
 - **`dword_53A55`/`dword_53AD5` 标量→指针**：按 `map_event.c` 既有约定 `(uint8_t *)(uintptr_t)dword_53A55`、`dword_53AD5 + 3*tag(+0x53/+0x54)`。
 - 无对拍器，标“已还原未验证”。
 
+### 96) 行动菜单驱动器 `0x1CFF0` → `action_menu_run`（本轮，1 函数，§1 闭包就绪游戏头名）→ `src/game/action_menu.c/.h`（追加）
+
+本轮闭包就绪游戏内容头名 `0x1CFF0`(u1，1243B，唯一 caller 是记录交互驱动器 `0x18D8C` 的
+`dword_53C57==1` 分支，`0x18D8C` 仍待还原)；其 callee 全部在册，真闭包＝自身，按 §1 同模块簇取走
+（`action_menu` 面板家族 `0x17AED/0x1CEED/0x1D51D` 现闭合）：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1CFF0` | `action_menu_run(rec)` | 三块 0xFA00 暂存（`dword_53C5B/5F/63`）快照 VGA → `box_open_init`+`action_menu_draw` → `fb_slide_step` 12 步（11→0）滑入 → `dword_53C57=0`；`do { action_menu_select(rec) } while(!=0)`；12 步（0→11）滑出 → 快照回灌 `0xA0000` → `guest_free`×3；`choice==-1` 返回 -1。否则 `rec_collect_slot_bits(rec,slots)`、`e=action_entry(slots[dword_53C57])`、`dword_51A83=e[4]+2`。三分支：`e[3]!=0 && slots==0x17`（双 `map_reveal_reachable`+`map_pick_record`，成功则 `qword_51CF9=qword_53AB1`、`dlg_portrait_glide`）、`e[3]==0`（`map_reveal_reachable(...,dword_51A83-2,0,0)`，`map_pick_record(4或5,...)`）、else（`map_reveal_reachable`+`map_pick_record`，`slots==0x1E` 时 `map_scan_records(lo,hi,list,lo,hi,e[3]-16,1)` 否则 `map_reveal_reachable(...,e[4],0,e[6])`）。收尾 `util_fix_records`；`v9==-1` 则清 `dword_51A83`、`dlg_portrait_glide`、返回 0；否则 `dword_51A83=0`、`map_view_update(0)`、`slots<9||==0x18||>0x1B` → `figure_effect_play`，否则 `ev5_1D4CB`+`pal_flash_entry`+`funcs_1541F[slots](rec,count,list)`+`menu_stop_and_free_music`；再 `map_collect_scripts`+`map_units_animate`+`ev_script_run`，`dword_51A83=1`，返回 1。 |
+
+**陷阱 / 伪代码伪影**：
+- **`v17`/`v18` 未初始化（伪代码）**：Hex-Rays 把 `call 0x1b6b7; mov ebx,eax` 的返回写成未初始化 `v17`；
+  机器为 `v18=map_collect_scripts(v20)`，C 侧按返回值捕获。
+- **分支 B 的自减读序**：`v14 = dword_51A83 - 2` 在 `dword_51A83 = 1` **之前**求值
+  （机器 `mov eax,[0x51a83]; sub eax,2; mov [0x51a83],1`）。
+- **死判据**：进入 `else if` 后的第二次 `v21[sel]==0x17` 比较在 `e[3]!=0` 时不可达（分支 A 已捕获），
+  C 侧按 `e[3]==0 / else` 等价还原。
+- **qword_53AB1 拆低/高**：机器分两次 `push [0x53ab5]`/`[0x53ab1]` 作 (x,y)；C 侧
+  `(int)qword_53AB1` / `(int)(qword_53AB1>>32)`。分支 C 的 `v22`（高）先存局部再作 `map_scan_records` 的 start_y。
+- **指针表 ABI**：`funcs_1541F`（`fd2_globals.h` 的 `void(**)(void)`）实调 `[eax*4+0x51D01]`，实参
+  `(rec,count,list)`（与 §94 `map_ai.c` 的 `action_table` 同形）；C 侧显式转型 `(int(*)(int,int,const uint8_t*))`。
+- **chkstk**：`push 0x108; call 0x3702F`（不分配帧），丢弃；无伪 callee。
+- **归属**：追加进既有 `action_menu`（§82/§83 面板族），头已被伞含，无需改列；无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
 - `function-map.csv`：待还原 **30 → 28**（本轮 §94 −2），已还原未验证 **293 → 295**（本轮 +2）。
 - `function-map.csv`：待还原 **28 → 25**（本轮 §95 −3），已还原未验证 **295 → 298**（本轮 +3）。
+- `function-map.csv`：待还原 **25 → 24**（本轮 §96 −1），已还原未验证 **298 → 299**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §96 取走闭包就绪游戏头名 `0x1CFF0`（行动菜单驱动）后，
+  闭包就绪待还原已无游戏内容项（`0x18D8C` 的 `dword_53C57==1` 分支依赖已解，但它自身仍被 `0x18890`/`0x1A813`/`0x1A866` 等阻挡）；
+  其余只剩 CRT/库包装（`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）。
 - **闭包就绪游戏内容项**：本轮 §95 取走闭包就绪头名 `0x13A9F`（及其单点解阻的 `0x1D80B`/`0x1D8BA`）后，
   闭包就绪游戏内容头名回落至 `0x1CFF0`(u1，1243B，行动菜单驱动)；`0x1A30B`(u2)/`0x13565`(u1) 等上游仍被 `0x1A813`/`0x1A866` 阻挡。
   其余仅剩 CRT/库包装（`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）。

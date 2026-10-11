@@ -1,5 +1,5 @@
 /* action_menu.h - map command/action list panel (original 0x17AED/0x1CEED/
- * 0x1D51D).
+ * 0x1D51D/0x1CFF0).
  *
  *   0x17AED  action_menu_open   open the record's box (box_open_anim) and,
  *            when the record has any action bits, reveal the action list with
@@ -10,6 +10,11 @@
  *            row `sel`.
  *   0x1D51D  action_menu_select one key step: draw the list, navigate with
  *            up/down/page/left/right, and confirm/cancel (returns 1/0/-1).
+ *   0x1CFF0  action_menu_run   the menu driver: stage the panel (box_open_init
+ *            + action_menu_draw + a 12-step slide), run the selection loop,
+ *            blit the snapshot back and execute the chosen action - either
+ *            figure_effect_play (ids < 9, 0x18 or > 0x1B) or the funcs_1541F
+ *            effect table - then collect and run the resulting event scripts.
  *
  * The panel is drawn on top of the box frame opened by box_open_init (0x17EEF).
  * It collects the indices of the set bits of record bytes +26..+30
@@ -24,10 +29,11 @@
  * tbl_ptr, base &fd2_data2[0x19FD]).
  *
  * ABI = cdecl.  action_menu_draw takes (record index, highlighted row,
- * absolute framebuffer address); action_menu_open takes the record index;
- * action_menu_select takes the record index and returns 1 (confirm), 0
- * (still running) or -1 (ESC).  The menu driver 0x1CFF0 (still pending) calls
- * action_menu_select.
+ * absolute framebuffer address); action_menu_open and action_menu_run take
+ * the record index; action_menu_select takes the record index and returns 1
+ * (confirm), 0 (still running) or -1 (ESC).  action_menu_run returns -1 when
+ * the player cancelled, 0 on the portrait glide-out path and 1 when the
+ * action and its event script have run.
  * Hand-restored, compile-verified, no differential harness yet.
  */
 #ifndef GAME_ACTION_MENU_H
@@ -41,5 +47,8 @@ void action_menu_draw(int rec, int sel, int base);
 
 /* 0x1D51D */
 int action_menu_select(int rec);
+
+/* 0x1CFF0 */
+int action_menu_run(int rec);
 
 #endif /* GAME_ACTION_MENU_H */
