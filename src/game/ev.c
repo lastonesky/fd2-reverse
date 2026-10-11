@@ -53,17 +53,15 @@ void ev_rec13_set1(void)
 }
 
 /* 0x348EA */
-uint32_t ev_status24_27(void)
+void ev_status24_27(void)
 {
-    uint32_t flag = *((uint8_t *)(uintptr_t)dword_53AD5 + 16);
+    uint8_t flag = *((uint8_t *)(uintptr_t)dword_53AD5 + 16);
 
     if (flag == 0) {
         rec_status_set(24, 27, 7);
         vm_sub(3);
         *((uint8_t *)(uintptr_t)dword_53AD5 + 16) = 1;
-        return (uint32_t)(uintptr_t)dword_53AD5;
     }
-    return flag;
 }
 
 /* 0x34A6C - the scan runs to completion (no early break), then the second
@@ -91,7 +89,7 @@ void ev_flag8_gate(void)
 }
 
 /* 0x34CF1 - 80*idx is the machine code's 32-bit `shl/add/shl` sequence. */
-uint32_t ev_rec6_gate(int idx)
+void ev_rec6_gate(int idx)
 {
     uint32_t b = *((uint8_t *)(uintptr_t)dword_53A45
                    + (uint32_t)idx * REC_STRIDE + 6);
@@ -99,25 +97,22 @@ uint32_t ev_rec6_gate(int idx)
     if (b != 0) {
         rec_status_set(9, 27, 0);
         *((uint8_t *)(uintptr_t)dword_53AD5 + 16) = 1;
-        return (uint32_t)(uintptr_t)dword_53AD5;
     }
-    return b;
 }
 
 /* 0x34D92 */
-uint32_t ev_mask_records(void)
+void ev_mask_records(void)
 {
     vm_sub(2);
-    return rec_status_mask_records();
+    rec_status_mask_records();
 }
 
 /* 0x34F74 */
-uint32_t ev_clear_status12_13(void)
+void ev_clear_status12_13(void)
 {
     vm_sub(2);
     *((uint8_t *)(uintptr_t)dword_53A45 + 12 * REC_STRIDE + 52) = 0;
     *((uint8_t *)(uintptr_t)dword_53A45 + 13 * REC_STRIDE + 52) = 0;
-    return (uint32_t)(uintptr_t)(dword_53A45 + 13 * REC_STRIDE);
 }
 
 /* 0x35123 - the machine code passes the incoming argument (which the first
@@ -137,17 +132,15 @@ void ev_slot8_claim(int idx)
 }
 
 /* 0x35191 */
-uint32_t ev_status16_71(void)
+void ev_status16_71(void)
 {
-    uint32_t flag = *((uint8_t *)(uintptr_t)dword_53AD5 + 16);
+    uint8_t flag = *((uint8_t *)(uintptr_t)dword_53AD5 + 16);
 
     if (flag == 0) {
-        rec_status_set(16, 71, (int)flag);
+        rec_status_set(16, 71, 0);
         vm_sub(1);
         *((uint8_t *)(uintptr_t)dword_53AD5 + 16) = 1;
-        return (uint32_t)(uintptr_t)dword_53AD5;
     }
-    return flag;
 }
 
 /* 0x351E6 - the window 64..73 is a constant, independent of the record

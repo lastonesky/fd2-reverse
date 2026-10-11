@@ -3047,3 +3047,196 @@ port3 已去 guest）。
 
 另加：`FD2_LOG` 日志重定向（GUI exe 可诊断）、`FD2_KEYS`/`FD2_KEY_DELAY` 脚本按键用于复现、
 Windows 未处理异常处理器（打印 code/地址）、`-Console` 调试构建、每 2s 的 fps/tick 统计日志。
+
+### 7.3 64 位 guest 指针残留系统性扫描（本轮）
+
+上一轮修 Load 崩溃时发现：这一类 bug 的共性是 guest 用 32 位整数存指针/绝对地址，
+C1/C3 只清了全局变量和十六进制 VGA 地址，局部变量、返回值、短名别名、表项、十进制地址
+仍有漏网。本轮做了一次系统性扫描（新增可重跑工具 `tools/scan64.sh`）：
+
+1. **编译器强约束扫描**：standalone 64 位下把 `-Wint-conversion` / `-Wint-to-pointer-cast`
+   / `-Wpointer-to-int-cast` 提为 error，`src/game/*.c` + `src/*.c` + `host/*.c` 全绿。
+2. **guest 绝对地址扫描**：源码中所有裸 guest 线性地址（0x5xxxx/0x6xxxx/0xA0000）与
+   十进制 VGA 地址，全部改走 `fd2_data1/fd2_data2` 镜像或 `VGA_P()`。
+3. **`(int)(intptr_t)` / `(uint32_t)(uintptr_t)` 显式截断扫描**：清零。
+
+**找到并修复（按影响排序）**
+
+| 位置 | 问题 | 修复 |
+|---|---|---|
+| `fd2_globals.h` `dword_53AA9` / `dword_53AB1` | 生成器因 `qword_53AA9/53AB1`（{x,y} 对）把同址的 `dword_` 名也生成为 `uint64_t`。`dword_53AA9 += dx` / `--dword_53AA9` 变成 64 位读写，**顺带改掉高 32 位的 y**（`dword_53AAD`/`dword_53AB5`），视图原点 x/y 被污染 → `map_render_view` 单元指针越界，**New Game/Load 崩溃的真根因**。 | `data_type_overrides.manual.csv` 增加 `dword_53AA9/dword_53AB1 = int32_t`（按符号覆盖，`qword_` 仍 uint64），重生成头文件 |
+| `dlg.c` `dword_53A18` | `dlg_open_box` 的 5 个 stage 指针数组被建模成镜面上的 `void **`，64 位下按 8 字节步进写入 0x3A18..0x3A3F，**覆盖相邻标量** `dword_53A2C/30/34/38/3C`（svc 调色板 tick、map_status 锚点）。 | `fd2_native.h/.c`：真正的 `void *dword_53A18[5]` |
+| `fx.c` 14 个 `FX_TABLE_*` | 粒子方向/位置表用 `(const void*)(uintptr_t)0x524EE...` 从裸 guest 地址读（与上轮 `screen_curtain` 同类）。 | 新增 `FX_TBL()` 从 dseg02 镜像读；14 处全改 |
+| `map_attack.c` `off_61955` | 效果脚本表存的是 **4 字节 guest 绝对地址**（0x619A9…），`tbl_u32` 后直接当指针用。 | `tables.c` 新增 `tbl_off61955()` + 通用 `tbl_guest()`，按镜像换算（`tbl_off627D8` 同用） |
+| `rec.c` `TBL_619FD` | `tbl_ptr((void *)(uintptr_t)0x619FD, …)` 把裸 guest 地址当表基址。 | 改为 `&fd2_data2[0x19FD]` 镜像 |
+| `map_interact.c` `map_pick_record(int list)` | 第三参数声明成 `int`，调用点 `(int)(intptr_t)list` 截断后函数内再当指针 → 各调用点全崩。 | 参数改为 `const uint8_t *list`，7 个调用点同步 |
+| `vm.c` box 句柄 | `int box` 存 `dlg_open_box()` 的指针，`close_open_box` 再 `(void*)(intptr_t)` 转回。 | 全程 `void *box` |
+| `res.c` | `res_load` 用 `guest_store_u32(0x53BFF,…)`（native 下 no-op）发布大小，而 `bgm.c` 读的是 `dword_53BFF` → native 恒 0。 | 直接写 `dword_53BFF`（两个 profile 都指向同一内存） |
+| `ev.c` / `rec.c` / `gfx.c` | 返回值/全局把指针存进 `uint32_t`（`return (uint32_t)(uintptr_t)…`；`gfx_glyph_tab/gfx_pen_dest`）。 | 返回值改 `void` / 指针类型；gfx 两个 scratch 改 `void*` |
+| `map.c` | `(uint32_t)(uintptr_t)dword_53A51 > 1u` 用低 32 位判非空哨兵。 | 改 `(uintptr_t)dword_53A51 > 1u` |
+| `map_zoom.c/.h`、`scene_core.c` | `uint8_t**`→`const uint8_t* const*` 不兼容、`char*`→`const uint8_t*` 符号性告警。 | 参数改 `uint8_t *const *`；`buf` 改 `uint8_t*` |
+| `fd2_platform.c` | 崩溃处理器只记 code/地址，定位不够。 | 追加 fault 地址、寄存器、`dword_53A51/53A5D/53A69` 与地图尺寸/原点；过滤 `DBG_PRINTEXCEPTION_C` |
+
+**回归**
+
+- `tools/check_compile.sh --full`：standalone + hybrid 双 profile、生成源、头自测，**全 0 error**；
+  严格 int-conversion 扫描 0。
+- `pwsh -File build.ps1 -Console`：MSVC x64 链接通过（仅剩编码/符号比较告警）。
+- 脚本按键复现（`E:\FD2`，`FD2_KEYS` + ASLR `/DYNAMICBASE:NO` + `/MAP` 还原函数）：
+  - `New Game: Enter` ×3、`Load: Down,Enter,Enter,Enter` ×3、长过场 25×Enter ×3 ——
+    **全部跑满超时无崩溃、无 `fd2_crash.log`**。修复前 New Game/Load 均稳定崩在
+    `map_render_view`（返回栈：`map_view_update → map_slide_view → dlg_open_box → vm_run`）。
+- 新增/保留诊断：崩溃回溯含 fault 地址与寄存器、地图关键全局；`FD2_LOG`/`FD2_KEYS`。
+
+**工具**：`tools/scan64.sh [standalone|hybrid|warn|nums]` —— 可重跑的本轮扫描入口。
+
+### 7.4 “退出到 DOS 后画面冻住”的根因与修复
+
+**复现**：`build/play.cmd` 启动（开 `FD2_KEYLOG`+`FD2_STALL_MS`），真人操作，记录键序
+（`play.keys`：26.3s 起 5×Down → Enter → Enter/Enter/Down/Enter/Enter）。
+
+**根因（不是回归，也不是死循环）**：地图里按 Enter 呼出菜单 → 子菜单选 **“退出到 DOS”**。
+日志给出确凿证据：`fd2: exit: sub_117E7 r=-1` —— 内层事件 tick 返回 -1，`boot.c` 置
+`quit=1`，`fd2_game_main` 正常走到 teardown（`AIL_shutdown`、切回文本模式）并 return。
+但宿主 `main_sokol.c` 的 `frame_cb` 只在 sokol 事件里 quit；游戏线程已经结束，主线程仍在
+每帧 `fd2_engine_frame()` 反复呈现**最后一帧** → 画面对用户就是“冻住”，其实游戏已退出。
+
+**修复**：
+
+- `fd2_kernel.c/.h` 新增 `fd2_engine_game_over()`（返回游戏线程结束标志）；`main_sokol.c`
+  的 `frame_cb` 在它置位时 `sapp_quit()`，窗口正常关闭。
+- 顺带加的诊断（本次联调用）：
+  - `FD2_KEYLOG=<path>`：每次真实按键 `<ms>,<scan>,<ascii>`（立即 flush）；日志同步
+    `fd2: key @...`。`boot.c` 主循环自增 `fd2_game_progress` 作为存活信号。
+  - `FD2_KEYPLAY=<path>`：按记录里的绝对时间轴回放，用于确定性复现。
+  - 冻结看门狗：游戏线程 8s（`FD2_STALL_MS`）无迭代推进**且键环里存在未被消费的按键**
+    （真死机时用户会按键，而空闲等待/已退出不会）才挂起游戏线程、扫栈打印返回地址 +
+    键环 head/tail + 地图关键全局，写 `play.log` 与 `fd2_stall.log`。
+  - `boot.c` 在各 `quit=1` 分支打印退出原因（`sub_117E7 r=-1` / `sub_25EBB v=` /
+    `scene_switch r=`）。
+
+**回归**：`FD2_KEYPLAY` 回放该键序，进程在 38s 处 **exit=0**（窗口关闭），日志末
+`fd2: exit: sub_117E7 r=-1` + `ail: shutdown`。Keys 文件与回放时间轴见
+`build/play.keys`。
+
+### 7.5 长按方向键不连续移动：宿主补 BIOS typematic 重复
+
+**现象**：地图上按方向键走一格；按住不放，原版会先停一下再连续走，port3 只走一格。
+
+**原因**：输入层把键盘自动重复丢了——`main_sokol.c` 的 `event_cb` `if (e->key_repeat) break;`
+丢弃 sokol 的重复 KEY_DOWN，`push_vk()/push_fr_key()` 的 `g_down[]` 按住去重再丢一次。于是
+游戏每次物理按压在 BDA 键环里只收到一个 make code。原版经 INT 16h 读到的是键盘控制器的
+**typematic 重复 make 流**（约 500ms 延迟后 ~10.9 次/秒），所以能连续移动。游戏逻辑本身正确
+（`scene_event_tick` / `map_cursor_dir_run` 都是"读一个键→走一步"）。
+
+**修复（方案 B，模拟 DOS BIOS typematic）**：`host/fd2_kernel.c` 新增：
+- `repeat_note()`：make 记下"最后按下的键"并起 500ms 定时；匹配的 break 解除。重复 make 直接进
+  BDA 键环（不过 `keylog_note`，录制里只保留真实输入）。
+- `repeat_thread()`：10ms 轮询，到点后每 90ms 推一个 make，直到松开。
+- 可调：`FD2_TYPEMATIC_DELAY`（默认 500ms）、`FD2_TYPEMATIC_RATE`（默认 90ms）、
+  `FD2_TYPEMATIC=0` 关闭、`FD2_TYPEMATIC_DEBUG=1` 打印每次重复。
+- 自动按键/回放（`FD2_KEYS`/`FD2_KEYPLAY` 都是 make 后立即 break）不会触发重复。
+
+**验证**：`FD2_KEYPLAY` 一个 500ms 按下、4500ms 松开的 Down，`FD2_TYPEMATIC_DEBUG=1` 下
+日志出现 38 次 `fd2: repeat scan=50`（≈92ms 周期），4500ms break 后停止。
+
+**另**：`fd2_code`（原版机器码 258KB）在 native 构建里已无被执行代码引用，是死数据，后续可删。
+
+### 7.6 释放法术崩溃：目标选择后仍用旧的视图原点
+
+**现象**：地图上选中单位 → 命令菜单选法术 → 回车 → 在地图上选一个敌人目标 → 回车释放
+→ 崩溃，未进入法术动画。
+
+**复现**：`FD2_KEYPLAY` 回放 `build/play.keys`（脚本化复现稳定）。崩溃签名：
+`res_blit+0x11`，`fault=0x8`，`dword_53A5D=0`，栈
+`action_menu_run → figure_effect_play → figure_attack_scroll → res_blit`。
+
+**根因**：`action_menu_run` (0x1CFF0) 在进入分支前把 `qword_53AB1`（地图光标）拷进局部
+`lo/hi`，之后 `map_pick_record` (0x115B6) 会让玩家移动光标到目标格。原始机器码在
+`map_pick_record` 之后重新**实时**读取 `[0x53ab1]/[0x53ab5]`（0x1D211 / 0x1D31E 的
+`push ds:0x53ab1`），因此范围/目标是以**目标格**为中心；还原代码却继续用旧的 `lo/hi`
+（施法者格），于是 `map_reveal_reachable(e[4]=0)` 在错误格子上过滤后返回 `count=0`。
+`figure_effect_play` 里 `groups[0]` 因 `count==0` 未被加载（端口显式置 NULL），
+`res_blit(groups[0]=NULL,0,…)` 读 `NULL+8` 崩溃。原始代码此处读到的是未初始化的栈槽，
+通常是个残留的合法指针，所以原版不崩、只画错。
+
+**修复**：
+- `action_menu.c`：`map_pick_record` 之后的 `map_reveal_reachable` 改用**实时**
+  `qword_53AB1`（branch 1 与 branch 3）；`map_scan_records` 的 `ref` 用实时光标、`start`
+  仍用 pre-pick 的 `lo/hi`（与 0x1D343 的 `push [esp+0xdc]/esi` 一致）。
+- `figure_view.c`：防御性——`figure_effect_play` 在 `count==0` 时把 `groups[0]` 回退为
+  施法者自己的 `fig_a`，避免 `res_blit(NULL)`（`count` 仍为 0，不产生伤害）。
+
+**回归**：`FD2_KEYPLAY` 回放该键序，进程跑满超时、无 `fd2_crash.log`，法术动画正常进入。
+双 profile `-Werror` 全绿。
+
+### 7.7 选人按回车“变两次”：break 码被塞进 BIOS 键环
+
+**现象**：地图上选人物按一次回车，菜单不出现或 NPC/敌人信息面板一闪就关。
+
+**取证**：开 `FD2_KEYLOG` 录下真实按键，每次回车只有一条 make(1C)+break(9C)，且无
+`fd2: repeat` —— 宿主只发了一次。再在 `int386(0x16)` 打点，看到游戏把 **break 码 0x9C
+当成第二个按键读走**（`int16 AH=9C wait -> scan=9C ascii=0D`）。
+
+**根因**：`fd2_engine_key` 把 make 和 break **都** `fd2_kbd_push` 进 BDA 键环
+（0040:001E）。真实 BIOS 的 INT 9 只把 **make 码**放进该环（release 仅用于内部换挡），
+INT 16h 永远不会返回 break。于是每次按键游戏都会多读到一个幽灵按键；其 AL 还是 0x0D，
+“按任意键继续”的信息面板一读就关，命令菜单也会被它顶掉/跳过。
+
+**修复**：`fd2_engine_key` 仍先用 break 清 typematic 状态、仍记入 `FD2_KEYLOG`，但
+`scan & 0x80` 的 break 不再进键环。`--autokey` 本就直接 `fd2_kbd_push` 只发 make，
+行为自此一致。
+
+**回归**：`FD2_KEYPLAY` 回放该键序，int16 打点里不再出现任何 break（9C/CB/CD/D0…），
+每次回车只被读一次；跑满超时无 `fd2_crash.log`。双 profile `-Werror` 全绿。
+
+### 7.8 工具链注意（待办）
+
+重跑 `tools/gen_headers.py`（本轮为固化 `dword_53AA9/53AB1` 的类型而跑过一次）时有两个
+需要人工兜底的点：
+
+1. **`gen_image()` 的 dseg02 BSS 边界会回退**：生成出的 `fd2_data_init()` 把清零起点写成
+   `0x5000`，会覆盖掉 §7.2 修好的 `0x4000`（dseg02 `[0x4000,0x56B0)` 是 BSS，IDA 导出为
+   0xFF）。本轮已把 `src/fd2_image.c` 手工回退保留 `0x4000`。**后续修 `gen_headers.py` 的
+   边界逻辑前，每次重生成都要检查这一行**，否则音效/Load 会再次出问题。
+2. **`fd2_funcs.h` 会删 273 条陈旧 `sub_*` 原型**（其语义名现在由各自头文件接管，重生成后
+   会因宏别名与 `void` 返回类型冲突而必须删除），同时按源码注释里出现的 `dword_XXXXX`
+   多生成 3 个宏（`tbl_51F96`/`dword_5266C`/`dword_52684`，实际只在注释里）。编译验证通过，
+   属工具输出更新，但重生成后要复核 diff。
+
+其它本轮相关的稳定性注意：
+- `fd2_engine_key` 只把 **make 码**放进 BDA 键环（§7.7）；break 仅用于 typematic 状态与
+  `FD2_KEYLOG`。以后若新增输入路径，别再把 release 塞进环里。
+- `figure_effect_play` 对空目标列表有兜底（§7.6）；`action_menu_run` 里 `map_pick_record`
+  之后的坐标一律读**实时** `qword_53AB1`，不要再缓存 `lo/hi`。
+
+### 7.9 音乐“慢了一点点”：循环尾音多塞 1 秒静音
+
+**问题**：商店/部分场景的背景音乐听感比原版慢一点点。
+
+**核对速度（是精确的）**：
+- 播放速度由 XMIDI 的 tempo 元事件决定：`tick_rate = 60 × 1e6 / tempo_us`（60 ticks/beat）。
+  这与原版 AIL 自身定时一致——port2 的 AIL 逆向记录里 120 BPM 的 tick 步长是 **8333 µs**，
+  而 `500000/60 = 8333.33`。
+- 抽出 FDMUS.DAT 全部曲目：每首只有 tick 0 一个 tempo，且都是整数 BPM（商店 track 11 = 60、
+  城镇 13 = 120、商店 fanfare 17 = 98、标题 19 = 111、开场 18 = 112 …）。实测端口解析打印
+  `112.000 BPM / 112.0001 ticks/s` 精确无误。商店主题本身慢是原曲如此。
+
+**真正的缺陷**：`synth.c` 的 `stream_init` 把曲长算成
+`g_total = last_tick/tick_rate*rate + rate`（`+rate` 是额外 1 秒）。这 1 秒本意是让最后一个音的
+release 响完，但对**循环**曲目它就是循环点，于是**每一圈都多出约 0.85 秒静音**再做下一遍——
+地图/城镇/商店这类长循环背景因此显得偏慢。
+
+**修复**：只在一次性播放时保留尾音，循环时不加：
+```c
+g_total = last_tick / tick_rate * rate;
+if (!g_loop) g_total += rate;
+```
+`g_loop` 在 `synth_play` 调 `stream_init` 之前已设好；离线统计/WAV（`render()` 里 `g_loop=0`）
+仍保留尾音。
+
+**诊断**：`xmidi.c` 的解析摘要新增一行常驻打印
+`xmidi: tempo <us/beat> (<BPM> BPM), 60 ticks/beat -> <ticks/s> ticks/s, song <s> s`，
+以后听感异常可直接对日志核对。
+
+**回归**：双 profile `-Werror` 全绿；Console 版实跑正常，日志显示 `tempo 535714 (112.000 BPM)`。

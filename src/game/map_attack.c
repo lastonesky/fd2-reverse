@@ -35,9 +35,7 @@ void map_attack_sprite(int attacker, int defender)
                        + 80u * (uint32_t)defender;
     const uint8_t *eff =
         item_entry(rec_field_byte(attacker, rec_slot_find(attacker, 0)));
-    const uint8_t *script =
-        (const uint8_t *)(uintptr_t)tbl_u32((const void *)&fd2_data2[0x1955],
-                                            eff[0]);
+    const uint8_t *script = (const uint8_t *)tbl_off61955(eff[0]);
     int count  = script[0];
     int x      = 24 * (int)(r[0] - (uint32_t)dword_53AA9) + 4;
     int y      = 24 * (int)(r[1] - (uint32_t)dword_53AAD);

@@ -339,6 +339,8 @@ static void init_cb(void)
 static void frame_cb(void)
 {
     fd2_engine_frame();
+    if (fd2_engine_game_over())
+        sapp_quit();          /* game thread returned: close, do not freeze */
 }
 
 static void event_cb(const sapp_event *e)

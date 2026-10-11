@@ -57,10 +57,10 @@ static int16_t fd2_tick_low(void)
 int scenario_menu(void)
 {
     uint32_t choice;
-    char *buf;
+    uint8_t *buf;
     FILE *fp;
     int v8;
-    char *v9;
+    uint8_t *v9;
 
     choice = (uint32_t)sub_1F894();                     /* 0x25EC8: main menu */
 
@@ -94,7 +94,7 @@ int scenario_menu(void)
     memset((void *)(uintptr_t)VGA_BASE, 0, 320u * 200u);
     sub_11D40(0, 255, 0);                               /* pal_fade_range  */
 
-    buf = (char *)malloc(SAVE_FILE_SIZE);               /* 0x59CB */
+    buf = (uint8_t *)malloc(SAVE_FILE_SIZE);           /* 0x59CB */
     fp = fopen(aFd2Sav_4, aRb_0);                       /* "FD2.SAV","rb"  */
     if (fp != NULL) {
         fread(buf, 1, SAVE_FILE_SIZE, fp);              /* 0x373CA = fread */

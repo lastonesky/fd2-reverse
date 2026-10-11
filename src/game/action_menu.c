@@ -232,9 +232,14 @@ int action_menu_run(int rec)
 
     if (e[3] != 0 && slots[sel] == 0x17) {
         step = map_reveal_reachable(lo, hi, list, e[3], 1, e[6]);
-        v9 = map_pick_record(e[6], step, (int)(intptr_t)list);
+        v9 = map_pick_record(e[6], step, list);
         util_fix_records(dword_53A51);
-        count = map_reveal_reachable(lo, hi, list, e[4], 0, e[6]);
+        /* The picker moved the map cursor onto the chosen cell; the original
+         * reads qword_53AB1 live here, so the effect range is centred on the
+         * TARGET, not the actor's pre-pick cell. */
+        count = map_reveal_reachable((int)qword_53AB1,
+                                     (int)(qword_53AB1 >> 32),
+                                     list, e[4], 0, e[6]);
         util_fix_records(dword_53A51);
         if (v9 != -1)
             v9 = map_pick_record(6, list[0], 0);
@@ -251,15 +256,21 @@ int action_menu_run(int rec)
         v15 = 4;
         if (count == 0)
             v15 = 5;
-        v9 = map_pick_record(v15, 0, (int)(intptr_t)list);
+        v9 = map_pick_record(v15, 0, list);
     } else {
         step = map_reveal_reachable(lo, hi, list, e[3], 0, e[6]);
-        v9 = map_pick_record(e[6], step, (int)(intptr_t)list);
+        v9 = map_pick_record(e[6], step, list);
         util_fix_records(dword_53A51);
+        /* As above: ref/target uses the live cursor (the picked cell); only
+         * map_scan_records' start pair stays at the pre-pick origin. */
         if (slots[sel] == 0x1E)
-            count = map_scan_records(lo, hi, list, lo, hi, e[3] - 16, 1);
+            count = map_scan_records((int)qword_53AB1,
+                                     (int)(qword_53AB1 >> 32),
+                                     list, lo, hi, e[3] - 16, 1);
         else
-            count = map_reveal_reachable(lo, hi, list, e[4], 0, e[6]);
+            count = map_reveal_reachable((int)qword_53AB1,
+                                         (int)(qword_53AB1 >> 32),
+                                         list, e[4], 0, e[6]);
     }
 
     util_fix_records(dword_53A51);

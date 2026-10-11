@@ -7,3 +7,5 @@ addr,name,type,mode,reason
 0x53DFC,dword_53DFC,uint8_t,lvalue,"ev4.c: (&dword_53DFC)[i]"
 0x53AA9,qword_53AA9,uint64_t,lvalue,"scene.c 用 uint64_t（0x2200000009）；同址 dlg.c 声明 int32_t，按宽度优先取 uint64_t"
 0x53AB1,qword_53AB1,uint64_t,lvalue,"同上"
+0x53AA9,dword_53AA9,int32_t,lvalue,"32-bit x view origin; qword_53AA9 is the {x,y} pair (low=x, high=dword_53AAD).  The dword_ name must stay 32-bit or ++/-- corrupts y."
+0x53AB1,dword_53AB1,int32_t,lvalue,"32-bit cursor x; qword_53AB1 is the {x,y} pair (low=x, high=dword_53AB5)."

@@ -64,7 +64,7 @@ int map_wait_key(void)
 }
 
 /* 0x115B6 - the interactive map record picker. */
-int map_pick_record(int mode, int sel, int list)
+int map_pick_record(int mode, int sel, const uint8_t *list)
 {
     int32_t v3  = sel;          /* v3: cycle length (0 when mode == 6) */
     int     v4  = 0;            /* v4: index into `list`               */
@@ -82,7 +82,7 @@ int map_pick_record(int mode, int sel, int list)
         --v14;
 
     if (v3 != 0) {
-        v5 = ((const uint8_t *)(uintptr_t)list)[0];
+        v5 = list[0];
         if (((const uint8_t *)dword_53A45)[80 * v5 + 7] != 0x79)
             dlg_portrait_glide(v5);
     }

@@ -45,8 +45,8 @@ extern uint16_t gfx_pen_stride; /* 0x627A3 */
 extern uint8_t  gfx_pen_fg;     /* 0x627A5 */
 extern uint8_t  gfx_pen_fill;   /* 0x627A6 */
 extern uint8_t  gfx_pen_shadow; /* 0x627A7 */
-extern uint32_t gfx_pen_dest;   /* 0x627A8 */
-extern uint32_t gfx_glyph_tab;  /* 0x627AC */
+extern void       *gfx_pen_dest;   /* 0x627A8 */
+extern const void *gfx_glyph_tab;  /* 0x627AC */
 extern uint32_t gfx_glyph_idx;  /* 0x627B0 */
 
 /* original byte_627C8 @ 0x627C8 - 16-byte scanline phase table (read-only) */

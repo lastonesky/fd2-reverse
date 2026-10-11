@@ -37,3 +37,9 @@ uint32_t tbl_u32(const void *base, int index);
 
 /* 0x4EB48 - pointer table at 0x627D8 */
 void *tbl_off627D8(int i);
+
+/* 0x4E87D - dword table at 0x61955 (same 4-byte GUEST pointers) */
+void *tbl_off61955(int i);
+
+/* translate a 4-byte GUEST pointer value into a standalone-mirror pointer */
+void *tbl_guest(uint32_t guest);

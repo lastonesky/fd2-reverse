@@ -33,7 +33,7 @@
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(DOS_LOWMEM_BASE + (off)))
 
 /* 0x1F558 */
-void map_zoom_draw(int x, int y, int zoom, const uint8_t *const *cells)
+void map_zoom_draw(int x, int y, int zoom, uint8_t *const *cells)
 {
     int      qx = (x - 156 * zoom) / 3072;
     int      rx = (x - 156 * zoom) % 3072;

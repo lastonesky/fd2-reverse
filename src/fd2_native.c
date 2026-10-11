@@ -12,6 +12,7 @@
 void *dword_53ED0;
 void *dword_53ED8;
 void *dword_53EDC;
+void *dword_53EE0;
 void *dword_53EE4;
 void *dword_53EE8;
 
@@ -40,6 +41,7 @@ uint8_t *dword_53A59;
 uint8_t *dword_53A69;
 uint8_t *dword_53A79;
 uint8_t *dword_53A45;
+void *dword_53A18[5];
 uint8_t *dword_53A71;
 uint8_t *dword_53A85;
 uint8_t *dword_53B0F;

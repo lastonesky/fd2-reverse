@@ -26,6 +26,6 @@ int map_find_records(int x, int y, int radius, uint8_t *out, int filter);
 int map_wait_key(void);
 
 /* 0x115B6 */
-int map_pick_record(int mode, int sel, int list);
+int map_pick_record(int mode, int sel, const uint8_t *list);
 
 #endif /* GAME_MAP_INTERACT_H */

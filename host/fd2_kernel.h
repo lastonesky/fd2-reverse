@@ -23,6 +23,10 @@ void fd2_engine_start(void);
 /* One presented frame (fd2_vga + palette -> render_present). */
 void fd2_engine_frame(void);
 
+/* 1 once the game thread has returned (the entry layer then quits its app
+ * loop instead of presenting a frozen last frame forever). */
+int  fd2_engine_game_over(void);
+
 /* Inject one keystroke into the BDA ring (scan may carry the 0x80 release
  * bit).  Called from the entry layer's key events. */
 void fd2_engine_key(uint8_t scan, uint8_t ascii);

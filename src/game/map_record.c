@@ -126,7 +126,7 @@ int map_record_interact(int rec, int *dir_tiles, int reopen)
         uint8_t *p   = (uint8_t *)guest_malloc(0x64);
         int      sel = map_reveal_reachable(MAP_X, MAP_Y, p, p4, p5, 0);
 
-        v13 = map_pick_record(0, sel, (int)(intptr_t)p);
+        v13 = map_pick_record(0, sel, p);
         util_fix_records(dword_53A51);
         guest_free(p);
     }

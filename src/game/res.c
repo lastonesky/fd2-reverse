@@ -6,8 +6,9 @@
  *
  * Two adaptations make this safe to run *inside* the game (not just in the
  * check harness): the buffers live on the game's heap (guest_mem.h) and the
- * size is published to the game's global at 0x53BFF, not to a C variable -
- * the game reads that address.
+ * size is published to the game global dword_53BFF (0x53BFF), which the game
+ * reads.  In the hybrid profile the dword_53BFF macro resolves to the guest
+ * mirror, so the machine code sees the same bytes.
  */
 #include "res.h"
 #include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
@@ -40,7 +41,7 @@ void *res_load(const char *filename, void *old_buffer, int index)
     start = entry[0];
     size  = entry[1] - entry[0];
     guest_free(entry);
-    guest_store_u32(RES_SIZE_ADDR, size);   /* what the game reads */
+    dword_53BFF = size;                     /* what the game reads (0x53BFF) */
 
     buf = guest_malloc(size);
     if (!buf) {

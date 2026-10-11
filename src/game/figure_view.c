@@ -1302,6 +1302,14 @@ void figure_effect_play(int unit, int mode, int count, const uint8_t *units)
 
         groups[j] = res_load(aFiganiDat, groups[j], 3 * r[7]);
     }
+    /* Defensive: an effect can still reach here with an empty target list
+     * (range 0 filters everything out).  The original then read groups[0]
+     * from an uninitialised stack slot; the port zeroes it and would
+     * res_blit(NULL).  Fall back to the actor's own plate so
+     * figure_attack_scroll/figure_play have a valid buffer (count stays 0,
+     * so nothing is damaged). */
+    if (count == 0)
+        groups[0] = fig_a;
 
     if (rec[6] != 0)
         i = tbc[mode];

@@ -34,8 +34,8 @@
 #define REC_STRIDE 80
 
 /* 0x21082 - add `value` to a record field, show it and drop a cost slot. */
-int map_action_add_field(int a1, int value, int field, int slot, int count,
-                         const uint8_t *list, int table_idx)
+void *map_action_add_field(int a1, int value, int field, int slot, int count,
+                           const uint8_t *list, int table_idx)
 {
     uint8_t *rec;
 
@@ -49,7 +49,7 @@ int map_action_add_field(int a1, int value, int field, int slot, int count,
     map_view_update(0);
     map_draw_status_popups();
     unit_metrics(a1);
-    return (int)(intptr_t)rec_slot_remove(a1, slot);
+    return rec_slot_remove(a1, slot);
 }
 
 /* 0x22721 - flag +34 and grow the +72 metric by (word * dbl_50210 + 1). */

@@ -241,6 +241,12 @@ static int parse_evnt(const uint8_t *ev, uint32_t len, int *out_skips)
            " %d unmodelled bytes, last tick %u)\n",
            g_count, notes, offs, skips,
            g_count ? g_events[g_count - 1].tick : 0);
+    printf("xmidi: tempo %u us/beat (%.3f BPM), %u ticks/beat -> %.4f ticks/s, "
+           "song %.3f s\n",
+           (unsigned)g_tempo_us, 60000000.0 / (double)g_tempo_us,
+           (unsigned)XMIDI_TICKS_PER_BEAT, effective_tick_rate(),
+           (double)(g_count ? g_events[g_count - 1].tick : 0) /
+               effective_tick_rate());
     if (out_skips)
         *out_skips = skips;
     return 1;

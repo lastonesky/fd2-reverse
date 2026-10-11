@@ -76,7 +76,7 @@ int map_action_interact(int actor)
             dword_51A83 = entry[18] + 2;
             v7 = map_reveal_reachable(MAP_X, MAP_Y, list, entry[16],
                                       entry[13] == 23, entry[21]);
-            v8 = map_pick_record(entry[21], v7, (int)(intptr_t)list);
+            v8 = map_pick_record(entry[21], v7, list);
             util_fix_records(dword_53A51);
             dword_51A83 = 1;
             v21 = map_reveal_reachable(MAP_X, MAP_Y, list, entry[18], 0,
@@ -116,7 +116,7 @@ int map_action_interact(int actor)
             goto label37;
         buf = guest_malloc(0x64);
         v11 = map_reveal_reachable(MAP_X, MAP_Y, (uint8_t *)buf, 1, 1, 3);
-        v18 = map_pick_record(3, v11, (int)(intptr_t)buf);
+        v18 = map_pick_record(3, v11, buf);
         v12 = dlg_portrait_find();
         util_fix_records(dword_53A51);
         map_slide_view((int)(uint32_t)saved, (int)(uint32_t)(saved >> 32));

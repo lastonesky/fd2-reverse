@@ -70,13 +70,13 @@ typedef int   (*pending_fn)(void);
 
 /* Close whatever box is open - the same three calls in the same order the
  * machine code uses at the top of -1/-17/-18/-19/-20. */
-static void close_open_box(int box, int mode)
+static void close_open_box(void *box, int mode)
 {
     if (!box)
         return;
     dlg_blit_dato(dword_53A85, dword_53C67, 0);
     dlg_wait_key(0);
-    dlg_close_box((void *)(intptr_t)box, mode);
+    dlg_close_box((void **)box, mode);
 }
 
 /* Shared tail of -17/-19 (top box, RLE 0x4EBFF) and -18/-20 (bottom box,
@@ -84,12 +84,12 @@ static void close_open_box(int box, int mode)
  * origin. `rec` is deliberately left pointing at the RLE block, exactly
  * where the machine code leaves EDI. */
 static void open_and_blit(int box_id, uint8_t *rec, int mode, int rle_top,
-                          int *box, uint8_t **rec_io, uint8_t **start, uint8_t **cur)
+                          void **box, uint8_t **rec_io, uint8_t **start, uint8_t **cur)
 {
     uint8_t *buf;
     uint8_t *origin = (box_id == BOX_TOP) ? ADDR_TOP : ADDR_BOTTOM;
 
-    *box = (int)(intptr_t)dlg_open_box(rec[0], rec[1], mode);
+    *box = dlg_open_box(rec[0], rec[1], mode);
 
     buf    = (uint8_t *)dword_53A85;
     *rec_io = buf + *buf;                       /* EDI after the blit setup */
@@ -113,7 +113,7 @@ uint8_t *vm_run(void *stream, int sub, uint8_t *addr, int pitch,
     uint8_t *start = addr;                      /* arg_8: text origin      */
     uint8_t *cur   = addr;                      /* ebp: write address      */
     int      line  = 0;                         /* var_18: paragraph index */
-    int      box   = 0;                         /* var_1C: open box handle */
+    void    *box   = NULL;                      /* var_1C: open box handle */
     int      mode  = 0;                         /* var_20: box row count   */
     uint8_t *rec   = NULL;                      /* edi: record/datum       */
     char     num[12];

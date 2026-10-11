@@ -33,7 +33,7 @@
 
 /* IDA names kept so the C reads like the original decompilation.
  * Addresses verified against E:\FD2\FD2.EXE.i64. */
-#define TBL_619FD   0x000619FDu                            /* 7-byte entry table */
+#define TBL_619FD   ((void *)&fd2_data2[0x19FD])              /* 7-byte entry table */
 
 /* 0x34894 */
 int rec_flag(int index)
@@ -180,20 +180,20 @@ int rec_slot_find(int index, int want_high)
 }
 
 /* 0x1CA89 - subtract byte 5 of entry `tidx` of the 7-byte table at 0x619FD
- * from the word the record keeps at +68, in 16-bit unsigned arithmetic. The
- * machine code returns the record address in EAX, so the C returns it too. */
-uint32_t rec_sub_table5(int index, int tidx)
+ * from the word the record keeps at +68, in 16-bit unsigned arithmetic.  The
+ * machine code leaves the record address in EAX, but no caller reads it, so
+ * the C returns void (returning uint32_t truncated the pointer on 64-bit). */
+void rec_sub_table5(int index, int tidx)
 {
     uint8_t *rec = (uint8_t *)((uintptr_t)dword_53A45
                                + REC_STRIDE * (uint32_t)index);
-    const uint8_t *e = (const uint8_t *)tbl_ptr((void *)(uintptr_t)TBL_619FD,
+    const uint8_t *e = (const uint8_t *)tbl_ptr(TBL_619FD,
                                                  7, tidx, 0);
     uint16_t w = (uint16_t)(rec[68] | (rec[69] << 8));
 
     w = (uint16_t)(w - e[5]);
     rec[68] = (uint8_t)w;
     rec[69] = (uint8_t)(w >> 8);
-    return (uint32_t)(uintptr_t)rec;
 }
 
 int rec_skip(int index)
@@ -233,8 +233,9 @@ int rec_flag_set1(int index)
 
 /* 0x34D64 - keep only bit 7 of byte +52 for records 10..27 (eighteen records,
  * a fixed window, not bounded by dword_53BEB). Takes no argument even though
- * the dispatch in sub_117E7 pushes one; returns the table base. */
-uint32_t rec_status_mask_records(void)
+ * the dispatch in sub_117E7 pushes one.  The machine code leaves the table
+ * base in EAX; no caller reads it, so the C returns void. */
+void rec_status_mask_records(void)
 {
     uint8_t *base = dword_53A45;
     int i;
@@ -243,17 +244,15 @@ uint32_t rec_status_mask_records(void)
         uint8_t *rec = (uint8_t *)((uintptr_t)(base + REC_STRIDE * (uint32_t)(i + 10)));
         rec[52] &= 0x80;
     }
-    return (uint32_t)(uintptr_t)base;
 }
 
-/* 0x35009 - the single-record twin: record 14 gets byte +52 = 0x83, and the
- * record address is returned. */
-uint32_t rec_status_set_record14(void)
+/* 0x35009 - the single-record twin: record 14 gets byte +52 = 0x83.  EAX
+ * carries the record address but no caller reads it, so the C returns void. */
+void rec_status_set_record14(void)
 {
     uint8_t *rec = (uint8_t *)((uintptr_t)dword_53A45 + REC_STRIDE * 14u);
 
     rec[52] = 0x83;
-    return (uint32_t)(uintptr_t)rec;
 }
 
 /* 0x1C269 - collect the set-bit indices of record[index] bytes +26..+30.

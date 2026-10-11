@@ -720,7 +720,7 @@ void map_draw_text_window(void)
     v13[0] = *(const uint32_t *)&fd2_data1[0x1EE5];
     v13[1] = *(const uint32_t *)&fd2_data1[0x1EE9];
     base = dword_53A49 + 0x1A59Cu;
-    if ((uint32_t)(uintptr_t)dword_53A51 > 1u) {
+    if ((uintptr_t)dword_53A51 > 1u) {
         anim_frame_step();
         map_render_view(dword_53A49 + 0x8088u, 456, 13, 8,
                      dword_53AA9, dword_53AAD);

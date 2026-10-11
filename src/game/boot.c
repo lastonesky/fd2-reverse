@@ -50,6 +50,14 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
+
+/* Host-visible liveness marker: incremented once per outer/inner state-machine
+ * iteration.  The native kernel's stall watchdog samples it to tell a hung
+ * game thread (screen frozen) from a healthy one that is merely waiting for a
+ * key inside a long blocking call.  Defined here (not in host/) so the same
+ * boot.c compiles for the guest-fixed differential profile too. */
+volatile unsigned fd2_game_progress;
 
 int fd2_game_main(int argc, char **argv)
 {
@@ -117,12 +125,14 @@ int fd2_game_main(int argc, char **argv)
 
     /* ---- 7. main state machine ------------------------------------- */
     for (;;) {                                   /* outer @0x25DB1 */
+        ++fd2_game_progress;
         sub_25977(0x12, 0);                      /* play BGM 18 */
 
         v = sub_25EBB();                         /* enter scene state */
         if (v == 0) {                            /* 0x25DC8 jnz -> inner */
             for (;;) {                           /* inner @0x25DCE */
                 r = sub_117E7();                 /* one event tick */
+                ++fd2_game_progress;
 
                 if (dword_53ECC == 1) {          /* 0x25DD5 */
                     byte_51AAC = 0;
@@ -139,6 +149,8 @@ int fd2_game_main(int argc, char **argv)
                         funcs_25E3A[dword_53C03]();          /* enter */
                         sub_25977((unsigned)byte_51E63[dword_53C03], 0);
                     } else {
+                        printf("fd2: exit: scene_switch r=%d state=%u\n",
+                               r, (unsigned)dword_53C03);
                         quit = 1;                /* 0x25E59 mov edi,1 */
                     }
                     byte_51AAC = 1;
@@ -147,7 +159,10 @@ int fd2_game_main(int argc, char **argv)
                 }
 
                 if (r == 0) continue;            /* 0x25E76 jz inner */
-                if (r == -1) quit = 1;           /* 0x25E7C..0x25E81 */
+                if (r == -1) {
+                    printf("fd2: exit: sub_117E7 r=-1\n");
+                    quit = 1;                    /* 0x25E7C..0x25E81 */
+                }
                 break;                           /* r > 0: back to outer */
             }
             if (quit) break;                     /* 0x25E8F test edi */
@@ -157,6 +172,7 @@ int fd2_game_main(int argc, char **argv)
              * makes edi 0 -> outer restart */
             continue;
         } else {
+            printf("fd2: exit: sub_25EBB v=%d\n", v);
             quit = 1;                            /* v > 0 or v < -1 */
             break;
         }

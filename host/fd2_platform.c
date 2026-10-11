@@ -10,6 +10,7 @@
  */
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "fd2_video.h"     /* fd2_palette / fd2_palette_dirty */
 #include "platform.h"
@@ -121,9 +122,32 @@ static void crash_write(const char *prefix, EXCEPTION_POINTERS *ep)
     DWORD wrote;
     HANDLE h;
 
-    n += wsprintfA(buf + n, "fd2: CRASH %s code=%08lX addr=%p\r\n", prefix,
+    n += wsprintfA(buf + n, "fd2: CRASH %s code=%08lX addr=%p fault=%p\r\n", prefix,
                    (unsigned long)ep->ExceptionRecord->ExceptionCode,
-                   ep->ExceptionRecord->ExceptionAddress);
+                   ep->ExceptionRecord->ExceptionAddress,
+                   (void *)ep->ExceptionRecord->ExceptionInformation[1]);
+    {
+        CONTEXT *c = ep->ContextRecord;
+        n += wsprintfA(buf + n,
+                       "  rip=%p rsp=%p rdi=%p rsi=%p rcx=%p rdx=%p rax=%p\r\n",
+                       (void *)c->Rip, (void *)c->Rsp, (void *)c->Rdi,
+                       (void *)c->Rsi, (void *)c->Rcx, (void *)c->Rdx,
+                       (void *)c->Rax);
+        {
+            extern unsigned char *dword_53A51, *dword_53A5D, *dword_53A69;
+            extern unsigned char fd2_data1[];
+            unsigned ac1, ac5;
+            int aa9, aad;
+            memcpy(&ac1, fd2_data1 + 0x3AC1, 4);
+            memcpy(&ac5, fd2_data1 + 0x3AC5, 4);
+            memcpy(&aa9, fd2_data1 + 0x3AA9, 4);
+            memcpy(&aad, fd2_data1 + 0x3AAD, 4);
+            n += wsprintfA(buf + n,
+                "  map: 53A51=%p 53A5D=%p 53A69=%p AC1=%u AC5=%u AA9=%d AAD=%d\r\n",
+                (void *)dword_53A51, (void *)dword_53A5D, (void *)dword_53A69,
+                ac1, ac5, aa9, aad);
+        }
+    }
     for (i = 0; i < (int)k && n < (int)sizeof buf - 40; i++)
         n += wsprintfA(buf + n, "  #%02d %p\r\n", i, frames[i]);
     h = CreateFileA("fd2_crash.log", FILE_APPEND_DATA, FILE_SHARE_READ, NULL,
@@ -144,8 +168,9 @@ static LONG WINAPI fd2_unhandled(EXCEPTION_POINTERS *ep)
 static LONG WINAPI fd2_veh(EXCEPTION_POINTERS *ep)
 {
     DWORD code = ep->ExceptionRecord->ExceptionCode;
-    /* 0x406D1388 = MS_VC_EXCEPTION (thread naming) - benign. */
-    if (code != 0x406D1388u)
+    /* 0x406D1388 = MS_VC_EXCEPTION (thread naming); 0x40010006 =
+     * DBG_PRINTEXCEPTION_C (OutputDebugString) - both benign. */
+    if (code != 0x406D1388u && code != 0x40010006u)
         crash_write("veh", ep);
     return EXCEPTION_CONTINUE_SEARCH;
 }
