@@ -24,4 +24,7 @@ analysis/prototypes.csv
 analysis/reloc_suspects.csv
 analysis/strings.csv
 function-map.csv
-src/fd2_image.c
+
+# NOTE: src/fd2_image.c is generated but IS committed - it is now data-only
+# (~197 KB: the dseg02/dseg03 mirror the game reads at runtime).  The dead
+# cseg01 code segment is no longer emitted (gen_headers.py skips it).

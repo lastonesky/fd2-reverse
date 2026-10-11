@@ -3251,7 +3251,8 @@ if (!g_loop) g_total += rate;
   `analysis/cseg01_disasm.txt`（3.9M）
 - IDA/脚本导出 `analysis/{arity,callgraph,data_items,data_type_overrides,decomp_failures,
   dispatch_tables,funcmap,names,prototypes,reloc_suspects,strings}.{csv,json}` 等
-- 由段字节生成的 `src/fd2_image.c`（1.5M）+ 生成的 `function-map.csv`（0.4M）
+- 由段字节生成的 `src/fd2_image.c`（1.5M）中的**代码段部分**（`fd2_code`）+ 生成的
+  `function-map.csv`（0.4M）
 - 编译产物 `build/**`（106 文件，4.1M）
 
 保留：`analysis/data_type_overrides.manual.csv`、`analysis/prototype_overrides.csv`、
@@ -3260,6 +3261,11 @@ if (!g_loop) g_total += rate;
 结果：`.git` **30.7M → 1.4M**，整库 **60M → 7.0M**。`.gitignore` 已加入上述路径防回归；
 `EXTERNAL_ARTIFACTS.md` 记录了重新导出/重建路径。
 
-> ⚠ 副作用：当前检出**不能直接编译**——缺 `src/fd2_image.c`。需先从外部 IDB 重建
-> `analysis/seg_*.bin` → `python tools/gen_headers.py` 生成 `src/fd2_image.c` → `build.ps1`。
+> 修正（同日）：`src/fd2_image.c` 不能整个删——它里面有两块：死的 **代码段** `fd2_code`
+> （258KB 字节 → 1.52MB C 文本，51 个引用它的宏无一被用）与**必需的数据段镜像**
+> `fd2_data1/_data2_init`（38KB 字节，游戏运行时通过 `fd2_data_init` 拷进镜像后读取
+> 文件名串/静态表等）。现改成**只生成数据段**：`gen_image()` 跳过 cseg01，`src/fd2_image.c`
+> 从 1.5MB 瘦到 **~197KB**（已入库），并顺手修了 `gen_image()` 的 BSS 清零起点
+> （原来向上取整到 0x5000，会把 dseg02 `[0x4000,0x5000)` 的 0xFF 当数据，正是 §7.2 那个
+> 音效 bug 的生成器根源）。**当前检出可直接 `build.ps1` 编译。**
 > 历史改写前的完整仓库已备份为 `E:\FD2\port3-backup-<时间戳>.bundle`。

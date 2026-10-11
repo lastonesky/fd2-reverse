@@ -446,15 +446,17 @@ def gen_image(bins):
            '#include "include/fd2_globals.h"', '#include <string.h>', '',
            '#ifndef FD2_GUEST_FIXED']
     for sname, base, binf in SEGMENTS:
+        # The cseg01 CODE segment is dead in the native build: 51 generated
+        # macros reference fd2_code, but none of them is used by src/game or
+        # host, and its 258 KB turned fd2_image.c into ~1.5 MB of hex.  Emit
+        # the DATA segments only; fd2_data1/fd2_data2 are still required.
+        if sname == 'cseg01':
+            continue
         b = bins[binf]; arr = ARR[sname]
         out.append('/* %s @0x%X : %d bytes */' % (sname, base, len(b)))
-        if sname == 'cseg01':
-            out.append('uint8_t %s[0x%X] = {' % (arr, len(b)))
-            out.append(carr(b)); out.append('};')
-        else:
-            out.append('static const uint8_t %s_init[0x%X] = {' % (arr, len(b)))
-            out.append(carr(b)); out.append('};')
-            out.append('uint8_t %s[0x%X];' % (arr, len(b)))
+        out.append('static const uint8_t %s_init[0x%X] = {' % (arr, len(b)))
+        out.append(carr(b)); out.append('};')
+        out.append('uint8_t %s[0x%X];' % (arr, len(b)))
         out.append('')
     out += ['uint8_t fd2_lowmem[0x100000];', '',
             'void fd2_data_init(void)', '{']
@@ -462,13 +464,14 @@ def gen_image(bins):
         if sname != 'cseg01':
             out.append('    memcpy(%s, %s_init, sizeof(%s));' % (ARR[sname], ARR[sname], ARR[sname]))
             # BSS: the IDA export pads uninitialised data with 0xFF, but the LE
-            # loader leaves it zero.  Find the trailing 0xFF run and zero it.
+            # loader leaves it zero.  Zero from the start of the trailing 0xFF
+            # run.  Do NOT round up to a page: that left the first partial page
+            # (dseg02 [0x4000,0x5000)) as 0xFF, which blocked every sound effect.
             b = bins[binf]; nz = len(b)
             while nz > 0 and b[nz-1] == 0xFF:
                 nz -= 1
-            bss = (nz // 0x1000 + 1) * 0x1000 if nz < len(b) else len(b)
-            if bss < len(b):
-                out.append('    memset(%s + 0x%X, 0, sizeof(%s) - 0x%X);' % (ARR[sname], bss, ARR[sname], bss))
+            if nz < len(b):
+                out.append('    memset(%s + 0x%X, 0, sizeof(%s) - 0x%X);' % (ARR[sname], nz, ARR[sname], nz))
     out += ['    /* fd2_lowmem: BDA mirror; BIOS tick counter at 0x46C (40:6C) */', '}',
             '#else /* FD2_GUEST_FIXED: image comes from the guest loader */',
             'void fd2_data_init(void) { /* guest loader owns image init */ }',
