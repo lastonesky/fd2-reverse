@@ -793,3 +793,196 @@ void figure_scene_play(int unit)
         guest_free((void *)(uintptr_t)dword_5414B);
     pal_fade_in();
 }
+
+/* 0x2CF30 - the party figure presentation driven by the effect dispatcher
+ * 0x2FF01.  `unit` selects the status-panel record and the FIGANI/BG base
+ * strips; `mode` (18 default / 24 / 28 / 29) selects the palette variant and
+ * how many postures the HP drain is split over; `units[0..count-1]` are the
+ * records whose figure groups are played in turn.
+ *
+ * It frees the previous screen / shape / DATO buffers, loads the BG.DAT and
+ * TAI.DAT strips of the displayed cell's map byte 6 and the BG strip picked by
+ * figure_bg_pick, plus the FIGANI group 3*rec[7] and 3*rec[7]+2 and the three
+ * rotating BG strips dword_5413F.  After fading out it loads every unit's
+ * FIGANI group, slides the plates in (figure_attack_scroll) and plays the base
+ * group (figure_play); then for each unit it snapshots the HP word (+0x40),
+ * calls unit_damage with `sel*rec[+0x48]/10 - rec[+0x4a]`, restores the
+ * snapshot and steps the posture sub-sprites of group +2.  A posture sub
+ * (byte +4==1) consumes the record, drains the HP word over `posture_n`
+ * postures and stamps the status panel; every frame substitute the shake table
+ * 0x52656 at index `step` into the animation cursor (anim_cycle_frame), blits
+ * the posture sprite and waits one tick.  Finally it frees every buffer, stops
+ * the sound, reloads FD2SHAP.DAT / FD2.TMP and restores the map view.
+ *
+ * True ABI = cdecl, four stack arguments: the single call site (0x3003f) pushes
+ * four values, but the `push 0x100; call 0x3702F` Watcom stack probe makes
+ * Hex-Rays drop all but the first, so its `int(int)` prototype is wrong.
+ * TRAP: the machine frees `v19` (the BG strip `bg_a`) twice on teardown; kept
+ * as is. */
+void figure_party_show(int unit, int mode, int count, const uint8_t *units)
+{
+    uint8_t        cell[8];       /* map_cell_info output (byte 6 = DAT index)*/
+    uint8_t        shake[6];      /* 0x52656 = {0,4,9,14,18,14}               */
+    const uint8_t *rec;           /* this unit's 80-byte record               */
+    void          *p[30];         /* per-unit FIGANI group 3*rec[7]           */
+    void          *bg_a   = NULL; /* v19  BG.DAT strip (cell[6])              */
+    void          *tai    = NULL; /* v21  TAI.DAT strip (cell[6])             */
+    void          *bg_pick = NULL;/* v23  BG.DAT strip (figure_bg_pick)       */
+    void          *fig_a  = NULL; /* v20  FIGANI group 3*rec[7]               */
+    void          *fig_b  = NULL; /* v30  FIGANI group 3*rec[7]+2             */
+    uint8_t       *screen;        /* v28  320-stride 0xFA00 buffer            */
+    uint8_t       *work;          /* v27  640-stride 0x1F400 buffer           */
+    int            i;
+    int            j;
+    int            k;
+    int            sel;           /* switch(mode) value                       */
+    int            steps;         /* v22  sel * rec[+0x48] / 10               */
+    int            base_hp;       /* v25  rec[+0x40] snapshot                 */
+    int            dmg;           /* v24  clamped unit_damage result          */
+    uint8_t        posture_n;     /* v35  8 for mode 28 else 1                */
+    uint8_t        posture_i;     /* v34  postures drained so far             */
+    uint8_t        step;          /* v33  shake index (5 on a posture)        */
+    int            blit_mode;     /* v32  res_blit mode (33 on a posture)     */
+
+    memcpy(shake, &unk_52656, sizeof(shake));
+
+    guest_free(dword_53A61);      /* buf / DATO atlas                         */
+    guest_free(dword_53A49);      /* screen frame                             */
+    guest_free(dword_53A5D);      /* map shape buffer                         */
+    dword_53A5D = NULL;
+
+    for (i = 0; i < 30; ++i)
+        p[i] = NULL;
+
+    switch (mode) {
+    case 24: sel = 15; break;
+    case 28: sel = 20; break;
+    case 29: sel = 12; break;
+    default: sel = 18; break;
+    }
+    rec   = (const uint8_t *)dword_53A45 + 80 * unit;
+    steps = sel * *(const int16_t *)(const void *)(rec + 0x48) / 10;
+
+    map_cell_info(rec[0], rec[1], cell);
+
+    bg_a    = res_load(aBgDat, NULL, cell[6]);
+    tai     = res_load(aTaiDat, NULL, cell[6]);
+    bg_pick = res_load(aBgDat, NULL, figure_bg_pick(count, units));
+
+    dword_5413F[0] = 0;
+    dword_54143    = 0;
+    dword_54147    = 0;
+    dword_5413F[0] =
+        (uint32_t)(uintptr_t)res_load(aBgDat, NULL, 0);
+    dword_54143 = (uint32_t)(uintptr_t)res_load(
+        aBgDat, (void *)(uintptr_t)dword_54143, 1);
+    dword_54147 = (uint32_t)(uintptr_t)res_load(
+        aBgDat, (void *)(uintptr_t)dword_54147, 2);
+
+    screen = guest_malloc(SCR_SIZE);
+    work   = guest_malloc(WORK_SIZE);
+    memset(screen, 0, SCR_SIZE);
+    ui_status_panel_at((int)(uintptr_t)screen, unit);
+
+    if (mode == 28) {
+        rle_decode(bg_pick, 0, 50, screen, 320, -1);
+        ui_status_panel_at((int)(uintptr_t)screen, units[0]);
+    } else {
+        rle_decode(bg_a, 0, 50, screen, 320, -1);
+    }
+
+    i      = 3 * rec[7];
+    fig_a  = res_load(aFiganiDat, NULL, i);
+    fig_b  = res_load(aFiganiDat, NULL, i + 2);
+    dword_5414B = (uint32_t)(uintptr_t)ev5_314DE(fig_b);
+    pal_fade_out();
+
+    for (i = 0; i < count; ++i) {
+        const uint8_t *r =
+            (const uint8_t *)dword_53A45 + 80 * units[i];
+
+        p[i] = res_load(aFiganiDat, p[i], 3 * r[7]);
+    }
+
+    figure_attack_scroll(unit, mode != 28, fig_a, p[0], work, screen, tai);
+    figure_play(unit, mode, fig_b, p[0], work, screen, bg_a, tai);
+
+    for (i = 0; i < count; ++i) {
+        const uint8_t *r = (const uint8_t *)dword_53A45 + 80 * units[i];
+
+        memset(work, 0, WORK_SIZE);
+        gfx_copy_rows(work + 320, 640, (void *)(uintptr_t)VGA_FRAME, 320,
+                      320, 200);
+        if (mode != 28)
+            figure_bg_scroll(units[i], p[i], screen, work, bg_pick);
+        anim_cycle_frame(p[i], 0, work, 320);
+
+        base_hp = *(const int16_t *)(const void *)(r + 0x40);
+        dmg     = unit_damage(units[i],
+                              steps - *(const int16_t *)(const void *)(r + 0x4a));
+        if (dmg > base_hp)
+            dmg = base_hp;
+        *(uint16_t *)(void *)((uint8_t *)r + 0x40) = (uint16_t)base_hp;
+
+        posture_n = (mode == 28) ? 8 : 1;
+        posture_i = 0;
+
+        for (j = ((const uint8_t *)fig_b)[2];
+             (int)((const uint8_t *)fig_b)[0] > j; ++j) {
+            const uint8_t *sub = (const uint8_t *)fig_b +
+                *(const uint32_t *)(const void *)((const uint8_t *)fig_b +
+                                                  4 * j + 8);
+
+            if (sub[5] != 0)
+                svc_play_sfx((const void *)(uintptr_t)dword_5414B, sub[5], 1);
+            if (sub[4] == 1) {
+                step      = 5;
+                blit_mode = 33;
+                ++posture_i;
+                *(uint16_t *)(void *)((uint8_t *)r + 0x40) = (uint16_t)(
+                    base_hp - (uint8_t)posture_i * dmg / posture_n);
+                ui_status_panel_at((int)(uintptr_t)screen, units[i]);
+            }
+            for (k = 0; k < sub[6]; ++k) {
+                uint8_t *win = work + 320;
+
+                gfx_copy_rows(win, 640, screen, 320, 320, 200);
+                anim_cycle_frame(p[i], blit_mode, win - shake[step], 640);
+                res_blit(fig_b, j, win, 640, -1);
+                gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, win, 640, 320,
+                              200);
+                svc_wait_ticks(1);
+                if (step != 0)
+                    --step;
+                blit_mode = -1;
+            }
+        }
+    }
+
+    for (i = 0; i < count; ++i)
+        guest_free(p[i]);
+    guest_free(bg_a);
+    guest_free(bg_pick);
+    guest_free(tai);
+    guest_free(bg_a);   /* the machine frees v19 a second time */
+    guest_free(screen);
+    guest_free(work);
+    guest_free((void *)(uintptr_t)dword_5413F[0]);
+    guest_free((void *)(uintptr_t)dword_54143);
+    guest_free((void *)(uintptr_t)dword_54147);
+    guest_free(fig_a);
+    guest_free(fig_b);
+    svc_play_sfx((const void *)(uintptr_t)dword_5414B, -1, 1);
+    if (dword_5414B != 0)
+        guest_free((void *)(uintptr_t)dword_5414B);
+
+    dword_53A49 = guest_malloc(0x25680);
+    i = *(const uint8_t *)(uintptr_t)dword_53A55;
+    dword_53A5D = res_load(aFdshapDat, dword_53A5D, 2 * i);
+    figure_tmp_load();
+    svc_wait_ticks(6);
+    pal_fade_out();
+    memset((void *)(uintptr_t)VGA_FRAME, 0, SCR_SIZE);
+    map_view_update(1);
+    pal_fade_in();
+}

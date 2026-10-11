@@ -1,10 +1,11 @@
 /* figure_view.h - unit figure/animation view helpers (original 0x30E25,
  * 0x2F4D4, 0x30E9D) plus the attack-animation driver 0x2EBE1.
  *
- * The still-pending driver sub_2CF30 (0x2CF30) shows a party member's animated
- * figure (FIGANI.DAT) over a scrolling background (BG.DAT) with an alternating
- * portrait strip (TAI.DAT).  Its closure-ready helpers live here; its fourth
- * callee, sub_2E95B (0x2E95B), only re-reads FD2.TMP and is restored here too.
+ * The driver sub_2CF30 (0x2CF30) shows a party member's animated figure
+ * (FIGANI.DAT) over a scrolling background (BG.DAT) with an alternating
+ * portrait strip (TAI.DAT); it is restored here as figure_party_show.  Its
+ * fourth callee, sub_2E95B (0x2E95B), only re-reads FD2.TMP and is restored
+ * here too.
  * Two sibling helpers of the same family, used by the drivers sub_2EBE1
  * (0x2EBE1) and sub_2FB2C (0x2FB2C), are restored here as well; the attack
  * driver sub_2EBE1 and its caller, the map attack view driver sub_2E2B0
@@ -117,6 +118,14 @@ void figure_attack_scroll(int unit, int flag, const void *plate_a,
  * FD2SHAP.DAT, clear the frame, refresh the map and fade back in.  The machine
  * starts the frame loop from an uninitialised EDI (see figure_view.c). */
 void figure_scene_play(int unit);
+
+/* 0x2CF30 - the driver called by the effect dispatcher 0x2FF01: show the
+ * figure groups of `units[0..count-1]` over the BG.DAT / TAI.DAT strips of
+ * `unit` and drain each record's HP word (+0x40) over the posture sub-sprites.
+ * `mode` (18/24/28/29) selects the palette variant and the drain step count.
+ * The ABI is cdecl with four arguments (the machine's `int(int)` prototype is
+ * a chkstk artifact; see figure_view.c). */
+void figure_party_show(int unit, int mode, int count, const uint8_t *units);
 
 /* 0x2E2B0 - the map attack view driver between records `attacker` and
  * `defender`: load their FIGANI/TAI/BG strips, stamp the two plates, play the

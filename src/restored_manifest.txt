@@ -489,10 +489,16 @@
 0x1741C sub_1741C game/map_cursor.h
 0x176B4 sub_176B4 game/map_cursor.h
 
-# unit figure/animation view helpers (driver 0x2CF30 still pending; sibling 0x2E95B is a CRT-fread wrapper, left out)
+# unit figure/animation view helpers (sibling 0x2E95B is a CRT-fread wrapper, left out)
 0x30E25 sub_30E25 game/figure_view.h
 0x2F4D4 sub_2F4D4 game/figure_view.h
 0x30E9D sub_30E9D game/figure_view.h
+
+# the party figure presentation driver called by the effect dispatcher 0x2FF01.
+# True closure = itself (all callees in the manifest); the `push 0x100; call
+# 0x3702F` chkstk makes Hex-Rays emit only its first argument, so the machine's
+# 4-argument cdecl ABI was decoded from the single call site 0x3003f.
+0x2CF30 sub_2CF30 game/figure_view.h
 
 # figure-view siblings used by the drivers 0x2EBE1 / 0x2FB2C
 0x2F631 sub_2F631 game/figure_view.h

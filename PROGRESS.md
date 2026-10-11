@@ -2263,16 +2263,40 @@ CRT/库包装 `0x3645D`(read)/`0x365DA`(int386) 后，游戏头名同为 u1 的�
 - **形参类型**：机器读 `[esp+4]/[esp+8]`（随 `push ebx/esi/edi; sub esp,0xc` 校正）即第 1/2 实参，与伪代码 `(int, _BYTE *)` 一致；本 C 用 `uint8_t *out`。
 - 无对拍器，标“已还原未验证”。本批后闭包就绪待还原仅剩 CRT/库包装与伪函数条目（见下）。
 
+### 89) 队伍图形演示驱动器 `0x2CF30` → `figure_party_show`（本轮，1 函数）→ `src/game/figure_view.c/.h`（追加）
+
+按 §88 遗留建议、依 playbook §5 的“超预算单函数”例外拉出闭包就绪头名 `0x2CF30`（2269B，u1）：
+闭包就绪列表已无 in-budget 游戏内容项（仅 CRT/库包装与伪函数条目），本函数的**真闭包＝自身**
+（唯一调用者 `0x2FF01` 仍待还原；所有 callee 已在册），已逐指令核对离线反汇编 `2cf30..2d80c`。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2CF30` | `figure_party_show(unit,mode,count,units)` | 效果分发器 `0x2FF01` 的“图形演示”：释放旧屏/DATO/形状缓冲 → 载 `unit` 格（`map_cell_info` 字节 6）的 BG/TAI 条 + `figure_bg_pick(count,units)` 选出的 BG 条 + FIGANI 组 `3*rec[7]`/`+2` + 三条轮转 BG 条 `dword_5413F` → `pal_fade_out` → 逐 unit 载其 FIGANI 组 → `figure_attack_scroll` 滑入 + `figure_play` → 逐 unit：快照 HP 字 `+0x40`，`unit_damage(units[i], sel*rec[+0x48]/10 - rec[+0x4a])`（`sel`：模式 18/24/28/29→18/15/20/12）夹到快照后回写，再逐姿态子精灵（组 `+2`）处理：姿态子（`+4==1`）置 `step=5`/`blit_mode=33`、HP 按 `posture_n`（模式 28→8 否则 1）分帧下探、刷状态面板；每帧 `anim_cycle_frame(p[i], blit_mode, work+320-shake[step], 640)` + `res_blit(fig_b,j,work+320,640,-1)` + 发屏 + `svc_wait_ticks(1)` → 收尾释放、停音、重载 FDSHAP/FD2.TMP、恢复地图视图。 |
+
+**陷阱 / 伪代码伪影**：
+- **ABI（关键）**：唯一调用点 `0x3003f` 压 4 个实参，但 `push 0x100; call 0x3702F` 使 Hex-Rays 只留第 1 参，
+  故 `int(int)` 原型错误；按压栈序（末压=第 1 参）定为 `(unit, mode, count, units)`（`ebp`=unit、`[esp+0xe4]`=mode、
+  `[esp+0xe8]`=count、`[esp+0xec]`=units）。
+- **双重释放（原机 bug，照留）**：`v19`（BG 条 `bg_a`，`[esp+0x88]`）在收尾被 `free` 两次（`2d6c4`、`2d6f1`）；
+  C 侧同样 `guest_free(bg_a)` 两次并加注释。
+- **常量表 `0x52656`**：镜像字节 = `{00 04 09 0e 12 0e}`＝`{0,4,9,14,18,14}`（与 `figure_attack_play` 的 `dword_5266C` 同）；
+  机器 `movsd+movsw` 拷 6 字节到栈局部，C 侧 `memcpy(shake,&unk_52656,6)`。
+- **`loc_1F400`**＝立即数 `0x1F400`（`malloc`/`memset` 的 size），非函数引用。
+- **`::p` / `buf`**：伪代码的 `::p`＝`dword_53A55`（格表基址，取首字节）`buf`＝`dword_53A61`（DATO 图集）。
+- **chkstk**：`push 0x100; call 0x3702F`（不分配帧），丢弃。
+- **符号/字节**：`rec[+0x48]`/`rec[+0x4a]` 为 `int16`（`movsx`）；HP 字 `+0x40` 为 `u16`；姿态计数 `v34`、步 `v33`、
+  分帧数 `v35` 均为字节（`inc/dec BYTE`、`movzx`）。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **36 → 35**（本轮 §88 −1），已还原未验证 **287 → 288**（本轮 +1）。
-- **闭包就绪游戏内容项**：本轮 §88 取走 `0x15DF3` 后，闭包就绪待还原已无 in-budget 游戏内容项——
+- `function-map.csv`：待还原 **35 → 34**（本轮 §89 −1），已还原未验证 **288 → 289**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §89 取走 `0x2CF30` 后，闭包就绪待还原仍无 in-budget 游戏内容项——
   只剩 CRT/库包装（`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）、伪函数条目
-  （`0x10000`/`0x36B00`），及超预算的 `0x2CF30`(2269B)/`0x2D80D`(1780B)/`0x31C49`(1511B)/`0x31529`(1718B)
-  （后者依赖未还原 CRT 包装/超 §1~1500B 预算）。
-  下批按 §5 取一个 ≤~2500B 的超预算单函数（真闭包＝自身）：优先 `0x2CF30`（2269B，`sub_2FF01`
-  fx 驱动器的 callee，`figure_view` 家族），或按 §2 取最小传递待还原闭包的游戏内容簇。
+  （`0x10000`/`0x36B00`），及超预算单函数 `0x2D80D`(1780B，真闭包＝自身)/`0x31C49`(1511B，真闭包＝自身)/
+  `0x31529`(1718B，闭包＝自身+`0x31C49` 共 3229B)。
+  下批按 §5 优先取 `0x2D80D`（1780B，片头 ANI/DAT 演示，真闭包＝自身），或取 `0x31C49`(1511B) 以解锁 `0x31529`。
 
 > **台账发现**：`0x1CEED` 的 caller `0x1CFF0`（行动菜单驱动）仍待还原，其真闭包含 `0x1AA1D`/`0x1DB65`
 > 等大件（>8 函数，按 §4 跳过）；另一个 caller `0x1D51D` 已在 §83 还原。
