@@ -1708,10 +1708,44 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - **返回值**：机器尾 = `map_view_update` 的 eax 残值，唯一 caller `0x117E7` 不读（`scene_core.c` 直接 `sub_2000A(); return 0;`），C 侧返回 0。
 - 无对拍器，标“已还原未验证”。
 
+### 67) 地图格“特殊事件”处理器 `0x190AC` → `map_cell_event`（本轮，1 函数）→ `src/game/map_event.c/.h`（新建）
+
+闭包就绪游戏头名（按 usage 排序：`0x3645D`(u4)/`0x2E95B`(u3)/`0x2EBE1`(u3，2291B 超预算)/`0x365DA`(u2)
+均为 CRT/库包装，按既定策略跳过）中，第一个游戏内容项是 `0x190AC`(u1，1215B)——记录交互驱动器
+`0x18D8C`（分支 `dword_53C57>=3`）的 `else` 动作处理器：读光标格（`qword_53AB1`）的 `map_cell_info`
+结果（格 16 位标志 = `cell[6]&0x1F`、tile 信息字节 `t[0]`），对未处理过的格执行对话/消息序列后，按
+`dword_53A55` 的 3 字节/格事件表（kind、word 值）施加效果：
+
+| kind | 行为 |
+|---|---|
+| `0` | 设 `dword_53AD9 = value+181` → 两次 `vm_run` → `rec_slot_claim`；成功置 `dword_53AD5[flag]=1`，失败则再走一遍消息 + `box_popup`/`rec_field_byte`/`rec_slot_remove`/`rec_slot_claim` 并回写事件字 |
+| `1` | 有值则 `dword_53AE1 = value`，`vm_run` 后 `dword_53BF3 += dword_53AE1`，置 `dword_53AD5[flag]=1` |
+| 其他 | `j___delay(200)` + `ev4_196CB()` 后 `funcs_1199C[value](rec_index)` 分派 |
+
+八段 `vm_run` 的 `sub` 由 tile 字节 `&0x20` 选择（421/428、422/429、423、424、425、426/430、427/431、
+0x19C），`stream=dword_53A7D`、`addr=0xA9F23`（首次）/`0xAB6E3`（后续），其余 7 参数固定。
+
+**陷阱 / 伪代码伪影**：
+- **巨大 callee 列表 = 表展开，非直接调用**：`function-map.csv` 把 `0x190AC` 的 callee 列成 ~100 个
+  `sub_34xxx`（`ev3_*`/`ev6_*`）——那是尾部分派 `funcs_1199C[value]`（`call [eax*4+0x51B91]`）的
+  表展开；真实直接调用只有 `map_cell_info/vm_run/msg_open_portrait/dlg_blit_dato/dlg_wait_key/
+  ev4_196CB/ev4_12263/map_window_run/box_popup/rec_*` 与 `j___delay`。
+- **`SHIWORD(v6)` = `out+2`**：Hex-Rays 把 `map_cell_info` 输出的 uint16 标志当 `int` 的高 16 位读；
+  机器是 `movsx edi, WORD [esp+2]`，C 侧按两字节拼合并 `(int16_t)` 符号扩展还原。
+- **`p` = `dword_53A55`**：Hex-Rays 的 `p` 是全局指针 `dword_53A55`（每格 3 字节事件表），
+  与并行“已处理”数组 `dword_53AD5` 一并按 `(uintptr_t)` 解引用（`scenario_load.c`/`ev2.c` 既有约定）。
+- **寄存器复用/变量混淆**：伪代码把 `v9`/`v8` 混作一谈；机器上 `[esp+0xc]`=`map_window_run()` 结果
+  （用于 `dword_53ADD = r+181`），`[esp+8]`=`rec_field_byte()` 结果（回写事件字），C 侧分开。
+- **共享 epilogue / 分支归并**：`0x1951b` 是本函数自身的 epilogue；`0x19523` 段（delay100 + vm_run
+  `0x19C` + delay200 + `ev4_196CB`）是外层 `r!=1 || dword_53C57!=0` 的提前返回路径。
+- **chkstk**：`push 0x4C; call 0x3702F` 不分配帧，丢弃。
+- 返回值：各路径 eax 残留调用结果，唯一 caller `0x18D8C` 不读，C 侧一律返回 0。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **75 → 74**（本轮 §66 −1），已还原未验证 **248 → 249**（本轮 +1）。
+- `function-map.csv`：待还原 **74 → 73**（本轮 §67 −1），已还原未验证 **249 → 250**（本轮 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1816,6 +1850,9 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 本轮 §64 拉出 `0x2B777`(u1，队伍换人屏 `0x2AF28` 的最后一个干净 callee，追加 `party_roster`)，
 故换人屏只剩 `0x2AF28`/`0x2B4FB`/`0x2B67F` 三角（同族，真闭包 2091B 超预算，暂跳）；
 下一闭包就绪游戏头名仍为 `0x1B1E7`(u1)/`0x1BBDC`(u1)/`0x2000A`(u1)/`0x2872B`(u1) 等大驱动器。
+本轮 §67 拉出 `0x190AC`(u1，记录交互驱动器 `0x18D8C` 的 `else` 动作处理器，新建 `map_event`)；
+其后闭包就绪游戏头名余 `0x1B1E7`(u1，party_panel 编排者，仍因内层读未初始化 ebp 暂跳)/`0x1BBDC`(u1，地图行动交互驱动)
+及库包装 `0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`（按既定策略跳过）、`0x2EBE1`(u3，2291B 超预算)。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交

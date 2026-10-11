@@ -34,6 +34,7 @@
 #include "map_ai.h"
 #include "map_attack.h"
 #include "map_cursor.h"
+#include "map_event.h"
 #include "map_interact.h"
 #include "map_levelup.h"
 #include "map_move.h"

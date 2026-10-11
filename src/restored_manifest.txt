@@ -731,3 +731,11 @@
 # the 0x602AD item table and the already-restored helpers; it ends with the
 # local epilogue at 0x28B39 (add esp,0x58; pop ebp/edi/esi/ebx; ret).
 0x2872B sub_2872B game/shop_screen.h
+
+# 0x190AC: map cell "special event" handler (driven by the record-interaction
+# driver 0x18D8C's `else` action).  Reads the cursor cell's flag value and
+# tile-info byte, runs the message/dialogue sequence and applies the 3-byte
+# per-flag event (kind 0 = claim slot / dialogue, 1 = money, other = dispatch
+# funcs_1199C[value]); the huge function-map callee list is the funcs_1199C
+# table expansion, not real direct calls.
+0x190AC sub_190AC game/map_event.h
