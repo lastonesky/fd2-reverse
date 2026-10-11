@@ -706,3 +706,9 @@
 0x36FAC sub_36FAC game/ani.h
 0x36FD3 sub_36FD3 game/ani.h
 0x36FF4 sub_36FF4 game/ani.h
+
+# four-slot save/scenario selector (new module). 0x29AB2 draws the four rows
+# from the 22987-byte FD2.SAV image; 0x29BCB is the selection loop. Both end
+# in shared epilogues (0x28B3C / 0x26A73) that are plain returns.
+0x29AB2 sub_29AB2 game/save_menu.h
+0x29BCB sub_29BCB game/save_menu.h

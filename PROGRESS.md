@@ -1605,10 +1605,36 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - **chkstk**：`push 0x7c; call 0x3702F`（不分配帧），丢弃。
 - 无对拍器，标“已还原未验证”；caller `0x29F48`（地点/商店菜单 0..3 选单）仍待还原。
 
+### 62) 四槽存档/场景选择菜单（本轮，2 函数）→ `src/game/save_menu.c/.h`（新建）
+
+§61 后闭包就绪游戏头名多为大体量驱动器，本轮改由“共享尾声伪 callee”入手：`0x29BCB`(u3) 的 callee 表把
+`sub_29AB2` 与 `sub_2872B`（尾跳 `0x28B3C` 落在 `0x2872B` 体内）都算进去；逐指令核 `29ab2..29b40` 后确认
+`0x29AB2` **尾跳 `0x28B3C` 只是共享尾声**（4 寄存器 pop + ret，与本函数自己的 `0x29AB2` 帧匹配），**无 `0x2872B` 调用**；
+`0x29BCB` 也以 `jmp 0x26A73`（`mov eax,esi; pop×4; ret`）返回。二者的其它 callee 全部在册
+（`vm_run`/`msg_blit_band`/`rle2_blit`/`svc_play_sfx`/`dlg_wait_key`/`guest_malloc`/`int386`），故本 2 函数闭包闭合。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x29AB2` | `save_slot_rows(selected, dst, base)` | 画 4 个存档槽行：逐 i 置 `dword_53AE1=i+1`，`vm_run(dword_53A7D, 549, 320*(19i+119)+dst+10, 320, fg, 76,0,0,0)`；槽 id=`byte[base+12587+2600i+2560]`，`0xFF` 时只画空槽标签（流 514，+88），否则流 `id+514`（+40）与 `id+550`（+130）；选中行 fg=201，其余 205。 |
+| `0x29BCB` | `save_slot_select(base, wait_keys)` | 取 3 块 0xFA00 暂存（`dword_53C5B/F/63`，`guest_malloc`）→ 快照 VGA → `rle2_blit(dword_53C63+0x8C05, dword_53F66+[dword_53F66+0x46], 320)` → `save_slot_rows(dword_53C57, dword_53C63, base)` → `svc_play_sfx(dword_53EEC,5,1)` → 6 段 `msg_blit_band` → 循环：`wait_keys` 非 0 时 `dlg_wait_key(0)`，否则裸 INT 16h AH=10h（E0/52→1C、53→01 归一）；`0x50`(下)/`0x48`(上) 在 `dword_53C57` 0..3 内移动并各播 sfx 7，重画到 `0xA0000`；回车/空格→1、Esc→−1。 |
+
+**陷阱 / 伪代码伪影**：
+- **伪 callee（共享尾声）**：`function-map.csv` 把 `0x29AB2` 的 `jmp 0x28B3C`、`0x29BCB` 的 `jmp 0x26A73` 记成对
+  `0x2872B` 的调用；离线反汇编证实二者是跨函数复用的尾部（`0x28B3C`=`pop ebp/edi/esi/ebx; ret` 于 `0x2872B` 末尾，
+  `0x26A73`=`mov eax,esi; pop×4; ret`）。真依赖不含这两个函数。
+- **返回值**：`0x29BCB` 经 `0x26A73` 返回 eax=esi（1/−1），与 `shop_items_run` 同构；`0x29AB2` 的尾部返回 eax=最后一次
+  `vm_run` 残值，三个调用点均不读，C 侧声明 `void`。
+- **`dlg_wait_key` 的 void 缺口**：机器调 `0x16C57` 后在 eax 取扫描码，而 port/ 资产把 `dlg_wait_key` 声明为 `void`；
+  同 §9/§61 约定，改为 `dlg_wait_key(0); key = byte_53A8E;`（`0x16C57` 已把归一后的扫描码写回 `byte_53A8E`）。
+- **槽数据来源**：`base` 是 22987B 的 FD2.SAV 镜像（`0x25EBB` 场景菜单、`0x2968D` 存、`0x2986F` 读三处 caller 均传该缓冲）。
+- **未释放**：`0x29BCB` 只分配不释放三块 0xFA00（机器原样，供 caller 复用），与 `shop_items_paint` 一致。
+- **chkstk**：`push 0x20; call 0x3702F`（`0x29BCB`）、`push 0x38; call 0x3702F`（`0x29AB2`）不分配帧，丢弃。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **82 → 81**（本轮 §61 −1），已还原未验证 **241 → 242**（本轮 +1）。
+- `function-map.csv`：待还原 **81 → 79**（本轮 §62 −2），已还原未验证 **242 → 244**（本轮 +2）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1703,6 +1729,9 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 及商店族 `0x2872B`(sub_279BC)/`0x2AA00`(sub_29DAA) 等，CRT/库包装 `0x3645D`(u4)/`0x2E95B`(u3)/`0x365DA`(u2) 仍按既定策略跳过。
 本轮 §60 把该列表里改判为游戏内容的 ANI.DAT 解码簇 `0x36E3D..0x36FAC`+`0x36FD3`/`0x36FF4` 整体拉出（新建 `ani`），故闭包就绪游戏头名转为 `0x1B1E7`/`0x1BBDC`/`0x1CFF0`/`0x2000A`/`0x2872B`/`0x2AA00` 等大驱动器与 `0x36C56`(u1) 等库包装。
 本轮 §61 从这批大驱动器中按“同模块”优先拉出 `0x2AA00`(u1，`item_menu` 的驱动器，§40 建模块时留下的唯一待还原项)，`item_menu` 家族自顶闭合；剩余闭包就绪游戏头名仍有 `0x1B1E7`(u1，内层读未初始化 ebp 暂跳)/`0x1BBDC`(u1，地图行动交互驱动)/`0x2000A`(u1，地图缩放视图驱动)/`0x2872B`(u1，商店菜单驱动，`sub_279BC` 的 callee)/`0x2EBE1`(u3，2291B 超预算) 与库包装 `0x3645D`(u4)/`0x2E95B`(u3)/`0x365DA`(u2)/`0x36C56`(u1)（按既定策略跳过）。
+本轮 §62 借“伪 callee 校正”拉出 `0x29BCB`(u3) 及其唯一待还原 callee `0x29AB2`（新建 `save_menu`）——`0x29AB2` 的
+`jmp 0x28B3C` 只是 `0x2872B` 体内共享尾声，并非调用；此后存放档/场景槽选择屏闭合，`0x28F65`(u2，仍待 `0x29300`)/
+`0x29DAA`(u1，仍待 `0x28F65/29300/29620`) 等商店族头名相应前移。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交

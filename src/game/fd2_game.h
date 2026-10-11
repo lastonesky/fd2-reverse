@@ -59,6 +59,7 @@
 #include "reveal.h"
 #include "rle.h"
 #include "rle2.h"
+#include "save_menu.h"
 #include "scenario_load.h"
 #include "scene.h"
 #include "scene_core.h"
