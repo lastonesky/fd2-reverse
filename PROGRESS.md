@@ -3269,3 +3269,25 @@ if (!g_loop) g_total += rate;
 > （原来向上取整到 0x5000，会把 dseg02 `[0x4000,0x5000)` 的 0xFF 当数据，正是 §7.2 那个
 > 音效 bug 的生成器根源）。**当前检出可直接 `build.ps1` 编译。**
 > 历史改写前的完整仓库已备份为 `E:\FD2\port3-backup-<时间戳>.bundle`。
+
+### 7.11 仓库零原版字节：数据段改为构建时从 FD2.EXE 生成
+
+在 §7.10 瘦身之后，仓库里还留着 38KB 原版数据段（`src/fd2_image.c` 的数据部分）。
+本轮把它也移出仓库，改为**构建时从本地的 FD2.EXE 生成**：
+
+- 新增 `tools/prepare_image.py`：
+  1. 有 `analysis/seg_dseg0{2,3}.bin` 就直接复用；
+  2. 否则解析 `FD2.EXE`（DOS/4GW LE）：映射对象页、**应用 LE fixups**（数据表里是
+     重定位前的裸偏移，loader 会改写为绝对地址）、写出两个数据段；
+  3. 既无段数据又无 `FD2.EXE` → 打印提示并 `exit(1)` 停止构建；
+  4. 由数据段生成 `src/fd2_image.c`（只含数据段）。
+- `.gitignore` 忽略 `/FD2.EXE`、`analysis/seg_*.bin`、`src/fd2_image.c`；
+  `src/fd2_image.c` 从 git 移除（工作区保留为生成物）。
+- `build.ps1`、`tools/check_compile.sh --full`、`host/Makefile engine` 都先调用它。
+
+**核对**：从锚定的 `FD2.EXE`（md5 `a6e341a8...`）提取的 dseg02/dseg03 与 IDA 导出的
+`analysis/seg_dseg0{2,3}.bin` 逐字节一致（dseg02 前 0x4000、dseg03 全 0x34D2，0 差异；
+仅 dseg02 的 BSS 尾部 IDA=0xFF、本工具=0x00，功能等价）。fixups 应用 7948 条、跨页伪
+记录跳过 11 条。构建全链路实测通过（复用段 / 提取段 / 无 EXE 报错 / 双 profile 编译）。
+
+结果：仓库内**不再有任何原版程序字节**，同时仍可从玩家自备的 FD2.EXE 一键构建。

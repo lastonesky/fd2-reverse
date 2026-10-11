@@ -435,6 +435,9 @@ def gen_funcs(protos, restored):
 
 # ---------------------------------------------------------------- image
 def gen_image(bins):
+    # NOTE: for a normal build the data image is produced by
+    # tools/prepare_image.py (it only needs FD2.EXE, not the IDA exports).
+    # This generator is the IDA-export path; both emit the same data-only file.
     def carr(b):
         lines = []
         for i in range(0, len(b), 16):

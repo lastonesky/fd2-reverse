@@ -54,6 +54,17 @@ $link = if ($Console) { "/link /SUBSYSTEM:CONSOLE /DYNAMICBASE:NO /MAP:`"$out\fd
 $objdir = Join-Path $out "fd2engine.obj"
 New-Item -ItemType Directory -Force -Path $objdir | Out-Null
 
+# ---- data-segment image (derived from the user's FD2.EXE; not in git) -----
+# src/fd2_image.c is gitignored; tools/prepare_image.py reuses analysis/seg_*.bin
+# if present, otherwise extracts them from FD2.EXE, and stops with instructions
+# if neither exists.  See EXTERNAL_ARTIFACTS.md.
+$python = Get-Command python -ErrorAction SilentlyContinue
+if (-not $python) { $python = Get-Command py -ErrorAction SilentlyContinue }
+if (-not $python) { throw "python not found - needed for tools/prepare_image.py" }
+Write-Host "== preparing data-segment image (src/fd2_image.c) =="
+& $python.Source (Join-Path $root "tools\prepare_image.py")
+if ($LASTEXITCODE -ne 0) { throw "tools/prepare_image.py failed - see the message above" }
+
 # Run cl in the vcvars environment.  When already inside a dev prompt
 # (VSCMD_VER set) vcvars is not re-run.
 $vcprompt = if ($env:VSCMD_VER) { "" } else { "`"$vcvars`" >nul && " }

@@ -35,6 +35,7 @@ check:
 
 engine:
 	@mkdir -p build
+	@python3 ../tools/prepare_image.py --quiet || { echo "tools/prepare_image.py failed (need FD2.EXE; see EXTERNAL_ARTIFACTS.md)"; exit 1; }
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o build/fd2engine \
 	  $(HOST_SRCS) $(GAME_SRCS) $(HOST_LIBS)
 	@echo "linked: host/build/fd2engine"

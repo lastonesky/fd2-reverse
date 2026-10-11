@@ -31,6 +31,9 @@ echo "errors: $($CC $FLAGS -DFD2_GUEST_FIXED $TOLERANT src/game/*.c src/fd2_nati
 
 if [ "${1:-}" = "--full" ]; then
   hr
+  echo "########## prepare data-segment image (needs FD2.EXE; see prepare_image.py) ##########"
+  python3 tools/prepare_image.py --quiet || { echo "prepare_image failed"; exit 1; }
+  hr
   echo "########## -Werror: all modules + generated (both profiles) ##########"
   for P in "" "-DFD2_GUEST_FIXED"; do
     $CC $FLAGS -Werror $TOLERANT $P src/game/*.c src/fd2_native.c src/fd2_dispatch.c src/fd2_image.c src/fd2_relocate.c
