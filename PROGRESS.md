@@ -2978,3 +2978,25 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 | C4 | 删除全部 `ORIG_*` 机器码回调（594 调用点） | ✅ |
 | C2 | 7 张游戏分派表改真实函数指针数组；`fd2_relocate` no-op | ✅ |
 | C3 | VGA 帧缓冲缝；`vm_run` 及全部绘图层地址参数指针化 | ✅ |
+
+---
+
+## 6. `modern-platform` 分支：复用 port 的后端
+
+分支：`main`（原 `master`）→ `modern-platform`。目标：把已调通、画面/声音验证过的
+`E:\FD2\port` 宿主的**后端层**迁入 port3，为原生引擎提供现代跨平台音频/音乐/视频实现。
+
+**本轮已搬入 `host/`（verbatim，WSL gcc `make -C host check` 全 0 error）：**
+
+- 视频抽象 `render.h` + 现代实现 `render_sokol.c`（D3D11/Metal/GL）+ Win32 参考 `render_gdi.c`；
+- 音频抽象 `audio.h` + 现代实现 `audio_sokol.c`（WASAPI/CoreAudio/ALSA）+ 单设备混音器；
+- 音乐 `synth.c` + `xmidi.c` + `dls.c`；
+- 输入词汇 `keys.c`、OS 缝 `platform_posix.c`/`platform_win32.c`、`sokol_impl.c` + `vendor/sokol/`。
+
+**不复用**：port 的 `le.c`/`dos.c`/`repl.c`/`host.c`/`main_*.c`（与“跑原始机器码”耦合，
+port3 已去 guest）。
+
+**待写适配层**（`host/README.md` §3）：`fd2_kernel.c`（原生宿主内核）、`fd2_video.c`
+（`fd2_vga`+调色板→BGRA→`render_present`）、`fd2_audio.c`（用 synth/xmidi 实现
+`src/lib/ail.h` 的 16 入口）、`fd2_platform.c`（`int386/outp/delay/fd2_mem_lock` + BDA 键/tick
+写入 `fd2_lowmem`）。
