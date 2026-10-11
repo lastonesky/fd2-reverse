@@ -521,3 +521,136 @@ int map_ai_use_item(int actor, int require_empty)
     dword_53EC8 = 0;
     return 0;
 }
+
+/* 0x51D01 - the funcs_1541F dispatch table (28 entries).  The machine calls
+ * `[eax*4 + 0x51D01]` with the action id; slot 23 is 0x2218A
+ * (map_units_move_deploy, void), wrapped here so the table stays uniform. */
+typedef int (*map_action_fn)(int, int, const uint8_t *);
+
+static int map_action_entry23(int a1, int count, const uint8_t *list)
+{
+    map_units_move_deploy(a1, count, list);
+    return 0;
+}
+
+static map_action_fn const action_table[28] = {
+    map_action_entry00, map_action_entry01, map_action_entry02,
+    map_action_entry03, map_action_entry04, map_action_entry05,
+    map_action_entry06, map_action_entry07, map_action_entry08,
+    map_action_entry09, map_action_entry10, map_action_entry11,
+    map_action_entry12, map_action_entry13, map_action_entry14,
+    map_action_entry15, map_action_entry16, map_action_grow_x_cost,
+    map_action_grow_y_cost, map_action_widen_cost, map_action_entry20,
+    map_action_entry21, map_action_entry22, map_action_entry23,
+    map_action_entry16, map_action_clear_flag, map_action_entry26,
+    map_action_entry27,
+};
+
+/* 0x15311 - execute the action map_ai_decide chose (see map_ai.h). */
+int map_ai_do_action(int actor, int require_empty)
+{
+    const uint8_t *entry = action_entry((int)dword_53C2F);
+    uint8_t list[32];   /* 0x14818/0x149F8 target list */
+    uint8_t hit[12];    /* 4 x 3-byte +49 script entries for ev_script_run */
+    int filter, count, steps;
+
+    if (require_empty != 0)
+        filter = entry[6];
+    else
+        filter = (entry[6] == 0);
+
+    if ((int)dword_53C23 < 6)
+        return 0;
+
+    dlg_portrait_glide(actor);
+    count = map_reveal_reachable((int)dword_53C27, (int)dword_53C2B, list,
+                                 entry[4], 0, filter);
+    util_fix_records(dword_53A51);
+    j___delay(200);
+    dword_51A83 = entry[4] + 2;
+    map_slide_view((int)dword_53C27, (int)dword_53C2B);
+    dword_51A83 = 0;
+    map_view_update(0);
+
+    if ((int)dword_53C2F >= 10 || byte_53AF9 != 0) {
+        ev5_1D4CB();
+        action_table[dword_53C2F](actor, count, list);
+        menu_stop_and_free_music();
+    } else {
+        figure_effect_play(actor, (int)dword_53C2F, count, list);
+    }
+
+    steps = ev5_1B653(hit);
+    map_view_update(0);
+    map_units_animate();
+    ev_script_run((int)dword_53C4B, steps, (int)(intptr_t)hit);
+    map_view_update(0);
+    dword_53EC8 = 0;
+    dword_51A83 = 0;
+    return 1;
+}
+
+/* 0x14EF0 - the AI decision driver (see map_ai.h). */
+int map_ai_decide(int actor, int require_empty)
+{
+    const uint8_t *base;
+    const uint8_t *rec;
+    int flag, hp_delta;
+
+    map_ai_pick_reach_target(actor, require_empty);
+    map_ai_pick_action_target(actor, require_empty);
+    map_ai_pick_item_target(actor, require_empty);
+
+    /* read after the scorers, as the machine does (ds:0x53a45 reloaded) */
+    base = (const uint8_t *)dword_53A45;
+    rec  = base + REC_STRIDE * (uint32_t)actor;
+    flag = rec[52] & 0x40;
+    hp_delta = *(const uint16_t *)(const void *)(rec + 72)
+             - *(const uint16_t *)(const void *)
+                 (base + REC_STRIDE * (uint32_t)dword_53C4B + 74);
+
+    if ((int)dword_53C4F < 6 && (int)dword_53C23 < 6 && (int)dword_53C33 < 6)
+        return 0;
+
+    if ((int)dword_53C4F > (int)dword_53C23 &&
+        (int)dword_53C4F > (int)dword_53C33)
+        goto attack;
+
+    if ((int)dword_53C4F == (int)dword_53C23 &&
+        (int)dword_53C4F > (int)dword_53C33) {
+        if ((int)dword_53C2F >= 11) {
+            if (flag == 0)
+                goto action;
+        } else if (*(const uint16_t *)(const void *)action_entry((int)dword_53C2F)
+                   >= hp_delta) {
+            goto action;
+        }
+        goto attack;
+    }
+
+    if ((int)dword_53C4F == (int)dword_53C33 &&
+        (int)dword_53C4F > (int)dword_53C23) {
+        if (flag != 0)
+            goto attack;
+        goto item;
+    }
+
+    if ((int)dword_53C23 > (int)dword_53C4F &&
+        (int)dword_53C23 >= (int)dword_53C33)
+        goto action;
+    if ((int)dword_53C33 <= (int)dword_53C4F ||
+        (int)dword_53C33 <= (int)dword_53C23)
+        goto tail;
+
+item:
+    map_ai_use_item(actor, require_empty);
+    goto tail;
+action:
+    map_ai_do_action(actor, require_empty);
+    goto tail;
+attack:
+    map_attack_run(actor, require_empty);
+tail:
+    dword_51A83 = 0;
+    return 1;
+}

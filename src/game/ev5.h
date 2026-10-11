@@ -39,6 +39,6 @@ void ev5_205B4(void);
 void ev5_205BE(void);
 void ev5_1F04A(int a, int b);
 int  ev5_1F0DC(int a, int b);
-void ev5_1B653(uint8_t *out);
+int  ev5_1B653(uint8_t *out);
 
 #endif /* GAME_EV5_H */

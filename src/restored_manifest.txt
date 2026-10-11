@@ -857,6 +857,8 @@
 # map_action_router.  True closure = itself (all callees in the manifest);
 # 0x3702F is the Watcom stack probe, dropped.  No differential harness.
 0x15055 sub_15055 game/map_ai.h
+0x14EF0 sub_14EF0 game/map_ai.h
+0x15311 sub_15311 game/map_ai.h
 
 # 0x1CEED - the map command/action list panel: collects the set action bits of
 # a record (rec_collect_slot_bits, 0x1C269) and draws one name/tile/number row

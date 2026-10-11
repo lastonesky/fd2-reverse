@@ -360,8 +360,11 @@ int ev5_1F0DC(int a, int b)
     return r;
 }
 
-/* 0x1B653 - collect 3-byte records (offset +49) of moveable record type 3. */
-void ev5_1B653(uint8_t *out)
+/* 0x1B653 - collect 3-byte records (offset +49) of moveable record type 3.
+ * The machine leaves the number collected in EAX (0x1b64d: `mov eax,esi`), so
+ * this returns the count; the old `void` dropped it (0x15311 needs it for
+ * ev_script_run).  Signature fix only - the loop is unchanged. */
+int ev5_1B653(uint8_t *out)
 {
     int i, v5 = 0;
     for (i = 0; i < (int)dword_53BEB; i++) {
@@ -371,4 +374,5 @@ void ev5_1B653(uint8_t *out)
             && *(uint16_t *)(uintptr_t)(r + 64) == 0)
             memmove(out + 3 * v5++, (const void *)(uintptr_t)(r + 49), 3);
     }
+    return v5;
 }

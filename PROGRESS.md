@@ -2378,10 +2378,55 @@ playbook 批选（闭包就绪、usage 降序、剔除 CRT/库包装）落到唯
 - **共享尾声/伪 callee**：仅误挂 `sub_3702F`(chkstk)；真依赖全部已还原。
 - 无对拍器，标“已还原未验证”。
 
+### 94) 单位 AI 决策驱动 + 动作执行器 `0x14EF0`/`0x15311` → `map_ai_decide`/`map_ai_do_action`（本轮，2 函数）→ `src/game/map_ai.c/.h`（追加）
+
+playbook 批选（闭包就绪、usage 降序、剔除 CRT/库包装）落到游戏内容头名 `0x14EF0`(u6，357B)——`map_ai.h`
+早已列出的“决策驱动”——连同其唯一仍未还原的 callee `0x15311`(u2，381B)。真闭包＝本 2 函数
+（`0x1548E`/`0x15055`/`0x14237`/`0x1598A`/`0x1567E` 等 scorer 与动作执行器均已在册）；逐指令核对了
+离线反汇编 `14ef0..1504f` 与 `15311..1548d`。`0x14EF0` 的 `jmp 0x22BBE` 与 `0x15311` 的 `jmp 0x1317D`
+类共享尾声均为普通 return。
+
+**函数语义**：
+- `0x14EF0` = `int map_ai_decide(int actor, int require_empty)`：先跑三个评分器
+  （`map_ai_pick_reach_target`/`map_ai_pick_action_target`/`map_ai_pick_item_target`），再读 `flag=rec[actor].+52&0x40`
+  与 `hp_delta=word(rec[actor].+72)-word(rec[dword_53C4B].+74)`，若三项分数（`dword_53C4F`/`dword_53C23`/`dword_53C33`）
+  全 <6 则返回 0；否则按分数与 flag/hp 平局规则派发到 `map_attack_run`(0x1548E) / `map_ai_do_action`(0x15311) /
+  `map_ai_use_item`(0x15055)，末 `dword_51A83=0` 返回 1。
+- `0x15311` = `int map_ai_do_action(int actor, int require_empty)`：`entry=action_entry(dword_53C2F)`（0x4E866/0x619FD）；
+  `dword_53C23<6` 直接返回 0；否则滑入肖像→`map_reveal_reachable(53C27,53C2B,list,entry[4],0,filter)`（filter 取 `entry[6]` 或
+  其反）→`util_fix_records`→`j___delay(200)`→`dword_51A83=entry[4]+2`→`map_slide_view`→`map_view_update(0)`；
+  然后 `dword_53C2F>=10 || byte_53AF9` 走 `ev5_1D4CB`+**funcs_1541F 派发**+`menu_stop_and_free_music`，否则直呼
+  `figure_effect_play(actor,dword_53C2F,count,list)`；尾段 `steps=ev5_1B653(hit)`→`map_view_update(0)`→`map_units_animate`
+  →`ev_script_run(dword_53C4B,steps,hit)`→`map_view_update(0)`，清 `dword_53EC8`/`dword_51A83` 返回 1。
+
+**陷阱 / 伪代码伪影**：
+- **funcs_1541F 派发表**：机器 `call [eax*4+0x51D01]`（28 项，`analysis/dispatch_tables.csv`）；C 侧新建
+  `static map_action_fn const action_table[28]`，索引＝`dword_53C2F`，引用 `map_action.h` 的语义名
+  （0..27：`map_action_entry00..27`／`map_action_grow_x_cost`(17)/`grow_y_cost`(18)/`widen_cost`(19)/
+  `map_action_clear_flag`(25)，槽 23＝`map_units_move_deploy`，槽 24 复用 `map_action_entry16`）。槽 23 的
+  `map_units_move_deploy` 原为 `void`，包一层 `map_action_entry23` 返回 0 以统一表类型（返回被调用方丢弃）。
+- **未初始化栈参数伪影**：`sub_1D4F6` 在反编译里被渲染成 14 个实参，机器实际不压栈（`call 0x1d4f6`）——按
+  语义名 `menu_stop_and_free_music()` 直呼（`map_action.c` 已有同一结论）。
+- **局部缓冲布局**：`0x15311` 的输出名单 `v8`＝帧基址（32B，`0x14818` 以字节写），命中块 `v9`＝帧+0x20（12B，
+  3 个 3 字节脚本项），`count`＝帧+0x2c；已逐指令按 `esp` 位移还原。
+- **有符号比较**：全部分数比较机器用 `jge/jle/jl`（有符号），C 侧显式 `(int)` 转型。
+- **`0x1B653` 返回值缺口（已按主管 A 选项修复）**：`0x15311` 需要 `0x1B653(&hit)` 的 EAX 计数（`0x1b64d: mov eax,esi`），
+  而 `ev5.c` 的 `ev5_1B653` 原声明为 `void` 把返回值丢弃。经主管批准（A 选项、零调用者、行为保持），
+  已把 `ev5.h`/`ev5.c` 的签名改为 `int ev5_1B653(uint8_t *out)` 并 `return count;`（仅签名+return，不动循环）；
+  这是对“勿改已验证模块”约束的一次**明示偏离**（该函数在 `src/` 中无任何调用者，改动行为保持）。
+  若该改动导致编译/链接问题则回退到本地静态 helper（未发生）。
+- **伪 callee**：`0x14EF0`/`0x15311` 均仅误挂 `sub_3702F`(chkstk)；真依赖全部已还原。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **31 → 30**（本轮 §93 −1），已还原未验证 **292 → 293**（本轮 +1）。
+- `function-map.csv`：待还原 **30 → 28**（本轮 §94 −2），已还原未验证 **293 → 295**（本轮 +2）。
+- **已验证模块签名修复**：`ev5.c` 的 `ev5_1B653` `void→int`（见 §94 末条），经主管批准、零调用者、行为保持。
+- **闭包就绪游戏内容项**：本轮 §94 一并取走 `0x14EF0` 与 `0x15311` 后，闭包就绪游戏内容头名回落至
+  `0x1CFF0`(u1，1243B，行动菜单驱动，`0x1CFF0` 的 callee `0x1D6C8` 已在 §59 还原) 与受它阻挡的
+  `0x18D8C`(u2，800B，记录交互驱动器)；其余仍只剩 CRT/库包装
+  （`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）。
 - **闭包就绪游戏内容项**：本轮 §93 取走 `0x2FF01`（§5 超预算明示允许的基石解阻）后，闭包就绪待还原已无游戏内容项——
   只剩 CRT/库包装（`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）与伪函数条目
   （`0x10000`/`0x36B00`）。`0x2FF01` 已拉出后，此前受它阻挡的 `0x15311`/`0x1CFF0`/`0x18D8C` 等上游闭包相应前移
