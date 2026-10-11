@@ -1651,10 +1651,27 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - **chkstk**：`push 0x38/0x34; call 0x3702F` 不分配帧，丢弃。
 - 无对拍器，标“已还原未验证”。
 
+### 64) 队伍换人屏的重排叶子（本轮，1 函数）→ `src/game/party_roster.c/.h`（追加）
+
+§27 曾把换人屏驱动器 `0x2AF28` 的两个名册助手 `0x2B439`/`0x2B843` 拉出；本轮取该屏最后一个闭包就绪 callee
+`0x2B777`（其唯一在册 callee `sub_2968D` 实为伪依赖，见下），并入同模块 `party_roster`：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2B777` | `party_roster_apply_selection(mask)` | 把队伍表二 `dword_53BF7`(0xA00) 拷贝到 `guest_malloc` 暂存后**稳定划分**：槽 `1..dword_53BFB-1` 中，掩码字节 `selected[0..dword_53BFB-2]`（第 i 字节对应槽 i+1）非零者按原序先写回，再写未选中者；槽 0（表头）不动；末 `guest_free` 释放。 |
+
+**�底锅 / 伪代码伪影**：
+- **伪 callee（共享尾声）**：`function-map.csv` 把 `sub_2968D` 记为其 callee，但尾部 `push edi; jmp 0x29862` 落
+  在 `0x2968D` 体内（`0x29861` 起是 `call free(0x3776E); add esp,4; pop ebp/edi/esi/ebx; ret` 的共享尾声）；
+  真语义为 `free(tmp); return`，真依赖只有 CRT `malloc`(0x3706E)/`memmove`(0x3771C)/`free`(0x3776E)。
+- **堆缝**：机器 `0x3706E`/`0x3776E` 走 `guest_malloc`/`guest_free`（与同模块 `0x2B843` 一致）。
+- **chkstk**：`push 0x20; call 0x3702F` 不分配帧，丢弃。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **79 → 77**（本轮 §63 −2），已还原未验证 **244 → 246**（本轮 +2）。
+- `function-map.csv`：待还原 **77 → 76**（本轮 §64 −1），已还原未验证 **246 → 247**（本轮 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1756,6 +1773,9 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 故 §62 的槽选择屏及两侧读写一并闭合（`0x29300`(u1，仍待 `0x26996…` 等)/`0x2670E`(u1)/`0x2B777`(u1)
 仍为待还原调用者）；下一闭包就绪游戏头名回落至 `0x1B1E7`(u1)/`0x1BBDC`(u1)/`0x2000A`(u1)/`0x2872B`(u1)
 与库包装 `0x3645D`(u4)/`0x2E95B`(u3)/`0x365DA`(u2)/`0x36C56`(u1)（按既定策略跳过）。
+本轮 §64 拉出 `0x2B777`(u1，队伍换人屏 `0x2AF28` 的最后一个干净 callee，追加 `party_roster`)，
+故换人屏只剩 `0x2AF28`/`0x2B4FB`/`0x2B67F` 三角（同族，真闭包 2091B 超预算，暂跳）；
+下一闭包就绪游戏头名仍为 `0x1B1E7`(u1)/`0x1BBDC`(u1)/`0x2000A`(u1)/`0x2872B`(u1) 等大驱动器。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交

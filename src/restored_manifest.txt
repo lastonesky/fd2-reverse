@@ -717,3 +717,9 @@
 # into the chosen FD2.SAV slot, 0x2986F republishes the chosen slot.
 0x2968D sub_2968D game/save_menu.h
 0x2986F sub_2986F game/save_menu.h
+
+# party-change screen callee 0x2B777: stable-partition the party table
+# (dword_53BF7) so the slots flagged in the selection mask come first.  Its
+# function-map callee sub_2968D is a false dependency (the `jmp 0x29862` tail is
+# a shared free-epilogue inside 0x2968D's body).
+0x2B777 sub_2B777 game/party_roster.h
