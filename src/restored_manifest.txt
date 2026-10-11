@@ -487,6 +487,10 @@
 0x2F631 sub_2F631 game/figure_view.h
 0x2FE14 sub_2FE14 game/figure_view.h
 
+# the attack-animation driver itself (called by the still-pending map attack
+# view 0x2E2B0; true closure = itself, its helpers are already in figure_view)
+0x2EBE1 sub_2EBE1 game/figure_view.h
+
 # map view / zoom / gauge frame-buffer helpers.  The zoom transition driver
 # 0x2000A lives in map_zoom.h (its 0x21548 sibling is map_action_zoom_resolve
 # in map_action.h); the map status overlay family 0x1E611/1E7F6/1E856 pending.

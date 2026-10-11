@@ -1938,14 +1938,43 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - **`svc_play_sfx`/`svc_play_sfx2` 的 bank 是 FDOTHER 77**（本函数自持 `snd`），非 main 的 dword_53EEC。
 - 无对拍器，标“已还原未验证”。
 
+### 76) 攻击动画驱动器 `0x2EBE1` → `figure_attack_play`（本轮，1 函数，§5 大单函数条款）→ `src/game/figure_view.c/.h`（追加）
+
+§75 记“下批依 §5 条款取 `0x2EBE1`”。闭包就绪游戏内容项已尽（余下仅 CRT/库包装与伪函数条目），
+故取此超预算单函数 `0x2EBE1`（2291B，≤2500B）：其**真闭包＝自身**——所有真 callee 均已还原/已验证
+（`figure_bg_scroll`/`figure_bg_scroll_portrait`/`map_attack_result`/`res_blit`/`gfx_copy_rows`/`svc_play_sfx`/
+`svc_wait_ticks`/`ui_status_panel_at`/`util_rand` 及 CRT `memset`/`outp`/`j___delay`），并逐指令核过
+离线反汇编 `2ebe1..2f4d3`（578 行）。它是 `sub_2E2B0`（地图攻击视图，待还原）调用的同族
+figure 播放器（`0x2FB2C`=item_menu_figure_play 的姊妹），故追加至既有 `figure_view`。
+
+| 项 | 要点 |
+|---|---|
+| 签名/ABI | `int figure_attack_play(int attacker, int defender, const uint8_t *figure, const uint8_t *base, uint8_t *work, uint8_t *screen, const void *portrait, int snd)`；8 参 cdecl（调用点 `0x2E6DE/2E724/2E75B` 均 `add esp,0x20`）。arg1/2＝攻/守记录号（索引 `dword_53A45`＋80），arg3＝攻方 FIGANI 组，arg4＝守方组，arg5＝640 步幅工作缓冲（`memset 0x1F400`），arg6＝320 步幅屏缓，arg7＝TAI 肖像条，arg8＝FDOTHER 音效 bank（调用点压 `ds:0x5414B`） |
+| 外环 | `v27` 起始 1；`util_rand()%100<3` 或攻击结果 `out[4]!=0`（仅首次）时增 1（即重播 2 次）；`v30==0` 强制清零退出；`for(;;){ v11=v27--; if(v11==0) break; ... }` 取自旋反（do-while 判据在顶部） |
+| 攻击结算 | `dword_54133==0` 时快照守方 HP 字（+0x40）→ `v28`，调 `map_attack_result(attacker,defender,out[6])`；否则 `out[0..5]=0` |
+| 第一趟（`figure[1]!=0`） | `memset(work,0,0x1F400)`；`v12<figure[2]`：每子体（`figure[4*i+8]` 偏移）播 `sub[5]`、`gfx_copy_rows(work+320,640,screen,…)`→`res_blit(figure,v12,work+320,640,-1)`→拷到 VGA→`svc_wait_ticks(sub[6])`；收尾按 `rec_att[6]` 选 `figure_bg_scroll(defender,base,screen,work,dword_5413B)` 或 `figure_bg_scroll_portrait(defender,base,portrait,screen,work,dword_5413B)`（另一分支 work 直用、偏移 +320） |
+| 主趟 | `v12>=figure[0]` 收尾：`v30==0⇒v27=0`；`v27!=0 && figure[1]==1` 时 `memset(work,0,0x1F400)`＋按 `rec_att[6]` 选 `figure_bg_scroll`/`figure_bg_scroll_portrait`（bg 用 `dword_54137`）。逐子体：`sub[4]!=0` 时 `++v33`、`v30=v28-out[5]*v33/v32`（有符号，钳 0）、写回 `rec_def+0x40`、`dword_54133==0` 时 `ui_status_panel_at(screen,defender)`，再按 `out[0]` 播 `svc_play_sfx(snd,0,1)` 或置 `v8=5`,`v37=33` 并播 `sub[5]`；否则 `sub[5]!=0` 直接播 |
+| 逐帧（`j<sub[6]`） | `v38=strip[v8]`（`figure[1]!=0` 时 0）；`gfx_copy_rows(work+16040,400,screen,…)`；按 `rec_att[6]` 与 `sub[7]&1` 决定攻方 `figure` 与守方 `base` 的 stamp 顺序，守方落点＝`work+16040 ∓ off[v8] ∓ 400*v38`（平移表 `0x5266C`={0,4,9,14,18,14}，条纹表 `0x52684`={0,2,4,6,8,10}）；拷 VGA；`sub[4]==1 && v33==v32` 时按 `out[2]`（蓝 1/0x20）/`out[1]`（白 0x3F）闪 DAC＋`j___delay`；`base` 基帧计数 `counter==base_sub[6]` 进位、`base_frame==base[0]` 回绕；`v8` 递减、`v37=-1`、`svc_wait_ticks(1)` |
+| 返回 | `dword_54133==1 && v33==v32` 时提前 `return 1`（供 `0x2E2B0` 分支）；否则返回最后一次 `v30` |
+
+**陷阱 / 伪代码伪影**：
+- **伪函数/伪 callee**：`sub_3702F`（Watcom chkstk，`push 0xB8; call`）不分配帧，非依赖；`0x37910`=memset、
+  `0x3790A`=j___delay、`0x37AE5`=outp（CRT）；`dword_53A45` 表走 `(uint8_t *)dword_53A45 + 80*rec`。
+- **未初始化局部快照**：`dword_54133!=0` 时不写 `v28`（机器 `[esp+0x50]` 亦未初始化），C 侧建模为 0 并注释。
+- **Hex-Rays 形参错列**：伪代码给 `__int16 *a7`（实为 TAI 条 `const void *`）与 `unsigned __int8 *a4`（守方组）；
+  机器 `[esp+0xac]`=a4、`[esp+0xb8]`=a7，逐条核对后按指针语义化。第一趟 loop bound 用 `figure[2]`、主趟用 `figure[0]`（两部同体共用 `v12`）。
+- **`out` 块即 `map_attack_result` 的 6 dword 结果区**（`[esp+0x18..0x2C]`）；`out[0]`=命中、`out[1]`=暴击、`out[2]`=反击/效果、`out[4]`=效果 3、`out[5]`=伤害。
+- **归属**：追加至既有 `figure_view`（§0-D/§0-F 已建，伞头已含）；唯一 caller `0x2E2B0` 仍待还原。无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **56 → 55**（本轮 §75 −1），已还原未验证 **267 → 268**（本轮 +1）。
-- **闭包就绪游戏内容项**：本轮 §75 取走 `0x1F894`(1765B) 后，闭包就绪待还原仅剩 CRT/库包装
-  （`0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`/`0x365AB`，既定策略跳过）、伪函数条目
-  （`0x10000`/`0x36B00`），及超 1500B 的 `0x2EBE1`(2291B，真闭包＝自身)；下批依 §5
-  “大单函数”条款取 `0x2EBE1`。
+- `function-map.csv`：待还原 **55 → 54**（本轮 §76 −1），已还原未验证 **268 → 269**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §76 取走超预算单函数 `0x2EBE1` 后，闭包就绪待还原仅剩 CRT/库包装
+  （`0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`/`0x365AB`，既定策略跳过）与伪函数条目
+  （`0x10000`/`0x36B00`）；下批按 §2 取“最小传递待还原闭包”的游戏内容簇——换人屏三角
+  `0x2AF28`(1297B)/`0x2B4FB`(388B)/`0x2B67F`(202B)（真闭包＝此三件，合计 1887B）或地图攻击视图
+  簇 `0x2E2B0`(1707B)/`0x2E9A8`(503B)（合计 2210B，另含库包装 `0x2E95B`）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 

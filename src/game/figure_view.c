@@ -236,3 +236,250 @@ void figure_frame_run(const void *figure, void *work, int frames)
         svc_wait_ticks(1);
     }
 }
+
+/* 0x2EBE1 - play one attack animation between the attacker record `attacker`
+ * and the defender record `defender`, stamping the attacker's figure group
+ * `figure` (FIGANI.DAT) and the defender's group `base` over the 640-stride
+ * work buffer `work` / 320-stride `screen`, and applying the full attack
+ * evaluation map_attack_result (0x2F7B6) as the drain proceeds.
+ *
+ * The outer loop repeats the whole animation once, or twice on a 3% roll
+ * (`util_rand()%100 < 3`) and again when the attack result raises its effect
+ * flag out[4]; a zero drain value (`v30`) forces the last repeat.  When demo
+ * flag dword_54133 is zero the defender's HP word (+0x40) is snapshotted into
+ * `v28`, the attack is resolved into `out[6]` and the meter drains by
+ * `out[5]*done/postures`; each posture sub plays its sound and, while the
+ * attack still misses (out[0]!=0), resets the shake index v8 to 5 and the
+ * res_blit mode v37 to 33.  The first pass (when figure[1]!=0) pre-renders every
+ * sub of `figure` before the bg scroll;
+ * the main pass then alternately flashes the palette (out[2] -> blue, out[1]
+ * -> white), stamps `base` offset by the shake table 0x5266C / strip table
+ * 0x52684 (or a mirror of it when the attacker record byte +6 is clear),
+ * copies the window to VGA, advances the base frame counter and waits a tick.
+ * Returns 1 to the caller (the attack driver 0x2E2B0) on the early-out when
+ * dword_54133==1 and every posture has drained, otherwise the last drain
+ * value.  The machine reads the uninitialised frame slot `v28` when
+ * dword_54133!=0; modelled as 0. */
+int figure_attack_play(int attacker, int defender, const uint8_t *figure,
+                       const uint8_t *base, uint8_t *work, uint8_t *screen,
+                       const void *portrait, int snd)
+{
+    int      off[6];   /* pixel shake offsets, dword_5266C = {0,4,9,14,18,14} */
+    int      strip[6]; /* strip index step,    dword_52684 = {0,2,4,6,8,10}   */
+    int      out[6];   /* map_attack_result result block                     */
+    uint8_t *rec_att = (uint8_t *)dword_53A45 + 80u * (uint32_t)attacker;
+    uint8_t *rec_def = (uint8_t *)dword_53A45 + 80u * (uint32_t)defender;
+    int      v8      = 0;  /* shake/strip index into off[]/strip[]            */
+    int      v27     = 1;  /* repeat counter                                  */
+    int      v28     = 0;  /* defender HP snapshot for the drain              */
+    int      v30     = 0;  /* running drain value (machine return)            */
+    int      v32     = 0;  /* number of posture subs (min 1)                  */
+    int      v33;          /* posture subs drained so far                     */
+    int      v37     = -1; /* res_blit mode for the flashing base stamp       */
+    int      v38;          /* BG strip step for this frame                    */
+    int      v12;          /* sub index                                       */
+    int      i;
+    int      j;
+    uint8_t  base_frame = 0;
+    uint8_t  counter    = 0;
+    uint8_t  posture    = 0; /* "attack result raised out[4]" flag            */
+
+    memcpy(off, &unk_5266C, sizeof(off));
+    memcpy(strip, &unk_52684, sizeof(strip));
+
+    for (i = 0; i < figure[0]; ++i)
+        if (figure[*(const uint32_t *)(figure + 4 * i + 8) + 4] != 0)
+            ++v32;
+    if (v32 == 0)
+        v32 = 1;
+
+    if ((int)(util_rand() % 100) < 3)
+        v27 = 2;
+
+    for (;;) {
+        int repeat = v27--;
+
+        if (repeat == 0)
+            break;
+
+        v33 = 0;
+        if (dword_54133 == 0) {
+            v28 = *(const uint16_t *)(const void *)(rec_def + 0x40);
+            map_attack_result(attacker, defender, out);
+            if (posture == 0 && out[4] != 0) {
+                posture = 1;
+                ++v27;
+            }
+        }
+
+        v12 = 0;
+        if (dword_54133 != 0)
+            memset(out, 0, sizeof(out));
+
+        if (figure[1] != 0) {
+            memset(work, 0, WORK_SIZE);
+            if (rec_att[6] != 0) {
+                while (v12 < figure[2]) {
+                    const uint8_t *s =
+                        figure + *(const uint32_t *)(figure + 4 * v12 + 8);
+
+                    if (s[5] != 0)
+                        svc_play_sfx((const void *)(intptr_t)snd, s[5], 1);
+                    gfx_copy_rows(work + 320, 640, screen, 320, 320, 200);
+                    res_blit((void *)(uintptr_t)figure, v12, work + 320, 640,
+                             -1);
+                    gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320,
+                                  work + 320, 640, 320, 200);
+                    svc_wait_ticks(s[6]);
+                    ++v12;
+                }
+                figure_bg_scroll(defender, base, screen, work,
+                                 (const void *)(uintptr_t)dword_5413B);
+            } else {
+                while (v12 < figure[2]) {
+                    const uint8_t *s =
+                        figure + *(const uint32_t *)(figure + 4 * v12 + 8);
+
+                    if (s[5] != 0)
+                        svc_play_sfx((const void *)(intptr_t)snd, s[5], 1);
+                    gfx_copy_rows(work, 640, screen, 320, 320, 200);
+                    res_blit((void *)(uintptr_t)figure, v12, work, 640, -1);
+                    gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, work, 640,
+                                  320, 200);
+                    svc_wait_ticks(s[6]);
+                    ++v12;
+                }
+                figure_bg_scroll_portrait(defender, base, portrait, screen,
+                                          work,
+                                          (const void *)(uintptr_t)dword_5413B);
+            }
+        }
+
+        for (;;) {
+            const uint8_t *s;
+
+            if (v12 >= figure[0]) {
+                if (v30 == 0)
+                    v27 = 0;
+                if (v27 != 0 && figure[1] == 1) {
+                    memset(work, 0, WORK_SIZE);
+                    if (rec_att[6] != 0) {
+                        gfx_copy_rows(work, 640, screen, 320, 320, 200);
+                        res_blit((void *)(uintptr_t)base, 0, work, 640, -1);
+                        figure_bg_scroll_portrait(
+                            attacker, figure, portrait, screen, work,
+                            (const void *)(uintptr_t)dword_54137);
+                    } else {
+                        gfx_copy_rows(work + 320, 640, screen, 320, 320, 200);
+                        res_blit((void *)(uintptr_t)base, 0, work + 320, 640,
+                                 -1);
+                        figure_bg_scroll(attacker, figure, screen, work,
+                                         (const void *)(uintptr_t)dword_54137);
+                    }
+                }
+                break;
+            }
+
+            s = figure + *(const uint32_t *)(figure + 4 * v12 + 8);
+
+            if (s[4] != 0) {
+                ++v33;
+                v30 = v28 - out[5] * v33 / v32;
+                if (v30 < 0)
+                    v30 = 0;
+                *(uint16_t *)(void *)(rec_def + 0x40) = (uint16_t)v30;
+                if (dword_54133 == 0)
+                    ui_status_panel_at((int)(uintptr_t)screen, defender);
+                if (out[0] != 0) {
+                    if (s[5] != 0)
+                        svc_play_sfx((const void *)(intptr_t)snd, 0, 1);
+                } else {
+                    v8  = 5;
+                    v37 = 33;
+                    if (s[5] != 0)
+                        svc_play_sfx((const void *)(intptr_t)snd, s[5], 1);
+                }
+            } else if (s[5] != 0) {
+                svc_play_sfx((const void *)(intptr_t)snd, s[5], 1);
+            }
+
+            for (j = 0; j < s[6]; ++j) {
+                const uint8_t *bs;
+
+                v38 = strip[v8];
+                if (figure[1] != 0)
+                    v38 = 0;
+                gfx_copy_rows(work + 16040, 400, screen, 320, 320, 200);
+                if (rec_att[6] != 0) {
+                    if ((s[7] & 1) != 0)
+                        res_blit((void *)(uintptr_t)figure, v12, work + 16040,
+                                 400, -1);
+                    res_blit((void *)(uintptr_t)base, base_frame,
+                             work + 16040 - off[v8] - 400 * v38, 400, v37);
+                    if ((s[7] & 1) == 0)
+                        res_blit((void *)(uintptr_t)figure, v12, work + 16040,
+                                 400, -1);
+                } else {
+                    if ((s[7] & 1) == 0)
+                        res_blit((void *)(uintptr_t)figure, v12, work + 16040,
+                                 400, -1);
+                    res_blit((void *)(uintptr_t)base, base_frame,
+                             work + 16040 + off[v8] + 400 * v38, 400, v37);
+                    if ((s[7] & 1) != 0)
+                        res_blit((void *)(uintptr_t)figure, v12, work + 16040,
+                                 400, -1);
+                }
+                gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, work + 16040,
+                              400, 320, 200);
+
+                if (s[4] == 1 && v33 == v32) {
+                    if (out[2] != 0) {
+                        outp(0x3C8, 0);
+                        outp(0x3C9, 1);
+                        outp(0x3C9, 0x20);
+                        outp(0x3C9, 0);
+                        j___delay(20);
+                        outp(0x3C8, 0);
+                        outp(0x3C9, 0);
+                        outp(0x3C9, 0);
+                        outp(0x3C9, 0);
+                    }
+                    if (out[1] != 0) {
+                        outp(0x3C8, 0);
+                        outp(0x3C9, 0x3F);
+                        outp(0x3C9, 0x3F);
+                        outp(0x3C9, 0x3F);
+                        j___delay(20);
+                        outp(0x3C8, 0);
+                        outp(0x3C9, 0);
+                        outp(0x3C9, 0);
+                        outp(0x3C9, 0);
+                        j___delay(40);
+                    }
+                }
+
+                bs = base + *(const uint32_t *)(base + 4 * base_frame + 8);
+                if ((uint8_t)(counter + 1) == bs[6]) {
+                    counter = 0;
+                    if ((uint8_t)(base_frame + 1) == base[0])
+                        base_frame = 0;
+                    else
+                        ++base_frame;
+                } else {
+                    ++counter;
+                }
+
+                if (v8 != 0)
+                    --v8;
+                v37 = -1;
+                svc_wait_ticks(1);
+            }
+
+            if (dword_54133 == 1 && v33 == v32)
+                return 1;
+
+            ++v12;
+        }
+    }
+    return v30;
+}

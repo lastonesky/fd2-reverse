@@ -1,5 +1,5 @@
 /* figure_view.h - unit figure/animation view helpers (original 0x30E25,
- * 0x2F4D4, 0x30E9D).
+ * 0x2F4D4, 0x30E9D) plus the attack-animation driver 0x2EBE1.
  *
  * The still-pending driver sub_2CF30 (0x2CF30) shows a party member's animated
  * figure (FIGANI.DAT) over a scrolling background (BG.DAT) with an alternating
@@ -8,7 +8,8 @@
  * fread wrapper sub_373CA and is therefore left out of this batch (library
  * zone, see module-map.md).  Two sibling helpers of the same family, used by
  * the drivers sub_2EBE1 (0x2EBE1) and sub_2FB2C (0x2FB2C), are restored here
- * too.
+ * too; the attack driver sub_2EBE1 itself is now restored here as well (its
+ * caller 0x2E2B0 is still pending).
  *
  *   0x30E25  figure_bg_pick    pick the BG.DAT sub-image index for the shown
  *                              unit: start from byte_52470[dword_53C03] and,
@@ -77,5 +78,17 @@ void figure_bg_scroll_portrait(int unit, const void *figure,
 /* 0x2FE14 - play `frames` animation frames of the figure group `figure` over
  * the cycling BG strips into `work` (640-stride), waiting one tick per frame. */
 void figure_frame_run(const void *figure, void *work, int frames);
+
+/* 0x2EBE1 - play one attack animation between the attacker record `attacker`
+ * and the defender record `defender`: stamp the attacker's figure group
+ * `figure` (FIGANI.DAT) and the defender's group `base` over the 640-stride
+ * `work` buffer and the 320-stride `screen`, drain the defender's HP toward the
+ * map_attack_result (0x2F7B6) damage, flash the palette on the result flags and
+ * wait a tick per frame.  `portrait` is the TAI.DAT strip stamped by the
+ * figure_bg_scroll_portrait variant, `snd` the FDOTHER sound bank.  Returns 1
+ * on the early-out of the dword_54133==1 mode, otherwise the last drain value. */
+int figure_attack_play(int attacker, int defender, const uint8_t *figure,
+                       const uint8_t *base, uint8_t *work, uint8_t *screen,
+                       const void *portrait, int snd);
 
 #endif /* GAME_FIGURE_VIEW_H */
