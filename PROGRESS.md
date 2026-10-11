@@ -2224,11 +2224,31 @@ CRT/库包装 `0x3645D`(read)/`0x365DA`(int386) 后，游戏头名同为 u1 的�
 - 堆：`dword_53F66` 系 `res_load`（guest_malloc）所出，收尾用 `guest_free`。
 - 无对拍器，标“已还原未验证”。本批后 `0x29DAA` 的唯一 caller `0x2670E` 仍未闭包就绪。
 
+### 87) 地点列表入口驱动器 `0x2670E` → `place_menu_commit`（本轮，1 函数）→ `src/game/place_menu.c/.h`（追加）
+
+按 §86 遗留建议取 `0x2670E`（u1，648B，闭包就绪）：它是 `0x26152`（scene_apply_state）地点列表
+按 Enter 时提交的分派器，`dword_53F4A` 选场所。逐指令核过离线反汇编 `2670e..26995`。真闭包＝自身
+（所有 callee 已在册，§86 点名的 `0x29DAA` 也已在册）。合计 648B，在 §1 预算内。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2670E` | `place_menu_commit()` | `place=tbl_ptr(&fd2_data2[0x238D],31,dword_53C03,-31)[0]`；`bgm_play(-1,0)`；若 `dword_53F4A==2`：`msg_open_portrait(75)`+`vm_run(dword_53A7D,513,0xA951F,320,205,76,74,19,1)`+`dword_53A51=(uint8_t*)1`+`dlg_blit_dato(·,·,0)`+`v0=map_window_run()`+`map_draw_text_window()`+`dword_53A51=0`+`msg_close_portrait`，`v0==-1||dword_53C57!=0` 即 `return 0`，否则 `(dword_53C03<27&&dword_53BFB>16)||(dword_53C03>26&&dword_53BFB>20)` 时置 `dword_53A45=dword_53BF7`→`party_change_run()`→清零，其返回 0 则 `return 0`，然后 `result=1`；`dword_53A45=dword_53BF7`；`frame=guest_malloc(0xFA00)`→`memmove(VGA←frame)`；`i=1..10`：`place_zoom_blit(((byte_52363[6*place+dword_53F4A]-150)*i/10)*128+20480, ((byte_52375[...]-100)*i/10)*128+12800, frame, 128-9i)`+`memmove(VGA←dword_53A49)`+`pal_fade_range(0,255,4i)`；再 `pal_fade_range(0,255,64)`+`memset(VGA,0,64000)`；分派：0→`bgm_play(13,0)`+`place_screen_run`、4→`bgm_play(11,0)`+`place_screen4_run`、3/5→`bgm_play(dword_53F4A==3?15:14,0)`+`place_menu_run`；`dword_53F4A!=2` 时 `bgm_play(10,0)`；`guest_free(frame)`+`dword_53A45=0`+`return result` |
+
+**陷阱 / 伪代码伪影**：
+- **chkstk**：`push 0x3C; call 0x3702F`，丢弃（0x3702F 自恢复 ESP，实参仍在 `[esp+N]` 原位）。
+- **共享尾声（纯 return）**：`JUMPOUT(0x29867)` 落在 `0x2986F` 体内，帧一致（`add esp,4; pop ebp/edi/esi/ebx; ret`），即 `return eax`；`0x2670E` 帧（`push ebx/esi/edi/ebp; sub esp,4`）与之吻合。
+- **`dlg_blit_dato` ABI**：机器只压 idx（恒 0），按 §0-J 约定补传 `dword_53A85,dword_53C67`。
+- **`bgm_play` 参数序**：机器 `push loop_count; push track`；`push 0`+`push 0xd` = `bgm_play(13,0)`。
+- **`<<7` 改写为 `*128`**：机器有符号 `idiv 10` 后 `shl eax,7`；C 侧 `*128`，32 位结果一致。
+- **场所字节表**：`byte_52363/52375[6*place+dword_53F4A]` 为 `(uint8_t*)&fd2_data1[0x2363/0x2375]`，逐条按机器 `movzx edx,BYTE PTR [ecx+0x5236x]` 还原。
+- **堆 / 哨兵**：`frame` 系 0x3706E（guest_malloc）所出，收尾 `guest_free`；`dword_53A51` 用 `(uint8_t*)(uintptr_t)1` 哨兵（同 `party_roster.c`）。
+- 无对拍器，标“已还原未验证”。本批后 `0x2670E` 的唯一 caller `0x26152` 的 `sub_2670E()` 调用点闭包就绪。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **38 → 37**（本轮 §86 −1），已还原未验证 **285 → 286**（本轮 +1）。
-- **闭包就绪游戏内容项**：本轮 §86 取走 `0x29DAA` 后，闭包就绪待还原还剩 CRT/库包装
+- `function-map.csv`：待还原 **37 → 36**（本轮 §87 −1），已还原未验证 **286 → 287**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §87 取走 `0x2670E` 后，闭包就绪待还原还剩 CRT/库包装
   （`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`），
   以及 `0x15DF3`(126B，u1，`0x13A9F` 的叶助手，唯一 caller 仍待还原)。`0x2CF30`(2269B)/`0x2D80D`(1780B)/`0x31C49`(1511B)
   仍超预算或依赖未还原 CRT 包装。

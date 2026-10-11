@@ -467,6 +467,16 @@
 0x26A7A sub_26A7A game/place_menu.h
 0x26B91 sub_26B91 game/place_menu.h
 
+# 0x2670E - the place-list entry driver (place_menu_commit): snapshot the VGA
+# frame to the guest heap, play the 10-step place_zoom_blit zoom-out with a
+# pal_fade_range wash each step, then dispatch by place type (0 -> 0x29300,
+# 4 -> 0x29DAA, 3/5 -> 0x279BC); place type 2 first plays its scripted intro
+# (msg_open_portrait + vm_run + map_window_run) and, if the party screen
+# confirms, falls through.  True closure = itself (all callees in the
+# manifest); 0x29867 is the frame's shared epilogue (plain return), 0x3702F is
+# the Watcom stack probe, both dropped.  No differential harness.
+0x2670E sub_2670E game/place_menu.h
+
 # map action / record-list helpers (drivers 0x20C6F / 0x1CFF0 / 0x15055 / 0x1567E / 0x1548E / 0x18D8C still pending)
 0x22866 sub_22866 game/map_action.h
 0x1B6B7 sub_1B6B7 game/map_records.h
