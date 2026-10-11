@@ -1,9 +1,8 @@
 /* title_screen.h - opening / continue-screen helpers (original 0x2DF01,
- * 0x1FF79, 0x1F73F, 0x1F81E).
+ * 0x1FF79, 0x1F73F, 0x1F81E) and the opening screen itself (0x1F894).
  *
- * These three are the already-restorable callees of the opening screen 0x1F894
- * (it loads FDOTHER.DAT, scrolls the logo, and asks "continue?" against
- * FD2.SAV):
+ * These four are the helpers used by the opening screen 0x1F894 (it loads
+ * FDOTHER.DAT, scrolls the logo, and asks "continue?" against FD2.SAV):
  *
  *   0x1F73F  title_frame_show  one animation frame: fade out, RLE-decode one
  *                             FDOTHER sub-image to the screen, fade in, wait,
@@ -47,5 +46,10 @@ void title_frame_show(int image_index, int palette_index, const void *strip,
  * the animation starts at full brightness.  The trailing fade is the shared
  * 0x1F882 block (pal_fade_out) that this function tail-falls into. */
 void title_ani_play(int index, int delay_ms, int palette_index);
+
+/* 0x1F894 - the opening / continue screen.  No arguments; returns the main
+ * menu choice that scenario_menu branches on (0 = new game, 1 = load game,
+ * else = save game).  See title_screen.c for the full frame script. */
+int title_screen_run(void);
 
 #endif /* GAME_TITLE_SCREEN_H */

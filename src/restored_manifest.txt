@@ -428,8 +428,10 @@
 0x13315 sub_13315 game/map_scroll.h
 0x13488 sub_13488 game/map_scroll.h
 0x13A44 sub_13A44 game/map_scroll.h
+0x15DF3 sub_15DF3 game/map_scroll.h
 
-# opening / continue-screen helpers (0x1F894 orchestrator still pending)
+# opening / continue screen: logo scroll + continue-prompt (0x1F894) and its helpers
+0x1F894 sub_1F894 game/title_screen.h
 0x1F73F sub_1F73F game/title_screen.h
 0x1F81E sub_1F81E game/title_screen.h
 0x1FF79 sub_1FF79 game/title_screen.h
@@ -466,6 +468,16 @@
 0x26A7A sub_26A7A game/place_menu.h
 0x26B91 sub_26B91 game/place_menu.h
 
+# 0x2670E - the place-list entry driver (place_menu_commit): snapshot the VGA
+# frame to the guest heap, play the 10-step place_zoom_blit zoom-out with a
+# pal_fade_range wash each step, then dispatch by place type (0 -> 0x29300,
+# 4 -> 0x29DAA, 3/5 -> 0x279BC); place type 2 first plays its scripted intro
+# (msg_open_portrait + vm_run + map_window_run) and, if the party screen
+# confirms, falls through.  True closure = itself (all callees in the
+# manifest); 0x29867 is the frame's shared epilogue (plain return), 0x3702F is
+# the Watcom stack probe, both dropped.  No differential harness.
+0x2670E sub_2670E game/place_menu.h
+
 # map action / record-list helpers (drivers 0x20C6F / 0x1CFF0 / 0x15055 / 0x1567E / 0x1548E / 0x18D8C still pending)
 0x22866 sub_22866 game/map_action.h
 0x1B6B7 sub_1B6B7 game/map_records.h
@@ -477,14 +489,38 @@
 0x1741C sub_1741C game/map_cursor.h
 0x176B4 sub_176B4 game/map_cursor.h
 
-# unit figure/animation view helpers (driver 0x2CF30 still pending; sibling 0x2E95B is a CRT-fread wrapper, left out)
+# unit figure/animation view helpers (sibling 0x2E95B is a CRT-fread wrapper, left out)
 0x30E25 sub_30E25 game/figure_view.h
 0x2F4D4 sub_2F4D4 game/figure_view.h
 0x30E9D sub_30E9D game/figure_view.h
 
+# the party figure presentation driver called by the effect dispatcher 0x2FF01.
+# True closure = itself (all callees in the manifest); the `push 0x100; call
+# 0x3702F` chkstk makes Hex-Rays emit only its first argument, so the machine's
+# 4-argument cdecl ABI was decoded from the single call site 0x3003f.
+0x2CF30 sub_2CF30 game/figure_view.h
+
 # figure-view siblings used by the drivers 0x2EBE1 / 0x2FB2C
 0x2F631 sub_2F631 game/figure_view.h
 0x2FE14 sub_2FE14 game/figure_view.h
+
+# the attack-animation driver itself (called by the map attack view 0x2E2B0)
+0x2EBE1 sub_2EBE1 game/figure_view.h
+
+# map attack view cluster: the outer driver, its plate-scroll helper and the
+# FD2.TMP reloader (closure of 0x2E2B0 = these three plus restored assets)
+0x2E2B0 sub_2E2B0 game/figure_view.h
+0x2E9A8 sub_2E9A8 game/figure_view.h
+0x2E95B sub_2E95B game/figure_view.h
+
+# figure effect-demo sibling of figure_party_show (0x2FF01 mode>=32 branch)
+0x2D80D sub_2D80D game/figure_view.h
+
+# the figure/effect dispatcher itself, called by 0x15400 (sub_15311) and
+# 0x1D43C (sub_1CFF0).  True closure = itself (all callees already in the
+# manifest).  Playbook-5 large-single-function deviation: 3876 B, above the
+# ~2500 B cap, taken as the approved keystone unblock.  No differential harness.
+0x2FF01 sub_2FF01 game/figure_view.h
 
 # map view / zoom / gauge frame-buffer helpers.  The zoom transition driver
 # 0x2000A lives in map_zoom.h (its 0x21548 sibling is map_action_zoom_resolve
@@ -566,13 +602,16 @@
 0x1E98C sub_1E98C game/map_attack.h
 0x1ECC7 sub_1ECC7 game/map_attack.h
 
-# the attack-result / status-overlay / level-up family driven by the
-# still-pending 0x1548E (0x1E856 = HP-bar drain, 0x1EB05 = overlay flash,
-# 0x1E292 = level-up screen + its 0x1D79C gain-bit marker)
+# the attack-result / status-overlay / level-up family driven by 0x1548E
+# (0x1E856 = HP-bar drain, 0x1EB05 = overlay flash, 0x1E292 = level-up screen
+# + its 0x1D79C gain-bit marker)
 0x1E856 sub_1E856 game/map_attack.h
 0x1EB05 sub_1EB05 game/map_status.h
 0x1E292 sub_1E292 game/map_levelup.h
 0x1D79C sub_1D79C game/map_levelup.h
+
+# the map attack sequence driver (the caller of the family above)
+0x1548E sub_1548E game/map_attack.h
 
 # the funcs_1541F entries 20/21 (0x22A85/0x22BC6) and their shared body
 # 0x22AA8; the wrappers push their constants and jump into 0x22AA8's tail
@@ -735,6 +774,14 @@
 # a shared free-epilogue inside 0x2968D's body).
 0x2B777 sub_2B777 game/party_roster.h
 
+# party-change screen itself (0x2AF28) and its two helpers.  True closure is
+# these three: the machine's callee sub_26152 is a false dependency (the tail
+# `jmp 0x2B434` is 0x2B4FB's shared return inside 0x2AF28), and the stack probe
+# sub_3702F is the Watcom chkstk.  No differential harness.
+0x2AF28 sub_2AF28 game/party_roster.h
+0x2B4FB sub_2B4FB game/party_roster.h
+0x2B67F sub_2B67F game/party_roster.h
+
 # 0x2872B: the place menu's first-option buy screen (driven from the place's
 # stock list).  Its callees are the shop_screen family (shop_items_paint/run),
 # the 0x602AD item table and the already-restored helpers; it ends with the
@@ -748,3 +795,266 @@
 # funcs_1199C[value]); the huge function-map callee list is the funcs_1199C
 # table expansion, not real direct calls.
 0x190AC sub_190AC game/map_event.h
+
+# 0x18D8C - the on-map per-record interaction driver.  Opens the 4x4 direction
+# patch over the cursor, then dispatches on the selected slot dword_53C57
+# (0 = pick a record and run its attack view + event script, 1 = action menu,
+# 2 = map_action_interact, other = item_use + map_cell_event).  Its second
+# argument is the caller's 4-int patch tile array, and it returns the no-slot /
+# blocked / no-free-slot status bits at [0]/[1]/[2].
+0x18D8C sub_18D8C game/map_record.h
+
+# 0x1BBDC - the interactive per-record map action driver, called by the
+# record-interaction driver 0x18D8C.  Opens the 4x4 direction patch, then
+# dispatches on the action slot dword_53C57 (0 = item/record action loop via
+# map_action_router, 1 = party record reorder, 2 = box_run, other = drop a
+# slot).  Ends with the shared epilogue at 0x1BFF6.
+0x1BBDC sub_1BBDC game/map_action_ui.h
+
+# 0x24336 - the last pending callee of the leave handler scene_state_20
+# (funcs_25E23[20], 0x240FA): plays a 101-frame FDOTHER.DAT entry-34 animation
+# (res_blit frames 1..68 with DAC animation, then ani_play + palette fades,
+# then frames 69..100), freeing its buffers before the shared tail 0x22BB7
+# (map_view_update(0)).
+0x24336 sub_24336 game/scene_cutscene.h
+
+# 0x1B1E7 - the world-map party-status pop-up orchestrator driven by the record
+# interaction driver 0x19DF7.  Snapshots the live map window, paints the panel
+# row block (0x1B41D) into scratch and slides it in (bands b/c/d/e), then holds
+# with tick-driven map/panel redraws until a key, slides it back out (bands
+# a/c/d/e) and frees the two 0xFA00 scratch buffers.  Reads an uninitialised
+# ebp tick baseline (modelled as 0); `jmp 0x10C49` is a shared epilogue, not a
+# call to 0x10B4E.
+0x1B1E7 sub_1B1E7 game/party_panel.h
+
+# 0x21DB2 - the per-particle emitter of the smoke-plume animator 0x21BD0 (its
+# only caller, still pending): draws one random-angle, radius-scaled particle
+# from the shared util_rand stream and writes its 16-bit x/y screen position and
+# a 1..8 sub-image selector for a particle slot.  True closure = itself (cos/sin
+# are the AIL boundary, util_rand is restored); no differential harness.
+0x21DB2 sub_21DB2 game/particle.h
+
+# toollib leaf helpers of the already-restored path/rle2/gfx modules.  They were
+# translated as static helpers inside path.c/gfx.c/rle2.c but never logged, so
+# function-map still showed them as 待还原.  Registration only, no source change
+# (mirrors the 0x2BF83 ledger fix).
+0x4E42C sub_4E42C game/path.h
+0x4E4BE sub_4E4BE game/path.h
+0x4E5CC sub_4E5CC game/path.h
+0x4E680 sub_4E680 game/path.h
+0x4E703 sub_4E703 game/path.h
+0x4E71F sub_4E71F game/path.h
+0x4E751 sub_4E751 game/path.h
+0x4EC66 sub_4EC66 game/rle2.h
+0x4ECA4 sub_4ECA4 game/gfx.h
+0x4ECF0 sub_4ECF0 game/gfx.h
+0x4ED4F sub_4ED4F game/gfx.h
+
+# 0x2DFC8 - play a party unit's FIGANI animation frame by frame over the map
+# cell background with the status panel under it, then restore FD2SHAP.DAT and
+# the map (called only by the AI action driver 0x15055; true closure = itself,
+# the frame counter is an uninitialised EDI modelled as 0).  No differential
+# harness.
+0x2DFC8 sub_2DFC8 game/figure_view.h
+
+# 0x15055 - the AI item-use executor, called only by the decision driver
+# 0x14EF0 (still pending) when its item target scores highest.  Resolves the
+# chosen item slot through rec_field_byte and the 0x4E8BC effect table, plays
+# the reach reveal (map_reveal_reachable / map_scan_records), then the
+# figure-summon sequence for effect kind >= 0x10, and hands the targets to
+# map_action_router.  True closure = itself (all callees in the manifest);
+# 0x3702F is the Watcom stack probe, dropped.  No differential harness.
+0x15055 sub_15055 game/map_ai.h
+0x14EF0 sub_14EF0 game/map_ai.h
+0x15311 sub_15311 game/map_ai.h
+
+# 0x1CEED - the map command/action list panel: collects the set action bits of
+# a record (rec_collect_slot_bits, 0x1C269) and draws one name/tile/number row
+# per available action through vm_run + dlg_frame_tile + dlg_draw_number.  Called
+# by the action select loop 0x1D51D, the menu driver 0x1CFF0 (both pending) and
+# the box open animation 0x17AED.  True closure = itself (all callees in the
+# manifest); 0x3702F is the Watcom stack probe, dropped.  No differential harness.
+0x1CEED sub_1CEED game/action_menu.h
+
+# 0x17AED - open a record's command box and animate its action list: box_open_anim
+# (0x17E0B) plus, when rec_collect_slot_bits != 0, a 7-step fb_slide_band_a/b/c
+# band wipe around action_menu_draw, then the 12-step slide-out; frees the three
+# 0xFA00 scratch buffers.  True closure = itself (all callees in the manifest);
+# 0x3702F is the Watcom stack probe, dropped.  No differential harness.
+0x17AED sub_17AED game/action_menu.h
+
+# 0x1D51D - one key step of the action menu: draw the list with the current
+# highlight (dword_53C57), then up/down/page/left/right navigation and confirm;
+# returns 1 (confirm accepted), 0 (still running) or -1 (ESC).  True closure =
+# itself (all callees in the manifest); 0x16E24 is a false callee from the shared
+# epilogue, 0x3702F is the Watcom stack probe, both dropped.  No differential harness.
+0x1D51D sub_1D51D game/action_menu.h
+
+# 0x29300 - the place menu's in-game option screen (place type 0): load FDOTHER
+# entry 13, loop the four-slot menu_choice4 under the screen_curtain wipe, and
+# dispatch slot 0 -> 0x29620, 1 -> save_slot_write(1), 2 -> save_slot_load, else
+# the map_window_run text dialogue; on cancel play the 11-step place_zoom_blit
+# zoom-out and free the FDOTHER buffer.  True closure = itself + 0x29620 (all
+# other callees in the manifest); 0x3702F is the Watcom stack probe, dropped.
+# No differential harness.
+0x29300 sub_29300 game/place_screen.h
+
+# 0x29620 - the place menu's member action list: loop the party-member selector
+# (menu_list_select) and open each chosen member's box (action_menu_open),
+# restoring dword_53C67 and reloading DATO.DAT.  True closure = itself (all
+# callees in the manifest); 0x3702F is the Watcom stack probe, dropped.  No
+# differential harness.
+0x29620 sub_29620 game/place_screen.h
+
+# 0x29DAA - the place-type-4 option screen (0x2670E dispatches place type 4
+# here): load FDOTHER entry 14, draw the money readout onto the frame and the
+# dword_53C5F scratch, and loop the four-slot menu_choice4 under the
+# screen_curtain wipe, dispatching slot 0 -> 0x29620 (place_member_actions_run),
+# 1 -> shop_give_run, 2 -> shop_buy_run, else item_menu_run; every accepted slot
+# closes with the 586 word stream.  On cancel reblit FDOTHER 14, play the
+# 11-step place_zoom_blit zoom-out and free the buffer.  True closure = itself
+# (all callees in the manifest); the exit `jmp 0x295FF` is 0x29300's shared tail
+# (free dword_53F66 / clear / EAX=0), 0x3702F is the Watcom stack probe, both
+# dropped as callees.  No differential harness.
+0x29DAA sub_29DAA game/place_screen.h
+
+# 0x279BC - the place menu driver: stage the place's FDOTHER sub-image, draw the
+# money readouts, and loop menu_choice4 over the four options dispatching to
+# shop_place_buy_run (0x2872B) / shop_sell_run (0x28CBD) / shop_box_run (0x28EFE)
+# / shop_give_run (0x28F65); on cancel play the 11-step place_zoom_blit zoom-out
+# and free the buffer.  True closure = itself + 0x28F65 (all other callees in the
+# manifest); the tail `jmp 0x27071` and 0x3702F are a shared epilogue / the
+# Watcom stack probe, dropped.  No differential harness.
+0x279BC sub_279BC game/shop_screen.h
+
+# 0x28F65 - the place menu's fourth option: pick a member, run the item list of
+# that member's occupied slots, pick a receiving member and (unless the receiver
+# already has all eight slots occupied) move the item across with
+# rec_field_byte/rec_slot_remove/rec_slot_claim + unit_metrics.  True closure =
+# itself (all callees in the manifest); `je 0x29619` lands on 0x29300's shared
+# epilogue (plain return), 0x3702F is the Watcom stack probe, both dropped.  No
+# differential harness.
+0x28F65 sub_28F65 game/shop_screen.h
+
+# 0x31C49 - the intro party-figure showcase, called once (argument-less) by the
+# intro driver 0x31529: fade in, then for every party record (dword_53BFB-1..0)
+# load the FIGANI base/+1 groups of its 80-byte record's group byte (+7), slide
+# the plate in (figure_attack_scroll), step 20 base frames, play the +1 group's
+# sub-sprites, then stamp the DATO dialogue box (dlg_box_stage) under five vm_run
+# text lines and a blinking cursor, polling the keyboard for up to 220 frames
+# (440 for the first record), ending each record with pal_fade_out.  True closure
+# = itself (all callees already in the manifest); the `int(void)` prototype is a
+# chkstk artifact and the `jmp 0x2E2A8` exit is a shared epilogue (plain return),
+# both dropped.  No differential harness.
+0x31C49 sub_31C49 game/figure_showcase.h
+
+# 0x31529 - the closing end-of-demo presentation driver, called argument-less
+# by the end-of-demo state handlers scene_state_26 (0x250CC) and scene_state_29
+# (0x25757), which then hang forever.  Decodes FDOTHER.DAT plates 54/60/59 and
+# the FDOTHER 58/57 pair, drives the palette fades, plays ANI.DAT animation 2,
+# the 40- and 200-frame FDOTHER sprite loops, page-steps the ending text via
+# msg_show_lines (dword_53C03 == 26 picks a different page set), runs the party
+# figure showcase and finally walks the two 20-entry portrait tables at
+# 0x526E9/0x526FD, overriding records 0/1's +6/+7 fields and dword_54133 before
+# each figure_attack_view(0, 1).  True closure = itself (all callees already in
+# the manifest); the `int(void)` prototype is a chkstk artifact, 0x3702F is the
+# Watcom stack probe and the returned eax is the free() result, none used.  No
+# differential harness.
+0x31529 sub_31529 game/ending_demo.h
+# map record turn loops + the record-action dispatcher.  0x13A9F executes
+# record `actor`'s pending action (the +52 low nibble, cases 0..11): the
+# map_ai_* scorers pick the move/attack, the case commits it and the tail
+# re-tags the cell (map_scroll_cell_tag), sets +5 bit 7 (rec_flag_or80),
+# clears the portrait and refreshes the view.  True closure = itself (all
+# callees in the manifest); the `int(int,int)` prototype is a chkstk artifact
+# and `jmp 0x1317D` is a shared epilogue (plain return), both dropped.
+0x13A9F sub_13A9F game/map_turn.h
+
+# 0x1D80B / 0x1D8BA - the per-record turn sweeps over status class 1 / class
+# 0, called argument-less by the party-change orchestrator 0x1A30B.  Each
+# record runs map_record_action, the funcs_1199C[dword_51A8F] scene handler
+# and the funcs_1197B[dword_53C03] per-state handler; both stop early when a
+# transition is pending (dword_53ECC != 0).  0x1D8BA first scores every
+# class-0 record (map_ai_pick_action_target / map_ai_pick_item_target) and
+# acts only when a score reaches 6, then does an action-only class-0 sweep.
+# The `int(void)` prototypes are chkstk artifacts; 0x3702F is the Watcom
+# stack probe, dropped.  No differential harness.
+0x1D80B sub_1D80B game/map_turn.h
+0x1D8BA sub_1D8BA game/map_turn.h
+
+# 0x1CFF0 - the action-menu driver (action_menu_run), closing the
+# 0x17AED/0x1CEED/0x1D51D panel family.  Snapshots VGA into three 0xFA00
+# scratch buffers, opens the box frame + action list, slides it in, runs
+# action_menu_select until the player confirms/cancels, slides out, blits the
+# snapshot back and executes the selected action: the +3/high-id (+6) branch
+# for the 0x17 slot (portrait glide + double reveal), the empty-slot (+3==0)
+# branch, or the plain action branch.  Execution is figure_effect_play, or the
+# funcs_1541F effect table for ids 9..0x1B; it then collects the +49 scripts
+# (map_collect_scripts) and runs ev_script_run.  True closure = itself (all
+# callees in the manifest); the `int(int)` prototype is a chkstk artifact,
+# 0x3702F is the Watcom stack probe.  No differential harness.
+0x1CFF0 sub_1CFF0 game/action_menu.h
+
+# 0x1A813 / 0x1A866 - the two remaining helpers of the party-change map
+# sequence orchestrator 0x1A30B (its closure, so it becomes closure-ready).
+# 0x1A813 dispatches funcs_1199C[entry+1](0) for every three-byte wave record
+# at dword_53A55 whose wave byte (+0) equals dword_53BEF and whose phase byte
+# (+2) equals `phase`.  0x1A866 is a two-pass per-record sweep over the class
+# `cls` records at dword_53A45: pass 1 drops max_hp/10 from the current hp of
+# records with a +37 ailment counter and plays the portrait/VM frame, then
+# map_units_animate + funcs_1197B[dword_53C03](0); pass 2 decrements the six
+# per-effect counters +34..+39 and plays the frame + unit_metrics when one
+# reaches zero.  The `int(int)` prototypes are chkstk artifacts; the tail
+# `jmp 0x190A9`/`0x190A7` are shared epilogues (plain return), not calls.
+# Hex-Rays' `v10` in 0x1A866 is the cdecl argument (chkstk allocates no frame).
+# No differential harness.
+0x1A813 sub_1A813 game/party_change_seq.h
+0x1A866 sub_1A866 game/party_change_seq.h
+
+# 0x1A30B - the party-change map-sequence orchestrator, the closure head that
+# the 0x1A813 / 0x1A866 helpers above unblocked.  It first animates every
+# class-2 record's HP toward max (two map-frame passes) and then runs both turn
+# sweeps (map_turn_side1 / map_turn_side0) bracketed by the mosaic portrait
+# reveal and the shared SFX-bank load/free, dispatching the wave/class helpers
+# at phases 0/1/2.  dword_53ECC aborts the sequence (returns).  The tail
+# `jmp 0x10B46` and the abort `jne 0x10B46` are the shared epilogue (plain
+# return), not calls; the uninitialised `[esp]` local pinned as 0 is the always-
+# zero argument svc_wait_ticks reads.  No differential harness.
+0x1A30B sub_1A30B game/party_change_seq.h
+
+# 0x13565 - the trigger around 0x1A30B: it scans the records at dword_53A45 for
+# one whose +5 flag byte has bits 0/7 clear, whose +6 status class is 2 and
+# whose +38 ailment counter is zero, and runs party_change_map_seq() only when
+# none exists (bracketing it with byte_51AAC / dword_51A83).  Called by the
+# event tick 0x117E7.  The Watcom stack probe (`push 8; call 0x3702F`) is
+# dropped; no differential harness.
+0x13565 sub_13565 game/party_change_seq.h
+
+# 0x18890/0x18B84 - the event tick's "act on the selected map record" driver
+# and the shared animation frame pump it calls before the pick.  0x18890 builds
+# the reachable region around the cursor target, pumps one frame, lets the
+# player pick a record, then traces a path from the picked cell to the latched
+# cursor target, marches the actor (map_scroll_path) and runs the on-map record
+# interaction (map_record_interact) until it settles, returning 0 while the
+# caller's `while (map_record_engage(rec) == 0)` loop keeps pumping.  0x18B84
+# ends by jumping into the shared epilogue at 0x18B7F (inside 0x18890's body) -
+# a plain return, hence the map's false `sub_18890` callee and the `void`
+# signature.  Watcom stack probes dropped; no differential harness.
+0x18890 sub_18890 game/map_record_engage.h
+0x18B84 sub_18B84 game/map_record_engage.h
+
+# 0x16F55/0x1728C/0x19DF7 - the in-game menu cluster (see game/sys_menu.h).
+# 0x16F55 is the outer map command menu (the event tick 0x117E7's
+# `while (sub_16F55() == 0)` loop); 0x1728C is its four sound toggles; 0x19DF7
+# is the save/load/party-panel menu.  All three share ONE frame layout, so
+# 0x1728C/0x19DF7 tail-jump into 0x16F55's epilogue at 0x16FDD (a plain return)
+# and 0x19DF7's default path jumps into 0x16F55's body at 0x1716F - reproduced
+# as the local sys_menu_cancel_frame() helper plus an explicit `return 1`.
+# The 16-byte locals are `rep movs` copies of the cursor tables
+# 0x51E9F/0x53EF2 (0x16F55), 0x51EAF/0x53F02 (0x1728C), 0x51EF5/0x53F22 (0x19DF7);
+# Hex-Rays drops the second argument of 0x177FC.  Watcom stack probes dropped;
+# the CRT fopen/fread/fwrite/fclose map to libc and malloc/free to the
+# guest-heap seam.  No differential harness.
+0x16F55 sub_16F55 game/sys_menu.h
+0x1728C sub_1728C game/sys_menu.h
+0x19DF7 sub_19DF7 game/sys_menu.h

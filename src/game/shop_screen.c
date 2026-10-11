@@ -552,3 +552,208 @@ int shop_place_buy_run(int count, const uint8_t *items)
         }
     }
 }
+
+/* 0x28F65 - the place menu's fourth option: hand one item from a chosen member
+ * to another.  Pick the source member (menu_list_select over the party), list
+ * that member's occupied slots (state byte bit 7 clear) and run the item list
+ * (shop_items_paint/run); on confirm pick the receiving member and, unless all
+ * eight of its slots are occupied, move the item across (rec_field_byte /
+ * rec_slot_remove on the source, rec_slot_claim on the target) and refold the
+ * source's metrics.  The shared epilogue at 0x29619 (add esp,8; pop
+ * edi/esi/ebx; ret) is a plain return whose EAX no caller reads, so the
+ * function is void; the only exit is the source-selection cancel. */
+void shop_give_run(void)
+{
+    uint8_t  items[20];
+    int      n;
+    int      i;
+    int      source;
+    int      slot;
+    int      v6;
+    int      item;
+    uint8_t *rec;
+
+    for (;;) {
+        msg_open_portrait(byte_52387[dword_53F4A]);
+        vm_run(dword_53A7D, 512, 0xA94CC, 320, 205, 76, 74, 19, 1);
+        dlg_blit_dato(dword_53A85, dword_53C67, 0);
+        dlg_wait_key(1);
+        msg_close_portrait();
+
+        dword_53F5E = dword_53BFB;
+        if (menu_list_select() == -1)
+            return;
+        source = (int)dword_53C57;
+        rec = (uint8_t *)(uintptr_t)dword_53A45 + 80u * (uint32_t)source;
+
+        n = 0;
+        for (i = 0; i < 8; ++i) {
+            if (rec[2 * i + 10] < 0x80)
+                items[n++] = rec[2 * i + 11];
+        }
+
+        if (n == 0) {
+            dword_53AD9 = (uint32_t)rec[8] + 1;
+            msg_open_portrait(byte_52387[dword_53F4A]);
+            vm_run(dword_53A7D, 511, 0xA94CC, 320, 205, 76, 74, 19, 1);
+            dlg_blit_dato(dword_53A85, dword_53C67, 0);
+            dlg_wait_key(1);
+            msg_close_portrait();
+            continue;
+        }
+
+        dword_53C57 = 0;
+        dword_53F4E = 0;
+        shop_items_paint(n, items, 1);
+        dword_53F5E = (uint32_t)n;
+        if (shop_items_run(n, items, 1) == -1) {
+            msg_close_portrait();
+            continue;
+        }
+
+        slot = (int)dword_53C57;
+        msg_close_portrait();
+
+        msg_open_portrait(byte_52387[dword_53F4A]);
+        vm_run(dword_53A7D, 510, 0xA94CC, 320, 205, 76, 74, 19, 1);
+        dlg_blit_dato(dword_53A85, dword_53C67, 0);
+        dlg_wait_key(1);
+        msg_close_portrait();
+
+        v6 = menu_list_select();
+        msg_close_portrait();
+        if (v6 == -1)
+            continue;
+
+        if (rec_slot_free((int)dword_53C57) == 8) {
+            dword_53AD9 =
+                (uint32_t)(*((const uint8_t *)dword_53A45 +
+                             80u * (uint32_t)dword_53C57 + 8u)) + 1u;
+            msg_open_portrait(byte_52387[dword_53F4A]);
+            vm_run(dword_53A7D, word_5238D[dword_53F4A], 0xA94CC,
+                   320, 205, 76, 74, 19, 1);
+            dlg_blit_dato(dword_53A85, dword_53C67, 0);
+            dlg_wait_key(1);
+            msg_close_portrait();
+            continue;
+        }
+
+        item = rec_field_byte(source, slot);
+        rec_slot_remove(source, slot);
+        rec_slot_claim((int)dword_53C57, item);
+        unit_metrics(source);
+    }
+}
+
+/* 0x279BC - the place menu.  Stage the current place's FDOTHER sub-image
+ * (index 12, or 29 / 63 when dword_53F4A is 3 / 5) into the live frame, draw
+ * the money readouts to the frame and to the dword_53C5F scratch, and loop on
+ * menu_choice4 over the four options, dispatching to the buy screen (0x2872B),
+ * the sell screen (0x28CBD), the character box (0x28EFE) or the item-give
+ * screen (shop_give_run).  On cancel it plays the closing zoom-out through
+ * place_zoom_blit and frees the resource.  `src` is the surface that zoom-out
+ * blits from.  Returns 1 when dword_53F4A is 0, else 0 (the machine's EAX;
+ * caller 0x2670E is still pending). */
+int place_menu_run(const char *src)
+{
+    uint8_t        items[12];
+    const uint8_t *ent;
+    const void    *panel;
+    int            v1 = 0;
+    int            v10 = 0;
+    int            index;
+    int            n;
+    int            i;
+    uint8_t        choice;
+    uint8_t        place;
+
+    /* 0x4E809 = table accessor: base 0x6238D, stride 31, offset -31 (tables.h). */
+    ent = (const uint8_t *)tbl_ptr((void *)&fd2_data2[0x238D], 31,
+                                   (int)dword_53C03, -31);
+    place = ent[0];
+
+    index = 12;
+    if (dword_53F4A == 3)
+        index = 29;
+    else if (dword_53F4A == 5)
+        index = 63;
+
+    dword_53F66 = (uint32_t)(uintptr_t)res_load(aFdotherDat,
+                    (void *)(uintptr_t)dword_53F66, index);
+    res_blit6((void *)(uintptr_t)0xA0000u, 320,
+              (void *)(uintptr_t)dword_53F66, 0);
+    pal_fade_in();
+    j___delay(200);
+    msg_open_portrait(byte_52387[dword_53F4A]);
+
+    /* panel sub-image at dword_53F66 + [dword_53F66+10], blitted at +30405. */
+    panel = (const void *)(uintptr_t)
+        (dword_53F66 +
+         *(const uint32_t *)(uintptr_t)(dword_53F66 + 10u));
+    rle2_blit((void *)(uintptr_t)0xA76C5u, panel, 320);
+    dlg_draw_number((void *)(uintptr_t)0xA7BD0u, 320, (int)dword_53BF3, 31, 8);
+    rle2_blit((void *)(uintptr_t)(dword_53C5F + 30405u), panel, 320);
+    dlg_draw_number((void *)(uintptr_t)(dword_53C5F + 31696u), 320,
+                    (int)dword_53BF3, 31, 8);
+
+    vm_run(dword_53A7D, (dword_53F4A == 1) ? 501 : 440, 0xA94CC,
+           320, 205, 76, 74, 19, 1);
+    dlg_blit_dato(dword_53A85, dword_53C67, 0);
+    dword_53F6A = 0;
+    dword_53F6E = 0;
+
+    for (;;) {
+        dword_53C57 = (uint32_t)v1;
+        screen_curtain(0);
+        choice = (uint8_t)menu_choice4();
+        if (choice == 1)
+            v1 = (int)dword_53C57;               /* keep the chosen slot */
+        screen_curtain(1);
+        n = place_name_copy((char *)items);
+        dword_53F5E = (uint32_t)n;
+        msg_close_portrait();
+
+        if (choice == 1) {
+            if (dword_53C57 == 0) {
+                shop_place_buy_run(n, items);
+            } else if ((uint32_t)choice == dword_53C57) {
+                shop_sell_run();
+            } else if (dword_53C57 == 2) {
+                shop_box_run();
+            } else {
+                shop_give_run();
+            }
+            msg_open_portrait(byte_52387[dword_53F4A]);
+            vm_run(dword_53A7D, (dword_53F4A == 1) ? 503 : 440, 0xA94CC,
+                   320, 205, 76, 74, 19, 1);
+            dlg_blit_dato(dword_53A85, dword_53C67, 0);
+        }
+
+        if (choice != 1)
+            break;
+    }
+
+    res_blit6((void *)(uintptr_t)0xA0000u, 320,
+              (void *)(uintptr_t)dword_53F66, 0);
+    j___delay(200);
+    pal_fade_out();
+
+    for (i = 10; i >= 0; --i) {
+        /* the machine's shl eax,7 is *128 here (the signed idiv quotient can be
+           negative; both give the same 32-bit result). */
+        place_zoom_blit(
+            ((i * ((int)byte_52363[6 * place + dword_53F4A] - 150) / 10) * 128)
+                + 20480,
+            ((i * ((int)byte_52375[6 * place + dword_53F4A] - 100) / 10) * 128)
+                + 12800,
+            src, 128 - 9 * i);
+        memmove((void *)(uintptr_t)0xA0000u, dword_53A49, 0xFA00u);
+        pal_fade_range(0, 255, 4 * i);
+    }
+
+    guest_free((void *)(uintptr_t)dword_53F66);
+    dword_53F66 = 0;
+    if (dword_53F4A == 0)
+        v10 = 1;
+    return v10;
+}

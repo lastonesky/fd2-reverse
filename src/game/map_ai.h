@@ -26,6 +26,12 @@
  *                                    for `actor`'s item and score every record
  *                                    the item can hit, keeping the best in
  *                                    dword_53C43..dword_53C4F.
+ *   0x15055  map_ai_use_item      execute the item action the decision driver
+ *                                    picked: resolve the chosen item slot,
+ *                                    play the effect's reach reveal (or the
+ *                                    figure-summon sequence for effect kind
+ *                                    0x10+) and hand the targets to
+ *                                    map_action_router.
  *
  * Two shared map helpers:
  *
@@ -35,7 +41,16 @@
  *   0x1DEBE  map_ai_target_adjacent  1 when a record is orthogonally adjacent
  *                                    to a cell and carries a weak-slot item.
  *
- * The decision driver 0x14EF0 is still pending.
+ *   0x14EF0  map_ai_decide        the decision driver: score the three
+ *                                    candidate targets, then dispatch to the
+ *                                    attack (0x1548E), the action executor
+ *                                    (0x15311) or the item executor (0x15055)
+ *                                    with the flag/hp tie-breaks.
+ *   0x15311  map_ai_do_action     execute the chosen action: reveal the
+ *                                    targets, dispatch the funcs_1541F entry,
+ *                                    then run the party +49 scripts.
+ *
+ * map_ai_decide finishes the decision driver family (0x15055/0x15311/0x1548E).
  *
  * ABI = cdecl, decoded from the offline disassembly
  * (analysis/cseg01_disasm.txt), which is the authority for the argument order
@@ -87,5 +102,35 @@ void map_exclude_record_cells(int actor, int mode);
 /* 0x1DEBE - 1 when record `target` is orthogonally adjacent to cell (x,y) and
  * carries a weak (effect byte +11 <= 1) item in its first slot; else -1. */
 int map_ai_target_adjacent(int target, int x, int y);
+
+/* 0x15055 - execute the item action the decision driver 0x14EF0 selected.
+ * Resolves the actor's chosen item slot (dword_53C3F) through rec_field_byte
+ * and the effect table (0x4E8BC): the effect byte +16 picks the reach (<= 15:
+ * map_reveal_reachable over the effect range/radius; >= 0x10: map_scan_records
+ * over the actor cell, then the full-screen figure_summon and a new view
+ * centre interpolated from qword_53AB1), byte +17 the empty filter and byte
+ * +18 the effect band.  The collected targets go to map_action_router, then
+ * the portrait is cleared.  `require_empty` picks the reachable-cell filter
+ * (0/1).  Always returns 0. */
+int map_ai_use_item(int actor, int require_empty);
+
+/* 0x14EF0 - the AI decision driver.  Runs the three scorers
+ * (map_ai_pick_reach_target / map_ai_pick_action_target /
+ * map_ai_pick_item_target), returns 0 when none exceeded 5, otherwise picks
+ * the best of the three scores (dword_53C4F item-reach, dword_53C23 action,
+ * dword_53C33 item) with the flag (`rec[52] & 0x40`) and the target HP gap
+ * (rec[actor].+72 - rec[dword_53C4B].+74) as tie-breaks and calls
+ * map_attack_run (0x1548E), map_ai_do_action (0x15311) or map_ai_use_item
+ * (0x15055).  Zeroes dword_51A83 and returns 1 after dispatching. */
+int map_ai_decide(int actor, int require_empty);
+
+/* 0x15311 - execute the action map_ai_decide chose.  Glides the portrait to
+ * the actor, reveals the reachable targets (map_reveal_reachable, filter from
+ * the action's tbl_619FD entry byte +6), then dispatches the funcs_1541F
+ * entry dword_53C2F (the direct-call figure_effect_play path when
+ * dword_53C2F < 10 and byte_53AF9 is clear), finally collects the moveable
+ * records' +49 scripts (ev5_1B653) and runs them (ev_script_run).  Returns 0
+ * when dword_53C23 < 6, else 1. */
+int map_ai_do_action(int actor, int require_empty);
 
 #endif /* GAME_MAP_AI_H */

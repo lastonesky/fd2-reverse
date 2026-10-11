@@ -426,3 +426,231 @@ int map_ai_pick_reach_target(int actor, int mode)
     guest_free(v26);
     return 0;
 }
+
+/* 0x15055 - the AI item-use executor, chosen by the decision driver 0x14EF0
+ * when the item target scores highest.  Reads the actor's chosen slot
+ * dword_53C3F through rec_field_byte and the effect entry through the 0x4E8BC
+ * accessor.  The effect byte +16 selects the reach: <= 0x0F scans the effect
+ * range (item[18]) / radius 0 (map_reveal_reachable), >= 0x10 walks the actor
+ * cell with map_scan_records and then plays the full-screen figure_summon
+ * sequence and interpolates a new view centre from qword_53AB1.  Byte +17 is
+ * the empty filter (inverted when `require_empty` is 0) and byte +18 the
+ * effect band (also the dword_51A83 fade selector).  The collected targets go
+ * to map_action_router, then the portrait is cleared.  Always 0. */
+int map_ai_use_item(int actor, int require_empty)
+{
+    const uint8_t *rec =
+        (const uint8_t *)dword_53A45 + REC_STRIDE * (uint32_t)actor;
+    const uint8_t *eff;
+    uint8_t list[32];
+    int filter, kind, count, i;
+
+    dword_53C57 = (uint32_t)rec_field_byte(actor, (int)dword_53C3F);
+    eff = item_entry((int)dword_53C57);
+
+    if (require_empty != 0)
+        filter = eff[17];
+    else
+        filter = (eff[17] == 0);
+
+    dlg_portrait_glide(actor);
+
+    kind = eff[16];
+    if (kind <= 0x0F)
+        count = map_reveal_reachable((int)dword_53C37, (int)dword_53C3B,
+                                     list, eff[18], 0, filter);
+    else
+        count = map_scan_records((int)dword_53C37, (int)dword_53C3B, list,
+                                 rec[0], rec[1], kind - 16, 0);
+
+    util_fix_records(dword_53A51);
+    j___delay(200);
+    dword_51A83 = eff[18] + 2;
+
+    if (kind >= 0x10) {
+        int32_t cx, cy, j;
+
+        ev5_1F04A(actor, list[0]);
+        map_view_update(1);
+        svc_wait_ticks(1);
+        svc_wait_ticks(2);
+        figure_scene_play(actor);
+        portrait_reveal_cell(actor, 80, -4);
+        j___delay(200);
+        for (i = 64; i >= 0; --i) {
+            pal_fade_add(0, 255, i);
+            j___delay(4);
+        }
+        dword_51A83 = 6;
+        kind -= 16;
+        cx = (int32_t)(dword_53C37 - (uint32_t)qword_53AB1) * kind
+             + (int32_t)(uint32_t)qword_53AB1;
+        if (cx < (int32_t)dword_53AC1) {
+            if (cx < 0)
+                cx = 0;
+        } else {
+            cx = (int32_t)(dword_53AC1 - 1u);
+        }
+        dword_53C37 = (uint32_t)cx;
+        cy = (int32_t)(dword_53C3B - dword_53AB5) * kind
+             + (int32_t)dword_53AB5;
+        if (cy < (int32_t)dword_53AC5) {
+            if (cy < 0)
+                cy = 0;
+        } else {
+            cy = (int32_t)(dword_53AC5 - 1u);
+        }
+        dword_53C3B = (uint32_t)cy;
+        dword_53C1F = 0;
+        map_slide_view((int)dword_53C37, (int)dword_53C3B);
+        dword_51A83 = 0;
+        for (j = 1; j < 9; ++j) {
+            dword_53C1F = j;
+            map_view_update(1);
+            svc_wait_ticks(1);
+        }
+        util_fix_records(dword_53A51);
+        svc_wait_ticks(2);
+        dlg_portrait_glide(list[0]);
+    } else {
+        map_slide_view((int)dword_53C37, (int)dword_53C3B);
+    }
+
+    map_action_router(actor, (int)dword_53C3F, count, list);
+    dlg_portrait_clear();
+    dword_53EC8 = 0;
+    return 0;
+}
+
+/* 0x51D01 - the funcs_1541F dispatch table (28 entries).  The machine calls
+ * `[eax*4 + 0x51D01]` with the action id; slot 23 is 0x2218A
+ * (map_units_move_deploy, void), wrapped here so the table stays uniform. */
+typedef int (*map_action_fn)(int, int, const uint8_t *);
+
+static int map_action_entry23(int a1, int count, const uint8_t *list)
+{
+    map_units_move_deploy(a1, count, list);
+    return 0;
+}
+
+static map_action_fn const action_table[28] = {
+    map_action_entry00, map_action_entry01, map_action_entry02,
+    map_action_entry03, map_action_entry04, map_action_entry05,
+    map_action_entry06, map_action_entry07, map_action_entry08,
+    map_action_entry09, map_action_entry10, map_action_entry11,
+    map_action_entry12, map_action_entry13, map_action_entry14,
+    map_action_entry15, map_action_entry16, map_action_grow_x_cost,
+    map_action_grow_y_cost, map_action_widen_cost, map_action_entry20,
+    map_action_entry21, map_action_entry22, map_action_entry23,
+    map_action_entry16, map_action_clear_flag, map_action_entry26,
+    map_action_entry27,
+};
+
+/* 0x15311 - execute the action map_ai_decide chose (see map_ai.h). */
+int map_ai_do_action(int actor, int require_empty)
+{
+    const uint8_t *entry = action_entry((int)dword_53C2F);
+    uint8_t list[32];   /* 0x14818/0x149F8 target list */
+    uint8_t hit[12];    /* 4 x 3-byte +49 script entries for ev_script_run */
+    int filter, count, steps;
+
+    if (require_empty != 0)
+        filter = entry[6];
+    else
+        filter = (entry[6] == 0);
+
+    if ((int)dword_53C23 < 6)
+        return 0;
+
+    dlg_portrait_glide(actor);
+    count = map_reveal_reachable((int)dword_53C27, (int)dword_53C2B, list,
+                                 entry[4], 0, filter);
+    util_fix_records(dword_53A51);
+    j___delay(200);
+    dword_51A83 = entry[4] + 2;
+    map_slide_view((int)dword_53C27, (int)dword_53C2B);
+    dword_51A83 = 0;
+    map_view_update(0);
+
+    if ((int)dword_53C2F >= 10 || byte_53AF9 != 0) {
+        ev5_1D4CB();
+        action_table[dword_53C2F](actor, count, list);
+        menu_stop_and_free_music();
+    } else {
+        figure_effect_play(actor, (int)dword_53C2F, count, list);
+    }
+
+    steps = ev5_1B653(hit);
+    map_view_update(0);
+    map_units_animate();
+    ev_script_run((int)dword_53C4B, steps, (int)(intptr_t)hit);
+    map_view_update(0);
+    dword_53EC8 = 0;
+    dword_51A83 = 0;
+    return 1;
+}
+
+/* 0x14EF0 - the AI decision driver (see map_ai.h). */
+int map_ai_decide(int actor, int require_empty)
+{
+    const uint8_t *base;
+    const uint8_t *rec;
+    int flag, hp_delta;
+
+    map_ai_pick_reach_target(actor, require_empty);
+    map_ai_pick_action_target(actor, require_empty);
+    map_ai_pick_item_target(actor, require_empty);
+
+    /* read after the scorers, as the machine does (ds:0x53a45 reloaded) */
+    base = (const uint8_t *)dword_53A45;
+    rec  = base + REC_STRIDE * (uint32_t)actor;
+    flag = rec[52] & 0x40;
+    hp_delta = *(const uint16_t *)(const void *)(rec + 72)
+             - *(const uint16_t *)(const void *)
+                 (base + REC_STRIDE * (uint32_t)dword_53C4B + 74);
+
+    if ((int)dword_53C4F < 6 && (int)dword_53C23 < 6 && (int)dword_53C33 < 6)
+        return 0;
+
+    if ((int)dword_53C4F > (int)dword_53C23 &&
+        (int)dword_53C4F > (int)dword_53C33)
+        goto attack;
+
+    if ((int)dword_53C4F == (int)dword_53C23 &&
+        (int)dword_53C4F > (int)dword_53C33) {
+        if ((int)dword_53C2F >= 11) {
+            if (flag == 0)
+                goto action;
+        } else if (*(const uint16_t *)(const void *)action_entry((int)dword_53C2F)
+                   >= hp_delta) {
+            goto action;
+        }
+        goto attack;
+    }
+
+    if ((int)dword_53C4F == (int)dword_53C33 &&
+        (int)dword_53C4F > (int)dword_53C23) {
+        if (flag != 0)
+            goto attack;
+        goto item;
+    }
+
+    if ((int)dword_53C23 > (int)dword_53C4F &&
+        (int)dword_53C23 >= (int)dword_53C33)
+        goto action;
+    if ((int)dword_53C33 <= (int)dword_53C4F ||
+        (int)dword_53C33 <= (int)dword_53C23)
+        goto tail;
+
+item:
+    map_ai_use_item(actor, require_empty);
+    goto tail;
+action:
+    map_ai_do_action(actor, require_empty);
+    goto tail;
+attack:
+    map_attack_run(actor, require_empty);
+tail:
+    dword_51A83 = 0;
+    return 1;
+}

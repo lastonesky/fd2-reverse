@@ -1,13 +1,15 @@
 /* figure_view.h - unit figure/animation view helpers (original 0x30E25,
- * 0x2F4D4, 0x30E9D).
+ * 0x2F4D4, 0x30E9D) plus the attack-animation driver 0x2EBE1.
  *
- * The still-pending driver sub_2CF30 (0x2CF30) shows a party member's animated
- * figure (FIGANI.DAT) over a scrolling background (BG.DAT) with an alternating
- * portrait strip (TAI.DAT).  Its three closure-ready helpers live here; the
- * fourth callee, sub_2E95B (0x2E95B), only re-reads FD2.TMP through the CRT
- * fread wrapper sub_373CA and is therefore left out of this batch (library
- * zone, see module-map.md).  Two sibling helpers of the same family, used by
- * the drivers sub_2EBE1 (0x2EBE1) and sub_2FB2C (0x2FB2C), are restored here
+ * The driver sub_2CF30 (0x2CF30) shows a party member's animated figure
+ * (FIGANI.DAT) over a scrolling background (BG.DAT) with an alternating
+ * portrait strip (TAI.DAT); it is restored here as figure_party_show.  Its
+ * fourth callee, sub_2E95B (0x2E95B), only re-reads FD2.TMP and is restored
+ * here too.
+ * Two sibling helpers of the same family, used by the drivers sub_2EBE1
+ * (0x2EBE1) and sub_2FB2C (0x2FB2C), are restored here as well; the attack
+ * driver sub_2EBE1 and its caller, the map attack view driver sub_2E2B0
+ * (0x2E2B0) with its scroll helper sub_2E9A8 (0x2E9A8), are now restored here
  * too.
  *
  *   0x30E25  figure_bg_pick    pick the BG.DAT sub-image index for the shown
@@ -31,6 +33,10 @@
  *   0x2FE14  figure_frame_run play N frames of a figure group over the cycling
  *                              BG strips into the 640-stride work buffer,
  *                              publishing one 320x200 window per frame.
+ *   0x2DFC8  figure_scene_play  play one unit's FIGANI group frame by frame
+ *                              over the background of its map cell with the
+ *                              status panel under it, then restore the map
+ *                              (called by the AI action driver 0x15055).
  *
  * ABI is cdecl; argument order and the constants were decoded from the offline
  * disassembly (analysis/cseg01_disasm.txt), which is authoritative.  Every real
@@ -77,5 +83,74 @@ void figure_bg_scroll_portrait(int unit, const void *figure,
 /* 0x2FE14 - play `frames` animation frames of the figure group `figure` over
  * the cycling BG strips into `work` (640-stride), waiting one tick per frame. */
 void figure_frame_run(const void *figure, void *work, int frames);
+
+/* 0x2EBE1 - play one attack animation between the attacker record `attacker`
+ * and the defender record `defender`: stamp the attacker's figure group
+ * `figure` (FIGANI.DAT) and the defender's group `base` over the 640-stride
+ * `work` buffer and the 320-stride `screen`, drain the defender's HP toward the
+ * map_attack_result (0x2F7B6) damage, flash the palette on the result flags and
+ * wait a tick per frame.  `portrait` is the TAI.DAT strip stamped by the
+ * figure_bg_scroll_portrait variant, `snd` the FDOTHER sound bank.  Returns 1
+ * on the early-out of the dword_54133==1 mode, otherwise the last drain value. */
+int figure_attack_play(int attacker, int defender, const uint8_t *figure,
+                       const uint8_t *base, uint8_t *work, uint8_t *screen,
+                       const void *portrait, int snd);
+
+/* 0x2E95B - reload FD2.TMP into the global DATO buffer dword_53A61 (the whole
+ * 0x32A00-byte file).  Called by figure_attack_view; returns the fclose
+ * result. */
+int figure_tmp_load(void);
+
+/* 0x2E9A8 - slide `plate_a` across the 640-stride `work` buffer (toward
+ * work+320 when record[6]==0, otherwise away from work as work+10*i) and stamp
+ * the fixed `plate_b`, flatten `work` into the 320-stride `screen`, publish it
+ * to VGA and fade the DAC by 6*i each step.  `portrait` is a TAI.DAT strip
+ * decoded at (164,157); `flag` suppresses the fixed plate stamp. */
+void figure_attack_scroll(int unit, int flag, const void *plate_a,
+                          const void *plate_b, uint8_t *work, uint8_t *screen,
+                          const void *portrait);
+
+/* 0x2DFC8 - play a unit's FIGANI animation frame by frame over the BG.DAT
+ * background of its map cell with the status panel drawn under it: load the
+ * TAI/FIGANI/BG strips, slide the two figure plates in (figure_attack_scroll),
+ * then for every frame of the +1 group stamp it over the background, publish
+ * the 320x200 window and wait the frame's tick count; finally reload
+ * FD2SHAP.DAT, clear the frame, refresh the map and fade back in.  The machine
+ * starts the frame loop from an uninitialised EDI (see figure_view.c). */
+void figure_scene_play(int unit);
+
+/* 0x2CF30 - the driver called by the effect dispatcher 0x2FF01: show the
+ * figure groups of `units[0..count-1]` over the BG.DAT / TAI.DAT strips of
+ * `unit` and drain each record's HP word (+0x40) over the posture sub-sprites.
+ * `mode` (18/24/28/29) selects the palette variant and the drain step count.
+ * The ABI is cdecl with four arguments (the machine's `int(int)` prototype is
+ * a chkstk artifact; see figure_view.c). */
+void figure_party_show(int unit, int mode, int count, const uint8_t *units);
+
+/* 0x2E2B0 - the map attack view driver between records `attacker` and
+ * `defender`: load their FIGANI/TAI/BG strips, stamp the two plates, play the
+ * attack animation (figure_attack_play) and, when the defender is cleared,
+ * the counter animation; then reload FD2.TMP / FD2SHAP.DAT and restore the
+ * map.  The demo flag dword_54133 selects the two-strip branch.  Called by
+ * ev3_35730 as (0x11, arg). */
+void figure_attack_view(int attacker, int defender);
+
+/* 0x2D80D - the sibling demo of figure_party_show, dispatched by the effect
+ * driver 0x2FF01 for the `mode >= 32` branch (modes 32..35).  It shows record
+ * `unit`'s FIGANI base/next groups over the BG.DAT / TAI.DAT strips of the
+ * unit's map cell, stamps the FDOTHER plate (entry mode+33), plays a palette
+ * blend driven by the 4x4 table at 0x5265C (row mode-32 gives {r,g,b,FDOTHER
+ * index}), then applies the map action for `mode` to the `units[0..count-1]`
+ * record list.  cdecl, four stack arguments (the Watcom probe hides them from
+ * Hex-Rays); see figure_view.c. */
+void figure_demo_show(int unit, int mode, int count, const uint8_t *units);
+
+/* 0x2FF01 - the figure/effect dispatcher: modes >= 32 go to figure_demo_show,
+ * modes 24 / 28..31 to figure_party_show, and every other mode runs the inline
+ * emitter animation driven by funcs_30469[mode] over a 640-stride work buffer,
+ * draining each unit's HP word toward the unit_action_damage result.  See
+ * figure_view.c.  Single 3876-byte function taken under the playbook-5
+ * large-single-function clause (its true closure is itself). */
+void figure_effect_play(int unit, int mode, int count, const uint8_t *units);
 
 #endif /* GAME_FIGURE_VIEW_H */

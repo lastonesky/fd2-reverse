@@ -238,3 +238,35 @@ void map_scroll_cell_tag(int x, int y, int which)
         }
     }
 }
+
+/* 0x15DF3 - locate the map cell carrying record tag `tag`.
+ *
+ * Scans y = 0..dword_53AC5-1 (outer) and x = 0..dword_53AC1-1 (inner), reading
+ * each cell with map_cell_info: a hit is a cell whose terrain-table byte
+ * (info[4]) has bits 0x60 set to 0x20 and whose tag word (info[2..3]) equals
+ * `tag`. On a hit it writes out[0]=x, out[1]=y and returns 0; when the whole
+ * map is exhausted it returns -1 leaving `out` untouched. The record-move
+ * driver 0x13A9F calls this with rec[61] to find its target cell.
+ *
+ * Machine notes: the `jge` bounds compares are signed (map dims are small); the
+ * `jmp 0x15677` tail is the shared epilogue of map_attack_run (0x1548E), i.e. a
+ * plain return, so function-map's `sub_1548E` callee entry is a false callee;
+ * `sub_3702F` is the Watcom stack probe (dropped). */
+int map_find_tag_cell(int tag, uint8_t *out)
+{
+    uint8_t info[8];
+    int32_t x, y;
+
+    for (y = 0; y < (int32_t)dword_53AC5; ++y) {
+        for (x = 0; x < (int32_t)dword_53AC1; ++x) {
+            map_cell_info(x, y, info);
+            if ((info[4] & 0x60) == 0x20
+                && (int)(*(const uint16_t *)(void *)(info + 2)) == tag) {
+                out[0] = (uint8_t)x;
+                out[1] = (uint8_t)y;
+                return 0;
+            }
+        }
+    }
+    return -1;
+}

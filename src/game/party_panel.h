@@ -1,8 +1,8 @@
 /* party_panel.h - map party-status panel: row painter + sliding band helpers
  * (original 0x1AF1E, 0x1AF99, 0x1B019, 0x1B0AD, 0x1B14B, 0x1B41D).
  *
- * These six routines are the parts of the world-map party pop-up that the
- * orchestrator 0x1B1E7 (still pending) drives. 0x1B41D paints the panel rows
+ * These six routines are the parts of the world-map party pop-up that
+ * party_panel_run (0x1B1E7) drives. 0x1B41D paints the panel rows
  * (portrait/stat tiles through res_blit6, the stat numbers through
  * dlg_draw_number and the two name streams through vm_run) into a scratch
  * 0xFA00 buffer; the five band helpers then copy horizontal bands out of that
@@ -42,5 +42,10 @@ void party_panel_band_e(const uint8_t *src, int step);
 
 /* 0x1B41D - paint one panel row block into dst at the given pitch. */
 void party_panel_draw(uint8_t *dst, int pitch);
+
+/* 0x1B1E7 - run the whole world-map party pop-up: snapshot the map window,
+ * slide the panel rows in (steps 0..11), animate/refresh until a key is
+ * pending, then slide the rows back out and release the scratch buffers. */
+void party_panel_run(void);
 
 #endif /* GAME_PARTY_PANEL_H */

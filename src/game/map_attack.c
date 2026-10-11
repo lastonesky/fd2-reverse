@@ -1,7 +1,8 @@
-/* map_attack.c - the unit attack result helpers (original 0x1E98C + 0x1ECC7).
+/* map_attack.c - the unit attack result helpers (original 0x1E98C + 0x1ECC7),
+ * the HP-bar drain (0x1E856) and the map attack sequence driver (0x1548E).
  *
- * Direct translation of the machine code at 0x1E98C/0x1ECC7; the offline
- * disassembly (analysis/cseg01_disasm.txt) is authoritative.
+ * Direct translation of the machine code at 0x1E98C/0x1ECC7/0x1E856/0x1548E;
+ * the offline disassembly (analysis/cseg01_disasm.txt) is authoritative.
  *
  *   - the Watcom stack probe (`push size; call 0x3702F`) is dropped (false
  *     callee);
@@ -178,17 +179,23 @@ int map_attack_resolve(int attacker, int defender)
  * map_attack_resolve is 69*remaining/max + 1.  The bar is drawn as decreasing
  * ui_meter_fixed segments at pos[0] + 320*(pos[1]+6) + 0xA0000 + 7.  The whole
  * drain repeats a second time when the attacker's item effect type is 3 or a
- * 3% roll hits (the machine's count-down do/while). */
-void map_attack_bar_drain(int attacker, int defender, int *pos)
+ * 3% roll hits (the machine's count-down do/while).
+ *
+ * Returns the defender's remaining HP: the machine keeps the last
+ * map_attack_resolve result in [esp+8] and returns it (`mov eax,[esp+8];
+ * jmp 0x1317D`), the caller 0x1548E tests it (`test eax,eax; setne`) to decide
+ * whether the target survived for a counter-attack. */
+int map_attack_bar_drain(int attacker, int defender, int *pos)
 {
     const uint8_t *r = (const uint8_t *)(uintptr_t)dword_53A45
                        + 80u * (uint32_t)defender;
     const uint8_t *eff =
         item_entry(rec_field_byte(attacker, rec_slot_find(attacker, 0)));
     int count = (eff[9] == 3 || (util_rand() % 100u) < 3u) ? 2 : 1;
+    int rem   = 0;
 
     for (;;) {
-        int v9, v8, rem;
+        int v9, v8;
 
         if (count == 0)
             break;
@@ -208,6 +215,7 @@ void map_attack_bar_drain(int attacker, int defender, int *pos)
         if (rem == 0)
             break;
     }
+    return rem;
 }
 
 /* 0x2F7B6 - full attack evaluation between two records (a sibling of
@@ -318,4 +326,71 @@ int map_attack_result(int attacker, int defender, int *out)
 
     out[5] = v30;
     return v30;
+}
+
+/* 0x1548E - run one map attack against the current target dword_53C4B.
+ *
+ * Direct translation of the machine code at 0x1548E; the offline disassembly
+ * (analysis/cseg01_disasm.txt) is authoritative.  The Watcom stack probe
+ * (`push 0x2c; call 0x3702F`) is dropped; the local script buffer is the
+ * machine's [esp] scratch region (IDA's 24-byte v7; the original leaves it
+ * uninitialised before map_collect_scripts fills it).
+ *
+ * `actor` glides its portrait in and walks toward the marked cell
+ * (dword_53C43/dword_53C47, `mode`), the target dword_53C4B then faces it.
+ * With the overlay on (byte_53AF9) it plays the status frame and drains the
+ * target's HP bar; if the target is facing-adjacent and survives (the bar
+ * drain's remaining-HP result is non-zero) the roles swap for a counter-attack
+ * on the actor's own bar.  With the overlay off it plays figure_attack_view.
+ * The tail clears the portrait, collects the party's +49 scripts, animates the
+ * units, runs the scripts (ev_script_run) and the level-up screen. */
+int map_attack_run(int actor, int mode)
+{
+    uint8_t scripts[24]; /* [esp-18h] scratch: 8 x 3-byte script entries */
+    int     steps;
+    int    *pos;
+
+    dword_51A83 = 0;
+    dlg_portrait_glide(actor);
+    map_move_toward((int)dword_53C43, (int)dword_53C47, actor, mode);
+    dword_51A83 = 1;
+    dlg_portrait_glide((int)dword_53C4B);
+    ev5_1F04A(actor, (int)dword_53C4B);
+
+    if (byte_53AF9 != 0) {
+        int rem;
+
+        dword_51A83 = 0;
+        map_view_update(0);
+        dword_51A83 = 1;
+
+        if (ev5_1F0DC(actor, (int)dword_53C4B) == 1)
+            ev5_1F04A((int)dword_53C4B, actor);
+
+        pos = map_status_overlay_play(actor, (int)dword_53C4B);
+        map_status_gauge(0xA0000, 320, (int)dword_53C4B, pos);
+        if (ev5_1F0DC(actor, (int)dword_53C4B) == 1)
+            map_status_gauge(0xA0000, 320, actor, pos + 2);
+
+        dlg_portrait_clear();
+        rem = map_attack_bar_drain(actor, (int)dword_53C4B, pos);
+
+        if (ev5_1F0DC(actor, (int)dword_53C4B) == 1 && rem != 0) {
+            ev5_1F04A((int)dword_53C4B, actor);
+            ev5_1F04A(actor, (int)dword_53C4B);
+            map_status_frame(pos, actor, (int)dword_53C4B);
+            map_attack_bar_drain((int)dword_53C4B, actor, pos + 2);
+        }
+    } else {
+        figure_attack_view(actor, (int)dword_53C4B);
+    }
+
+    dlg_portrait_clear();
+    steps = map_collect_scripts(scripts);
+    map_view_update(0);
+    map_units_animate();
+    ev_script_run((int)dword_53C4B, steps, (int)(intptr_t)scripts);
+    map_view_update(0);
+    map_levelup_run((int)dword_53C4B);
+    return 1;
 }

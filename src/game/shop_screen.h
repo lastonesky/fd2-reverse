@@ -21,8 +21,8 @@
  *            stream comes from an equipment array (shop_party_equip_rows).
  *            Returns 1 / -1.
  *
- * The remaining place-menu entry screens (the four menu options of 0x279BC)
- * are driven here too:
+ * The place-menu driver 0x279BC (place_menu_run) and its four options are
+ * driven here too:
  *
  *   0x2872B  shop_place_buy_run the buy screen of the place menu's first
  *            option, driven from the place's stock list: run shop_items_paint/
@@ -91,5 +91,17 @@ int shop_place_buy_run(int count, const uint8_t *items);
 
 /* 0x2A07A - collect the indices whose rec_flag is 1 into `dst`; count. */
 int shop_usable_items(uint8_t *dst);
+
+/* 0x279BC - the place menu: stage the current place's FDOTHER sub-image, draw
+ * the money readouts and loop on menu_choice4 over the four options, running
+ * the chosen sub-screen (shop_place_buy_run / shop_sell_run / shop_box_run /
+ * shop_give_run).  On cancel it plays the closing zoom-out and frees the
+ * resource.  `src` is the surface that zoom-out blits from.  Returns 1 when
+ * dword_53F4A is 0, else 0 (the machine's EAX; caller 0x2670E is pending). */
+int place_menu_run(const char *src);
+
+/* 0x28F65 - the fourth option: hand one item from a chosen member to another.
+ * Both callers ignore EAX; the only exit is the member-selection cancel. */
+void shop_give_run(void);
 
 #endif /* GAME_SHOP_SCREEN_H */
