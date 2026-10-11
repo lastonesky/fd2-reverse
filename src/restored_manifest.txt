@@ -771,3 +771,10 @@
 # ebp tick baseline (modelled as 0); `jmp 0x10C49` is a shared epilogue, not a
 # call to 0x10B4E.
 0x1B1E7 sub_1B1E7 game/party_panel.h
+
+# 0x21DB2 - the per-particle emitter of the smoke-plume animator 0x21BD0 (its
+# only caller, still pending): draws one random-angle, radius-scaled particle
+# from the shared util_rand stream and writes its 16-bit x/y screen position and
+# a 1..8 sub-image selector for a particle slot.  True closure = itself (cos/sin
+# are the AIL boundary, util_rand is restored); no differential harness.
+0x21DB2 sub_21DB2 game/particle.h

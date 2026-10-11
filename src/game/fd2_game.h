@@ -51,6 +51,7 @@
 #include "menu_select.h"
 #include "mosaic_reveal.h"
 #include "msg.h"
+#include "particle.h"
 #include "party_panel.h"
 #include "party_roster.h"
 #include "password.h"

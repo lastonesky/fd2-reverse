@@ -1850,10 +1850,30 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - **归属**：追加至既有 `party_panel`（§12）；新增函数用语义名调用各 band/draw，无需别名；
   唯一 caller `0x19DF7` 仍待还原。无对拍器，标“已还原未验证”。
 
+### 73) 随机粒子放置助手 `0x21DB2` → `particle_spawn`（本轮，1 函数）→ `src/game/particle.c/.h`（新建）
+
+§71/§72 遗留的闭包就绪游戏头名 `0x21DB2`(u0，255B)：烟柱动画 `0x21BD0`（其唯一 caller，仍待还原）
+的逐槽发射器。真闭包＝自身（`cos`/`sin`＝AIL 边界 `0x3CBD5`/`0x3CBE8`，`util_rand` `0x4EBE3` 已还原）。逐指令核过离线反汇编。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x21DB2` | `particle_spawn(radius,index,x[],y[],kind[],cx,cy)` | 依次取 3 个 `util_rand`：`r=((rand%64)*radius)/64-1`（有符号 `idiv`）→ `angle=(double)(rand%360)*dbl_501F8`（度→弧度；`dbl_501F8`=`0.0174532`）→ `x[index]=(int)(cos(angle)*r+cx)`、`y[index]=(int)(sin(angle)*r+cy+dbl_50200)`（`dbl_50200`=`-8.0`）→ `kind[index]=rand%8+1`（亦为返回值）。 |
+
+**陷阱 / 伪代码伪影**：
+- **ABI 实为 7 参**：Hex-Rays 仅列 5 参（`char __cdecl(int, unsigned __int8, int, int, int)`）；两处调用点
+  （`0x21C72`/`0x21D9D`，均 `add esp,0x1c`）证明压 7 参：`radius, index, x*, y*, kind*, cx, cy`——中心坐标 arg6/arg7
+  在机器为 `[esp+0x44]`/`[esp+0x48]`，被 `sar edx,0x1f`/`idiv` 序列掩盖，故 IDA 漏记两参。
+- **`__CHP()` → `(int)`**：`call 0x37AF4` 同 fx/map_action/unit_load 先例，退化为截断强转。
+- **`cos`/`sin` 为 AIL 边界**（`__int64 __cdecl(__int64)`），按 `fx_dots5`(0x2C67D) 先例改用 `<math.h>`。
+- **常数走数据宏**：`dbl_501F8`(0x501F8)/`dbl_50200`(0x50200) 直接用 `fd2_globals.h` 宏（读原始数据段）。
+- **归属**：新建 `particle`（语义名：随机偏移粒子放置）；唯一 caller `0x21BD0` 仍待还原。无对拍器，标“已还原未验证”。
+- **台账缺口（新记）**：`0x21BD0`（481B，烟柱动画，`push 0x13c; call 0x3702F` 前言）是真实函数，却不在
+  `function-map.csv` 中（IDA 未登记）；本轮未纳入（非 pending），留记待台账修复后补入。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **69 → 68**（本轮 §72 −1），已还原未验证 **254 → 255**（本轮 +1）。
+- `function-map.csv`：待还原 **68 → 67**（本轮 §73 −1），已还原未验证 **255 → 256**（本轮 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1974,6 +1994,11 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 101 帧全屏动画，新建 `scene_cutscene`)；其后剩余闭包就绪游戏头名仅 `0x1B1E7`(u1，内层读未初始化 ebp 暂跳)、
 `0x21DB2`(u0，255B，cos/sin 几何助手，可下批取)，及库包装 `0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`（按既定策略跳过）、
 `0x1F894`(u1，1765B)/`0x2EBE1`(u3，2291B) 超预算。
+本轮 §73 已拉出该头名 `0x21DB2`(u0，255B，随机粒子放置助手，新建 `particle`)；其后剩余闭包就绪游戏内容均为
+**工具库叶函数** `0x4E4BE`(56B)/`0x4E703`(28B)/`0x4E71F`(50B)/`0x4E751`(68B)/`0x4EC66`(22B)/`0x4ECA4`(27B)/
+`0x4ECF0`(27B)/`0x4ED4F`(43B)（均 u0，toollib 区，真闭包＝自身，可作下批同区一簇），及库包装
+`0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`/`0x365AB`（按既定策略跳过）、`0x1F894`(u1，1765B)/`0x2EBE1`(u3，2291B) 超预算，
+及无名字/伪函数条目 `0x10000`/`0x36B00`（后者即 §1.2 的 `malloc(0x36B00)` 立即数伪函数）。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交
