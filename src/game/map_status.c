@@ -1,5 +1,5 @@
 /* map_status.c - the map-view status frame (original 0x1E611 + 0x1E7F6 +
- * 0x1EC2A).
+ * 0x1EC2A + 0x1EB05).
  *
  * Direct translation of the machine code at 0x1E611/0x1E7F6/0x1EC2A; the
  * offline disassembly (analysis/cseg01_disasm.txt) is authoritative.
@@ -95,4 +95,53 @@ void map_status_anchor(int *out, int rec)
         else
             out[0] -= 88;
     }
+}
+
+/* 0x1EB05 - flash the actor/target status overlays over the VGA page.
+ *
+ * Direct translation of the machine code at 0x1EB05; the offline disassembly
+ * (analysis/cseg01_disasm.txt) is authoritative.  The Watcom stack probe
+ * (`push 0x2c; call 0x3702F`) is dropped.  Hex-Rays renders the second
+ * parameter as an uninitialised local because the frozen fd2_funcs.h prototype
+ * is `int sub_1EB05(int)`; the machine reads [esp+0x18] (arg 2) and the only
+ * caller 0x1548E pushes both, so the real ABI is (actor, target).
+ *
+ * The target anchor is written unconditionally to dword_53A30; the actor
+ * anchor (dword_53A38) is written only when ev5_1F0DC reports a partner (else
+ * its x is -1).  Ten frames of portrait sub-images 39..48 are blitted over
+ * 0xA0000 with res_draw_subimage, restored with dlg_snap_restore for the first
+ * nine, and freed afterwards.  Returns the address of the target anchor block. */
+int *map_status_overlay_play(int actor, int target)
+{
+    int *pos = (int *)(void *)&dword_53A30;
+    void *v2 = 0, *v1 = 0;
+    int i;
+
+    map_status_anchor(pos, target);
+    if (ev5_1F0DC(actor, target) == 1)
+        map_status_anchor((int *)(void *)&dword_53A38, actor);
+    else
+        dword_53A38 = 0xFFFFFFFFu;
+
+    for (i = 0; i < 10; ++i) {
+        v2 = res_draw_subimage((const void *)(uintptr_t)dword_53AD1,
+                               (void *)0xA0000, 320, dword_53A30, dword_53A34,
+                               i + 39);
+        if (dword_53A38 != 0xFFFFFFFFu)
+            v1 = res_draw_subimage((const void *)(uintptr_t)dword_53AD1,
+                                   (void *)0xA0000, 320, dword_53A38,
+                                   dword_53A3C, i + 39);
+        j___delay(25);
+        if (i < 9) {
+            dlg_snap_restore(v2, (void *)0xA0000, 320);
+            if (dword_53A38 != 0xFFFFFFFFu)
+                dlg_snap_restore(v1, (void *)0xA0000, 320);
+        }
+    }
+
+    guest_free(v2);
+    if (dword_53A38 != 0xFFFFFFFFu)
+        guest_free(v1);
+
+    return pos;
 }

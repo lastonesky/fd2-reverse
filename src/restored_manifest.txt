@@ -42,7 +42,11 @@
 0x12DAC sub_12DAC game/map_interact.h
 0x14742 sub_14742 game/map_interact.h
 0x13FD4 sub_13FD4 game/item_use.h
+0x1C75E sub_1C75E game/item_use.h
+0x1C81F sub_1C81F game/item_use.h
+0x1C8ED sub_1C8ED game/item_use.h
 0x1C916 sub_1C916 game/item_use.h
+0x1C9DD sub_1C9DD game/item_use.h
 0x1DA16 sub_1DA16 game/item_use.h
 0x22AF6 sub_22AF6 game/item_use.h
 0x25EBB sub_25EBB game/scene_core.h
@@ -427,6 +431,7 @@
 
 # opening / continue-screen helpers (0x1F894 orchestrator still pending)
 0x1F73F sub_1F73F game/title_screen.h
+0x1F81E sub_1F81E game/title_screen.h
 0x1FF79 sub_1FF79 game/title_screen.h
 0x2DF01 sub_2DF01 game/title_screen.h
 
@@ -481,10 +486,12 @@
 0x2F631 sub_2F631 game/figure_view.h
 0x2FE14 sub_2FE14 game/figure_view.h
 
-# map view / zoom / gauge frame-buffer helpers (drivers 0x2000A, 0x21548 and the
-# map status overlay family 0x1E611/1E7F6/1E856 still pending)
+# map view / zoom / gauge frame-buffer helpers.  The zoom transition driver
+# 0x2000A lives in map_zoom.h (its 0x21548 sibling is map_action_zoom_resolve
+# in map_action.h); the map status overlay family 0x1E611/1E7F6/1E856 pending.
 0x1E739 sub_1E739 game/ui_meter.h
 0x1F558 sub_1F558 game/map_zoom.h
+0x2000A sub_2000A game/map_zoom.h
 0x2282F sub_2282F game/map_action.h
 0x265EC sub_265EC game/scene_core.h
 
@@ -529,3 +536,215 @@
 0x1399C sub_1399C game/map_shape.h
 0x1CAC7 sub_1CAC7 game/map_sprites.h
 0x1EC2A sub_1EC2A game/map_status.h
+
+# phases of the unit-move animation and their driver 0x22253 (the driver sets
+# the record's cell and loads the sfx); its inferred group is ev3)
+0x2218A sub_2218A game/map_units.h
+0x22253 sub_22253 game/map_units.h
+0x22470 sub_22470 game/map_units.h
+0x22547 sub_22547 game/map_units.h
+0x22656 sub_22656 game/map_units.h
+
+# unit-AI target/action scorer (the move-target picker 0x1567E drives the two
+# raters; the decision driver 0x14EF0 is still pending)
+0x1567E sub_1567E game/map_ai.h
+0x15880 sub_15880 game/map_ai.h
+0x1598A sub_1598A game/map_ai.h
+0x15B77 sub_15B77 game/map_ai.h
+0x15DA2 sub_15DA2 game/map_ai.h
+
+# map item-use screen (0x2AA00 is the driver; the other three are the
+# helpers it calls, one of which (0x2FB2C) is also the figure-animation
+# driver of the sub_2AA00 item flow)
+0x2AA00 sub_2AA00 game/item_menu.h
+0x2AE0E sub_2AE0E game/item_menu.h
+0x2AC7D sub_2AC7D game/item_menu.h
+0x2FB2C sub_2FB2C game/item_menu.h
+
+# the attack result helpers of the still-pending driver sub_1E856 (0x1E856);
+# both are its only callees and operate on the character table dword_53A45
+0x1E98C sub_1E98C game/map_attack.h
+0x1ECC7 sub_1ECC7 game/map_attack.h
+
+# the attack-result / status-overlay / level-up family driven by the
+# still-pending 0x1548E (0x1E856 = HP-bar drain, 0x1EB05 = overlay flash,
+# 0x1E292 = level-up screen + its 0x1D79C gain-bit marker)
+0x1E856 sub_1E856 game/map_attack.h
+0x1EB05 sub_1EB05 game/map_status.h
+0x1E292 sub_1E292 game/map_levelup.h
+0x1D79C sub_1D79C game/map_levelup.h
+
+# the funcs_1541F entries 20/21 (0x22A85/0x22BC6) and their shared body
+# 0x22AA8; the wrappers push their constants and jump into 0x22AA8's tail
+0x22A85 sub_22A85 game/map_action.h
+0x22BC6 sub_22BC6 game/map_action.h
+0x22AA8 sub_22AA8 game/map_action.h
+
+# the funcs_1541F entries 22/26/27 (0x22BE1/0x22CBF/0x22E41) and their shared
+# damage body 0x22D1B + cost-charge wrapper 0x22CDA; the three wrappers push
+# their constants and jump into 0x22CDA's 0x22BF7 tail
+0x22D1B sub_22D1B game/map_action.h
+0x22CDA sub_22CDA game/map_action.h
+0x22BE1 sub_22BE1 game/map_action.h
+0x22CBF sub_22CBF game/map_action.h
+0x22E41 sub_22E41 game/map_action.h
+
+# 0x31266 is the second `call funcs_30469[reg*4]` site: it plays an emitter
+# over a saved background. Restored as fx_play (all callees already restored).
+0x31266 sub_31266 game/fx.h
+
+# the remaining place-menu entry screens driven by the still-pending 0x279BC /
+# 0x29DAA: 0x28CBD = member item list, 0x28EFE = member popup box, 0x2A43E =
+# buy screen + its 0x2A07A usable-record filter
+0x28CBD sub_28CBD game/shop_screen.h
+0x28EFE sub_28EFE game/shop_screen.h
+0x2A43E sub_2A43E game/shop_screen.h
+0x2A07A sub_2A07A game/shop_screen.h
+
+# AI reach-target picker + its shared map helpers, driven alongside the other
+# scorers by the still-pending 0x14EF0; 0x146D1 is also called by the
+# still-pending 0x14B78 / 0x18890, 0x1DEBE only by 0x14237.
+0x14237 sub_14237 game/map_ai.h
+0x146D1 sub_146D1 game/map_ai.h
+0x1DEBE sub_1DEBE game/map_ai.h
+
+# the actor-"approach a cell" core (0x14B78) and its two closure-ready
+# callers: 0x14121 (move onto the reachable 0x40-flagged cell) and 0x13E9C
+# (move onto the nearest record matching the +6 filter).
+0x14B78 sub_14B78 game/map_move.h
+0x14121 sub_14121 game/map_move.h
+0x13E9C sub_13E9C game/map_move.h
+
+# the funcs_1541F status-effect entries 0/1/2/3/8 (0x21206/0x2134B/0x21364/
+# 0x2137D/0x21494) and their shared body 0x21227: draw the party icons, blink
+# the targets over the map view, charge the cost and resolve the action on the
+# list.  All run through the shared 0x2121A/0x21190 tails (false callees).
+0x21227 sub_21227 game/map_action.h
+0x21206 sub_21206 game/map_action.h
+0x2134B sub_2134B game/map_action.h
+0x21364 sub_21364 game/map_action.h
+0x2137D sub_2137D game/map_action.h
+0x21494 sub_21494 game/map_action.h
+
+# funcs_1541F entries 4/5/6/7/9 + the shared 0x213B7 body.  The 0x21449/62/7B
+# tails jump into 0x21396's 0x213AA call site; 0x213B7/0x214AD end on the shared
+# 0x21190 epilogue inside 0x2111A (false callees).
+0x213B7 sub_213B7 game/map_action.h
+0x21396 sub_21396 game/map_action.h
+0x21449 sub_21449 game/map_action.h
+0x21462 sub_21462 game/map_action.h
+0x2147B sub_2147B game/map_action.h
+0x214AD sub_214AD game/map_action.h
+
+# dynamic action bodies reached straight from the action router 0x20C6F (not
+# funcs_1541F entries): action 21 resolves the action on the listed records with
+# record-layer blink, actions 5/13 heal the list.  0x2111A owns the shared
+# 0x21190 epilogue the other families jump into (false callees).
+0x2111A sub_2111A game/map_action.h
+0x211A4 sub_211A4 game/map_action.h
+
+# the map action router itself (dispatches 0x21082..0x22E41 by action code; its
+# tail collects the party +49 scripts and runs the 0x1AA1D interpreter).
+0x20C6F sub_20C6F game/map_action.h
+
+# funcs_1541F entries 10/11/12/13 + their shared bodies.  0x21548 is the body
+# of entries 10/11/12; 0x21B18 of entries 13/14/15/16/24.  The 0x2185F/0x21A9E
+# tails jump into 0x2153b inside 0x21527 and 0x21B99/0x2211C/0x22153 would jump
+# into 0x21b0b inside 0x21B18 (not calls).  0x21B18 ends on the shared 0x21190
+# epilogue inside 0x2111A (false callee).
+0x21548 sub_21548 game/map_action.h
+0x21527 sub_21527 game/map_action.h
+0x2185F sub_2185F game/map_action.h
+0x21A9E sub_21A9E game/map_action.h
+0x21B18 sub_21B18 game/map_action.h
+0x21AD9 sub_21AD9 game/map_action.h
+
+# funcs_1541F entries 14/15/16 (the dispatch table also points slot 24 at
+# 0x22153).  Each tail jumps into 0x21b0b inside 0x21B18 (not a call).
+0x21B99 sub_21B99 game/map_action.h
+0x2211C sub_2211C game/map_action.h
+0x22153 sub_22153 game/map_action.h
+
+# map direction-cursor key loop + per-frame sprite painter (the two arrays are
+# the drivers' 4-int frame tables).  0x177FC's second argument is dropped by
+# Hex-Rays (machine loads ebx=[esp+0xc]); 0x179D5 tails into the 0x13FCC
+# shared epilogue inside sub_13E9C (false callee).
+0x179D5 sub_179D5 game/map_cursor.h
+0x17898 sub_17898 game/map_cursor.h
+0x177FC sub_177FC game/map_cursor.h
+
+# shop/place party stat-preview rows and the effective-stat helper (the
+# 0x2825B sibling of the shop_rows painters).  0x2825B's return is whatever
+# the last dlg_draw_number leaves in eax and no caller reads it.
+0x28632 sub_28632 game/shop_party_stats.h
+0x2825B sub_2825B game/shop_party_stats.h
+
+# shop/place party stat-preview screen driver.  0x27F4A ends with the
+# conditional `jmp 0x26A73` shared epilogue (mov eax,esi; pop ebp/edi/esi/ebx;
+# ret) matching its own four-register frame, so it returns the 1 / -1 selection.
+0x27F4A sub_27F4A game/shop_party_stats.h
+
+# map-action subtree leaves (closure-ready heads of the sub_1CFF0 family).
+# 0x1D6C8 = select click + DAC-entry-0 flash (caller 0x1CFF0); 0x24BDE =
+# party-record id scan (called by scene_state_22); 0x2F7B6 = the full attack
+# evaluation sibling of 0x1ECC7 (caller 0x2EBE1).
+0x1D6C8 sub_1D6C8 game/fade.h
+0x24BDE sub_24BDE game/party_roster.h
+0x2F7B6 sub_2F7B6 game/map_attack.h
+
+# ANI.DAT animation-frame command decoder (funcs_37012 table + entry points).
+# Loaded/played by 0x20421: palette (0x52766) + VGA frame buffer (0x52762).
+# Previously skipped as "small library functions"; the 0x20421 ANI.DAT loader
+# proves they are game content.  The opcode cursor is the original ESI, modelled
+# as `const unsigned char **sp`.
+0x36E3D sub_36E3D game/ani.h
+0x36E57 sub_36E57 game/ani.h
+0x36E65 sub_36E65 game/ani.h
+0x36EA7 sub_36EA7 game/ani.h
+0x36EE0 sub_36EE0 game/ani.h
+0x36F08 sub_36F08 game/ani.h
+0x36F24 sub_36F24 game/ani.h
+0x36F69 sub_36F69 game/ani.h
+0x36F82 sub_36F82 game/ani.h
+0x36FAC sub_36FAC game/ani.h
+0x36FD3 sub_36FD3 game/ani.h
+0x36FF4 sub_36FF4 game/ani.h
+
+# 0x20421 - ANI.DAT container player: seeks to the container's directory entry
+# (4*index+6), reads the 0xAD-byte header, then for each frame reads an 8-byte
+# {size, command count} header, reads `size` bytes and runs the funcs_37012
+# command stream onto 0xA0000.  Index 1 plays FDOTHER.DAT sample 78 on the
+# first frame.  The frame count is the signed word at header+0xA5 (Hex-Rays
+# split it into a false HIWORD/LOWORD pair around the fread result).
+0x20421 sub_20421 game/ani.h
+
+# four-slot save/scenario selector (new module). 0x29AB2 draws the four rows
+# from the 22987-byte FD2.SAV image; 0x29BCB is the selection loop. Both end
+# in shared epilogues (0x28B3C / 0x26A73) that are plain returns.
+0x29AB2 sub_29AB2 game/save_menu.h
+0x29BCB sub_29BCB game/save_menu.h
+
+# save/load game drivers around the selector: 0x2968D writes the live scene
+# into the chosen FD2.SAV slot, 0x2986F republishes the chosen slot.
+0x2968D sub_2968D game/save_menu.h
+0x2986F sub_2986F game/save_menu.h
+
+# party-change screen callee 0x2B777: stable-partition the party table
+# (dword_53BF7) so the slots flagged in the selection mask come first.  Its
+# function-map callee sub_2968D is a false dependency (the `jmp 0x29862` tail is
+# a shared free-epilogue inside 0x2968D's body).
+0x2B777 sub_2B777 game/party_roster.h
+
+# 0x2872B: the place menu's first-option buy screen (driven from the place's
+# stock list).  Its callees are the shop_screen family (shop_items_paint/run),
+# the 0x602AD item table and the already-restored helpers; it ends with the
+# local epilogue at 0x28B39 (add esp,0x58; pop ebp/edi/esi/ebx; ret).
+0x2872B sub_2872B game/shop_screen.h
+
+# 0x190AC: map cell "special event" handler (driven by the record-interaction
+# driver 0x18D8C's `else` action).  Reads the cursor cell's flag value and
+# tile-info byte, runs the message/dialogue sequence and applies the 3-byte
+# per-flag event (kind 0 = claim slot / dialogue, 1 = money, other = dispatch
+# funcs_1199C[value]); the huge function-map callee list is the funcs_1199C
+# table expansion, not real direct calls.
+0x190AC sub_190AC game/map_event.h

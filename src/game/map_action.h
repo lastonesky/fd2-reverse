@@ -1,4 +1,4 @@
-/* map_action.h - map action-effect handlers (original 0x21082 .. 0x22C04).
+/* map_action.h - map action-effect handlers (original 0x21082 .. 0x22E41).
  *
  * The per-record effects dispatched by the map action router sub_20C6F (action
  * codes 8..24) and by the funcs_1541F event/action table that sub_15311 and
@@ -23,6 +23,39 @@
  *                         (the x and y cost both charge entry 18 on the
  *                         machine), then run 0x22721 / 0x22866 / 0x22997; the
  *                         funcs_1541F entry 25 is 0x22C04 itself.
+ *
+ *   0x22A85  +20 table    charge the 0x619FD entry-20 cost, then run
+ *                        item_apply over the list with effect byte 37 (rec+37)
+ *   0x22BC6  +21 table    the same with entry-21 cost and effect byte 38
+ *   0x22AA8               the shared body both of the above jump into
+ *                        (charge cost, item_apply, then drain the status queue)
+ *
+ *   0x22D1B               the shared damage body of the entries 22/26/27:
+ *                        draw the icons, then deal 10 damage (50% chance) to
+ *                        each target whose effect byte is still empty, arm it
+ *                        to rand 2..5, queue the number and book 8*rec[33]
+ *   0x22CDA               its shared body: charge the cost, then run 0x22D1B
+ *   0x22BE1 / 0x22CBF / 0x22E41  entries 22/26/27: charge index 22/26/27 and
+ *                        damage effect byte 39/37/38 respectively
+ *
+ *   0x214AD               entry 9: charge cost 9, then resolve action 9 on the
+ *                        first listed record only and queue the dealt number
+ *
+ *   0x21548               shared body of the entries 10/11/12: decode the
+ *                        shape library, play the three-frame map zoom, cycle
+ *                        the four scratch frames for 60 ticks, then damage
+ *                        the listed records
+ *   0x21527 / 0x2185F / 0x21A9E  entries 10/11/12: run the map-zoom damage
+ *                        body with index 10/11/12 (11/12 first play a SFX and
+ *                        reveal a cell portrait)
+ *   0x21B18               shared body of the entries 13/14/15/16/24: charge
+ *                        the cost, then heal each listed record by the action
+ *                        table amount and queue the recovered number
+ *   0x21AD9               entry 13: SFX + portrait zoom-reveal, then the
+ *                        heal-by-action body with index 13
+ *   0x21B99 / 0x2211C / 0x22153  entries 14/15/16 (the table also points slot
+ *                        24 at 0x22153): SFX + portrait zoom-reveal, then the
+ *                        heal-by-action body with index 14/15/16
  *
  * ABI = cdecl, arguments decoded from the pushes (the offline disassembly is
  * the authority).  Record fields index the 80-byte table dword_53A45; the
@@ -67,5 +100,131 @@ int map_action_grow_y_cost(int index, int count, const uint8_t *list);
 
 /* 0x22960 - charge the 0x619FD entry-19 cost, then run map_action_widen. */
 int map_action_widen_cost(int index, int count, const uint8_t *list);
+
+/* 0x22AA8 - charge the 0x619FD entry-`index` cost, run item_apply over `list`
+ * with per-record effect byte `field`, then drain the queued status numbers.
+ * Shared body of the funcs_1541F entries 20/21 (see map_action_entry20/21). */
+int map_action_charge_apply(int a1, int index, int count, const uint8_t *list,
+                            int field);
+
+/* 0x22A85 - funcs_1541F entry 20: charge cost index 20, effect byte 37. */
+int map_action_entry20(int a1, int count, const uint8_t *list);
+
+/* 0x22BC6 - funcs_1541F entry 21: charge cost index 21, effect byte 38. */
+int map_action_entry21(int a1, int count, const uint8_t *list);
+
+/* 0x22D1B - deal 10 damage (50% chance) to each listed record whose effect
+ * byte `field` is still empty, arm it to rand 2..5, book experience and queue
+ * the numbers.  Shared body of the funcs_1541F entries 22/26/27. */
+int map_action_damage_records(int a1, int table_idx, int count,
+                              const uint8_t *list, int field);
+
+/* 0x22CDA - charge cost `index` then run map_action_damage_records; shared
+ * body of the funcs_1541F entries 22/26/27. */
+int map_action_charge_damage(int a1, int index, int count, const uint8_t *list,
+                             int field);
+
+/* 0x22BE1 - funcs_1541F entry 22: charge cost index 22, effect byte 39. */
+int map_action_entry22(int a1, int count, const uint8_t *list);
+
+/* 0x22CBF - funcs_1541F entry 26: charge cost index 26, effect byte 37. */
+int map_action_entry26(int a1, int count, const uint8_t *list);
+
+/* 0x22E41 - funcs_1541F entry 27: charge cost index 27, effect byte 38. */
+int map_action_entry27(int a1, int count, const uint8_t *list);
+
+/* 0x21227 - charge cost `table_idx`, blink the targets over the map view and
+ * resolve action `table_idx` on each listed record, queueing the dealt number.
+ * Shared effect body of the funcs_1541F entries 0/1/2/3/8. */
+int map_action_resolve_list(int a1, int table_idx, int count,
+                            const uint8_t *list);
+
+/* 0x21206 / 0x2134B / 0x21364 / 0x2137D / 0x21494 - funcs_1541F entries
+ * 0/1/2/3/8: resolve action 0/1/2/3/8 on the list. */
+int map_action_entry00(int a1, int count, const uint8_t *list);
+int map_action_entry01(int a1, int count, const uint8_t *list);
+int map_action_entry02(int a1, int count, const uint8_t *list);
+int map_action_entry03(int a1, int count, const uint8_t *list);
+int map_action_entry08(int a1, int count, const uint8_t *list);
+
+/* 0x213B7 - clear the status-queue flag, draw the animated party icons with
+ * shape bank `table_idx`, alternate the record-layer animation frames, charge
+ * cost `table_idx` via rec_sub_table5, then resolve action `table_idx` on each
+ * listed record and queue the dealt number.  Shared body of the funcs_1541F
+ * entries 4/5/6/7. */
+int map_action_resolve_layer(int a1, int table_idx, int count,
+                             const uint8_t *list);
+
+/* 0x21396 / 0x21449 / 0x21462 / 0x2147B - funcs_1541F entries 4/5/6/7:
+ * resolve action 4/5/6/7 on the list via map_action_resolve_layer. */
+int map_action_entry04(int a1, int count, const uint8_t *list);
+int map_action_entry05(int a1, int count, const uint8_t *list);
+int map_action_entry06(int a1, int count, const uint8_t *list);
+int map_action_entry07(int a1, int count, const uint8_t *list);
+
+/* 0x214AD - funcs_1541F entry 9: charge cost 9, then resolve action 9 on the
+ * first listed record only and queue the dealt number. */
+int map_action_entry09(int a1, int count, const uint8_t *list);
+
+/* 0x2111A - action router (sub_20C6F) action-code 21 body: draw the animated
+ * party icons and the record-layer blink with shape bank `bank`, resolve action
+ * `bank` on each listed record and queue the dealt number.  Owns the shared
+ * 0x21190 epilogue (map_view_update + map_draw_status_popups) that the siblings
+ * 0x21227/0x213B7/0x211A4/0x214AD jump into. */
+int map_action_anim_resolve(int a1, int count, const uint8_t *list, int bank);
+
+/* 0x211A4 - action router (sub_20C6F) action-code 5/13 body: draw both
+ * party-icon passes with the fixed bank 13, then heal each listed record by
+ * `amount` and queue the recovered number with glyph base 105. */
+int map_action_heal_list(int a1, int count, const uint8_t *list, int amount);
+
+/* 0x21548 - decode the current shape library, build the 64x64 source-base
+ * table over it, play the three-frame map zoom while redrawing the unflagged
+ * portraits, cycle the four scratch frames into 0xA0504 for 60 ticks (SFX
+ * bank-13 sample 2 every 6th tick for the first 43), then resolve action
+ * `table_idx` on each listed record and pop the queued numbers.  Shared body
+ * of the funcs_1541F entries 10/11/12 (see map_action_entry10/11/12). */
+int map_action_zoom_resolve(int a1, int table_idx, int count,
+                            const uint8_t *list);
+
+/* 0x21527 - funcs_1541F entry 10: run the map-zoom damage body with index 10. */
+int map_action_entry10(int a1, int count, const uint8_t *list);
+
+/* 0x2185F / 0x21A9E - funcs_1541F entries 11/12: play SFX bank-13 sample 2 and
+ * reveal the cell portrait (radius 15/30, step 10/16), then run the map-zoom
+ * damage body with index 11/12. */
+int map_action_entry11(int a1, int count, const uint8_t *list);
+int map_action_entry12(int a1, int count, const uint8_t *list);
+
+/* 0x21B18 - clear the status-queue flag, draw both party-icon passes with
+ * shape bank `table_idx`, charge cost `table_idx` via rec_sub_table5, then
+ * heal each listed record by the amount read from the action's tbl_619FD
+ * entry and queue the recovered number with glyph base 105.  Shared body of
+ * the funcs_1541F entries 13/14/15/16/24. */
+int map_action_heal_action_list(int a1, int table_idx, int count,
+                                const uint8_t *list);
+
+/* 0x21AD9 - funcs_1541F entry 13: play SFX bank-13 sample 11 and zoom-reveal
+ * the portrait (radius 1, step 2), then run the heal-by-action body with index
+ * 13. */
+int map_action_entry13(int a1, int count, const uint8_t *list);
+
+/* 0x21B99 / 0x2211C / 0x22153 - funcs_1541F entries 14/15/16 (the dispatch
+ * table points slot 24 at 0x22153 as well): play SFX bank-13 sample 11 and
+ * zoom-reveal the portrait (radius/step 2/4, 8/4, 6/6), then run the
+ * heal-by-action body with index 14/15/16. */
+int map_action_entry14(int a1, int count, const uint8_t *list);
+int map_action_entry15(int a1, int count, const uint8_t *list);
+int map_action_entry16(int a1, int count, const uint8_t *list);
+
+/* 0x20C6F - the map action router.  Reads the item entry selected by
+ * rec_field_byte(actor, slot) through the 0x4E8BC accessor; its byte +13 is
+ * the action code and the uint16 at +14 the shape bank.  Dispatches the
+ * matching effect over the `count` records named by `list` (threading `actor`
+ * and `slot` through), drops the router's `slot` from the actor's equipment
+ * list for actions 5/6/7/11, then runs the shared tail: zero dword_53EC8,
+ * release the FDOTHER effect bank, collect the party's +49 script entries and
+ * run them through the event-script interpreter.  Callers ignore the result. */
+int map_action_router(int actor, int slot, int count, const uint8_t *list);
 
 #endif /* GAME_MAP_ACTION_H */

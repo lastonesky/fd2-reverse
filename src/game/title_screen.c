@@ -69,3 +69,15 @@ void title_frame_show(int image_index, int palette_index, const void *strip,
                   (const uint8_t *)strip + 320u * (uint32_t)row, 320, 320, 200);
     pal_fade_in();
 }
+
+/* 0x1F81E */
+void title_ani_play(int index, int delay_ms, int palette_index)
+{
+    if (palette_index != -1) {
+        memset((void *)(uintptr_t)0xA0000u, 0, 0xFA00u);
+        dword_53A65 = res_load(aFdotherDat, dword_53A65, palette_index);
+    }
+    pal_fade_range(0, 255, 0);
+    ani_play(index, delay_ms, 0);
+    pal_fade_out();   /* shared 0x1F882 tail block */
+}

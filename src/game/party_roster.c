@@ -1,4 +1,5 @@
-/* party_roster.c - party-membership helpers (original 0x2B439 + 0x2B843).
+/* party_roster.c - party-membership helpers (original 0x2B439 + 0x2B843 +
+ * 0x2B777).
  *
  * Direct translation of the machine code; the offline disassembly
  * (analysis/cseg01_disasm.txt, lines for 0x2B439..0x2B995) is authoritative.
@@ -11,7 +12,10 @@
  *   - both functions compare an unsigned byte id (movzx) against the record
  *     byte +8, so the compare is on (uint8_t)id;
  *   - `buf` (0x53A61, the DATO sprite bank scratch cell) is freed through the
- *     game heap wrapper, matching dword_53BF7's game-heap allocation.
+ *     game heap wrapper, matching dword_53BF7's game-heap allocation;
+ *   - 0x2B777's tail `push edi; jmp 0x29862` is a shared epilogue in 0x2968D's
+ *     body (`call free`; pop ebp/edi/esi/ebx), i.e. `free(tmp); return`, so its
+ *     only dependencies are the CRT malloc/memmove/free.
  */
 #include "fd2_game.h"
 #include "party_roster.h"
@@ -77,4 +81,46 @@ int party_member_move_front(int id)
     for (i = 0; i < (int)dword_53BFB; ++i)
         unit_entry_data(party[REC_STRIDE * i + 7], fp);
     return fclose(fp);
+}
+
+/* 0x24BDE - is unit id `id` in the party-record table dword_53BF7?
+ *
+ * Scans slots 0..dword_53BFB-1 (the machine's loop counter starts at 0, unlike
+ * party_member_present's 1..count) and compares the record's id byte (+8) with
+ * the zero-extended `id`.  IDA's prototype is int(int); the only callee is the
+ * dropped stack probe. */
+int party_has_unit(int id)
+{
+    const uint8_t *party = (const uint8_t *)(uintptr_t)dword_53BF7;
+    int i;
+
+    for (i = 0; i < (int)dword_53BFB; ++i) {
+        if (party[REC_STRIDE * i + 8] == (uint8_t)id)
+            return 1;
+    }
+    return 0;
+}
+
+/* 0x2B777 - stable-partition the party table dword_53BF7 by the count-1 mask
+ * bytes `selected[0..count-2]` (each pairing with slot i+1): the set slots come
+ * first in order, then the unset ones.  Slot 0 (the header) and the tail of the
+ * 0xA00-byte table are copied through untouched.  The Watcom probe is dropped;
+ * the tail `push edi; jmp 0x29862` is 0x2968D's shared free-epilogue. */
+void party_roster_apply_selection(const uint8_t *selected)
+{
+    uint8_t *party = (uint8_t *)(uintptr_t)dword_53BF7;
+    uint8_t *tmp   = (uint8_t *)guest_malloc(0xA00u);
+    int      next  = 1;                 /* esi: next destination slot */
+    int      i;
+
+    memmove(tmp, party, 0xA00u);
+    for (i = 0; i < (int)dword_53BFB - 1; ++i) {
+        if (selected[i] != 0)
+            memmove(party + REC_STRIDE * next++, tmp + REC_STRIDE * (i + 1), 0x50u);
+    }
+    for (i = 0; i < (int)dword_53BFB - 1; ++i) {
+        if (selected[i] == 0)
+            memmove(party + REC_STRIDE * next++, tmp + REC_STRIDE * (i + 1), 0x50u);
+    }
+    guest_free(tmp);
 }

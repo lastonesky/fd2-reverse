@@ -26,6 +26,12 @@ void pal_fade_in(void);    /* restore from black            */
 /* 0x11DF2 - add `add` to each channel of DAC entries [start..end], clamp 0x3F */
 void pal_fade_add(int start, int end, int add);
 
+/* 0x1D6C8 - play the select click (svc_play_sfx on the dword_53B13 bank) and
+ * flash DAC entry 0 four times: on with byte_51AAD/51AD1/51AF5[index], then
+ * black, one tick apart.  Called by the map-action driver 0x1CFF0 for the
+ * highlighted entry. */
+void pal_flash_entry(int index);
+
 /* 0x4E310 - read the BIOS tick word (BDA 0x46C) through the low-memory mirror,
  * zero-extended to 16 bits. */
 uint16_t pal_tick_word(void);

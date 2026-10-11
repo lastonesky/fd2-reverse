@@ -9,6 +9,11 @@ Read `PROGRESS.md` and recent `src/game/*.c` for style. Leave the repo clean and
 - Inventory/status: `function-map.csv`; segment bytes: `analysis/seg_cseg01.bin` (file offset = addr - 0x10000).
 - Ghidra MCP may be unavailable in your context; the offline disassembly is the authority.
 
+> **IMPORTANT — bash exit codes abort your run.** A bash command that exits non-zero terminates this
+> child immediately. Any `grep`/`ls`/pipeline that may legitimately find nothing MUST end with
+> `|| true` (e.g. `grep -n "^ *1e504:" analysis/cseg01_disasm.txt || true`, `ls x | grep y || true`).
+> Avoid bare `grep` as the last command of a pipeline; do not use `set -e`/`pipefail`.
+
 ## Batch selection
 1. Compute closure-ready pending functions and pick a coherent cluster (1..6 funcs, <= ~1500 bytes) by usage desc, preferring same-module/callee clusters:
 
@@ -62,14 +67,15 @@ free.sort(key=lambda r:-int(r["usage"] or 0))
   findings) and update the `验证与台账` counts for 待还原 / 已还原未验证.
 - Commit: `git add -A && git commit -m "P1 batch N: restore <cluster> (<addrs>)"`.
 
-## Constraints / STOP
+## Constraints / HALT
 - One writer; no parallel git. Do not modify verified existing modules beyond the umbrella include.
 - Do not hand-edit `function-map.csv` or generated headers.
 - If compile cannot go green after honest fixes, or semantics stay ambiguous after decomp+disasm, or
   you would have to guess ABI/constants: revert uncommitted changes (`git checkout -- .`; delete new
-  files) and end with a line starting `STOP:`.
+  files) and end with a line starting `HALT: <reason>`.
 
 ## Final report (concise)
 `BATCH`; `COMMIT` (hash or none); `NEW_PENDING` (count); `NOTES` (traps, decompiler artifacts, asset
-gaps, false callees); `NEXT` (recommended cluster); and `STOP:` only if halted. If nothing is left to
-restore, print `ALL_DONE`.
+gaps, false callees); `NEXT` (recommended cluster). Use the reserved word `HALT:` (line start) ONLY
+when you actually halted as described above — never in a normal completion report, and never write a
+bare `STOP:` line. If nothing is left to restore, print `ALL_DONE`.
