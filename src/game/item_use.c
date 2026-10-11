@@ -140,7 +140,7 @@ int unit_damage(int rec, int amount)
  * (an absolute screen address).  Out-of-view records are dropped.  `mode` 0
  * is the plain sprite, 2 the constant-colour variant; `field` is the
  * record-relative animation phase byte. */
-int view_draw_unit_sprite(int dst, int pitch, int rec, int mode, int field)
+int view_draw_unit_sprite(uint8_t *dst, int pitch, int rec, int mode, int field)
 {
     const uint8_t *r = (const uint8_t *)dword_53A45 + 80u * (uint32_t)rec;
     int v6  = r[0];
@@ -149,7 +149,8 @@ int view_draw_unit_sprite(int dst, int pitch, int rec, int mode, int field)
     int v15 = r[4];
     int ox  = (int)qword_53AA9;
     int oy  = dword_53AAD;
-    int v10, v11, v13;
+    int v10, v11;
+    uint8_t *v13;
     const uint8_t *base = (const uint8_t *)dword_53A61;
     const uint8_t *buf;
 
@@ -176,9 +177,9 @@ int view_draw_unit_sprite(int dst, int pitch, int rec, int mode, int field)
     v13 = dst - 6 * pitch + 24 * pitch * (v7 - oy) + 24 * (v6 - ox);
 
     if (mode == 0)
-        sprite24_plain(buf, (void *)(uintptr_t)(v13 + v10 * v15), pitch);
+        sprite24_plain(buf, v13 + v10 * v15, pitch);
     else if (mode == 2)
-        sprite24_const(buf, (void *)(uintptr_t)(v13 + v10 * v15), pitch);
+        sprite24_const(buf, v13 + v10 * v15, pitch);
 
     return 0;
 }
@@ -236,13 +237,13 @@ int item_use(int rec)
     svc_wait_ticks(1);
     svc_play_sfx((const void *)(uintptr_t)dword_53EEC, 4, 1);
 
-    view_draw_unit_sprite((int)(intptr_t)dword_53A49 + 32904, 456, rec, 2, 253);
-    gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
+    view_draw_unit_sprite(dword_53A49 + 32904, 456, rec, 2, 253);
+    gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320,
                   dword_53A49 + 32904, 456, 0x138, 192);
     svc_wait_ticks(1);
 
-    view_draw_unit_sprite((int)(intptr_t)dword_53A49 + 32904, 456, rec, 0, 0);
-    gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
+    view_draw_unit_sprite(dword_53A49 + 32904, 456, rec, 0, 0);
+    gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320,
                   dword_53A49 + 32904, 456, 0x138, 192);
     svc_wait_ticks(1);
 

@@ -29,7 +29,7 @@ typedef void     (*flush_fn)(void);          /* 0x4E381 (keyboard flush)     */
 /* --- original data-segment globals ------------------------------------- */
 
 #define REC_STRIDE 80
-#define VGA_BASE   0x000A0000u
+#define VGA_BASE   fd2_vga
 
 /* Every vm_run call in this batch passes the same eight tail arguments. */
 static void ev2_vm_run(int sub)

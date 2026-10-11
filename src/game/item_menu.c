@@ -13,7 +13,7 @@
 
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(DOS_LOWMEM_BASE + (off)))
 
-#define VGA_FRAME 0xA0000u /* the visible 320x200 frame                    */
+#define VGA_FRAME fd2_vga /* the visible 320x200 frame                    */
 #define WORK_SIZE 0x1F400u /* 640-stride figure work buffer                */
 #define SCR_SIZE  0xFA00u  /* 320-stride screen snapshot                   */
 
@@ -45,10 +45,10 @@ int item_menu_list(uint8_t *records, uint8_t *kinds)
 }
 
 /* 0x2AC7D - use the current item on record `rec`.  Opens the talking portrait,
- * runs the item vm script 595 (page address 0xA951F), blits the DATO box and
+ * runs the item vm script 595 (page address VGA_P(0xA951Fu), blits the DATO box and
  * pages through the five dialogue pages 490..494 at record +0x37/+0x39/+0x3e/
  * +0x42/+0x46, each driving the next.  When the record's tbl_615FE entry has a
- * reaction byte the second script 596 is played at 6080*page + 0xA951F and the
+ * reaction byte the second script 596 is played at 6080*page + VGA_P(0xA951Fu) and the
  * record's byte +0x3b advances by it.  Finally folds the equipment metrics and
  * resets the record's item state (byte +0x21/+0x3c, words +0x40/+0x44 from the
  * maxima at +0x42/+0x46). */
@@ -63,7 +63,7 @@ void item_menu_use(int rec)
     kbd_flush();
     msg_open_portrait(r[7]);
     dword_53AD9 = (uint32_t)r[0x20] + 150u;
-    vm_run(dword_53A7D, 595, 693535, 320, 205, 76, 74, 19, 1);
+    vm_run(dword_53A7D, 595,VGA_P(693535), 320, 205, 76, 74, 19, 1);
     dlg_blit_dato(dword_53A85, dword_53C67, 0);
     kbd_flush();
 
@@ -76,7 +76,7 @@ void item_menu_use(int rec)
     lbl = (const uint8_t *)tbl_ptr((void *)&fd2_data2[0x15FE], 2, r[7], -64);
     if (lbl[1] != 0) {
         dword_53AE1 = lbl[1];
-        vm_run(dword_53A7D, 596, 6080 * page + 693535, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 596,VGA_P(6080 * page + 693535), 320, 205, 76, 74, 19, 1);
         dlg_wait_key(0);
         r[0x3b] = (uint8_t)(r[0x3b] + (uint8_t)dword_53AE1);
     }
@@ -183,7 +183,7 @@ int item_menu_run(void)
         count = item_menu_list(records, kinds);
         if (count == 0) {
             msg_open_portrait(byte_5238B);
-            vm_run(dword_53A7D, 591, 693452, 320, 205, 76, 74, 19, 1);
+            vm_run(dword_53A7D, 591,VGA_P(693452), 320, 205, 76, 74, 19, 1);
             dlg_blit_dato(dword_53A85, dword_53C67, 0);
             dlg_wait_key(0);
             msg_close_portrait();
@@ -191,7 +191,7 @@ int item_menu_run(void)
         }
 
         msg_open_portrait(byte_5238B);
-        vm_run(dword_53A7D, 592, 693452, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 592,VGA_P(693452), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         dlg_wait_key(1);
         msg_close_portrait();
@@ -208,7 +208,7 @@ int item_menu_run(void)
         rec = (uint8_t *)dword_53A45 + 80u * (uint32_t)v3;
         dword_53AD9 = (uint32_t)rec[7] + 1u;
 
-        vm_run(dword_53A7D, 594, 693452, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 594,VGA_P(693452), 320, 205, 76, 74, 19, 1);
         kbd_flush();
         v5 = map_window_run();
         map_draw_text_window();

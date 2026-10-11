@@ -124,7 +124,7 @@ void ev5_34317(int val, uint8_t *out)
 /* 0x1F6EF - fill (n-1) VGA rows with `value`. */
 void ev5_1F6EF(int x, int y, int value, int n)
 {
-    uint8_t *p = (uint8_t *)(uintptr_t)((uint32_t)x + 320u * (uint32_t)y + 0xA0000u);
+    uint8_t *p = fd2_vga + ((uint32_t)x + 320u * (uint32_t)y);
     int      i;
     for (i = 0; i < n - 1; i++) {
         memset(p, value, (size_t)(n - 1));
@@ -269,7 +269,7 @@ void ev5_20BF5(void)
     if (rec_flag(0) != 0)
         dword_53ECC = 1;
     if (rec_flag(1) != 0) {
-        vm_run((void *)(uintptr_t)dword_53A45, 7, 0xA0000, 320, 205,
+        vm_run((void *)(uintptr_t)dword_53A45, 7,VGA_P(0xA0000u), 320, 205,
                     76, 74, 19, 1);
         dword_53ECC = 1;
     }
@@ -285,7 +285,7 @@ void ev5_20B72(void)
     if (rec_flag(0) != 0)
         dword_53ECC = 1;
     if (rec_flag(1) != 0) {
-        vm_run((void *)(uintptr_t)dword_53A45, 9, 0xA0000, 320, 205,
+        vm_run((void *)(uintptr_t)dword_53A45, 9,VGA_P(0xA0000u), 320, 205,
                     76, 74, 19, 1);
         dword_53ECC = 1;
     }

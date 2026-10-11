@@ -18,9 +18,9 @@
 
 
 /* screen offsets the three option bands are blitted to (9 rows apart) */
-#define TITLE_BAND0_DST 0x000ACD81u
-#define TITLE_BAND1_DST 0x000AD8C1u
-#define TITLE_BAND2_DST 0x000AE401u
+#define TITLE_BAND0_DST (fd2_vga + 0xCD81u)
+#define TITLE_BAND1_DST (fd2_vga + 0xD8C1u)
+#define TITLE_BAND2_DST (fd2_vga + 0xE401u)
 
 /* 0x2DF01 */
 void pal_blend_to(int first, int last, int step, int r, int g, int b)
@@ -56,16 +56,16 @@ void title_frame_show(int image_index, int palette_index, const void *strip,
     const void *img;
 
     pal_fade_out();
-    memset((void *)(uintptr_t)0xA0000u, 0, 0xFA00u);
+    memset((void *)(uintptr_t)VGA_P(0xA0000u), 0, 0xFA00u);
     dword_53A65 = res_load(aFdotherDat, dword_53A65, palette_index);
     img = res_load(aFdotherDat, NULL, image_index);
-    rle_decode(img, 0, 0, (void *)(uintptr_t)0xA0000u, 320, -1);
+    rle_decode(img, 0, 0, (void *)(uintptr_t)VGA_P(0xA0000u), 320, -1);
     pal_fade_in();
     svc_wait_ticks(1);
     svc_wait_ticks(6);
     pal_fade_out();
     dword_53A65 = res_load(aFdotherDat, dword_53A65, 101);
-    gfx_copy_rows((void *)(uintptr_t)0xA0000u, 320,
+    gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0000u), 320,
                   (const uint8_t *)strip + 320u * (uint32_t)row, 320, 320, 200);
     pal_fade_in();
 }
@@ -74,7 +74,7 @@ void title_frame_show(int image_index, int palette_index, const void *strip,
 void title_ani_play(int index, int delay_ms, int palette_index)
 {
     if (palette_index != -1) {
-        memset((void *)(uintptr_t)0xA0000u, 0, 0xFA00u);
+        memset((void *)(uintptr_t)VGA_P(0xA0000u), 0, 0xFA00u);
         dword_53A65 = res_load(aFdotherDat, dword_53A65, palette_index);
     }
     pal_fade_range(0, 255, 0);
@@ -118,21 +118,21 @@ int title_screen_run(void)
     int      i, j, k, m;
 
     snd = (uint8_t *)res_load(aFdotherDat, NULL, 77);          /* sound bank */
-    memset((void *)(uintptr_t)0xA0000u, 0, 0xFA00u);
+    memset((void *)(uintptr_t)VGA_P(0xA0000u), 0, 0xFA00u);
     dword_53A65 = (uint8_t *)res_load(aFdotherDat, dword_53A65, 76);
     pal_fade_range(0, 255, 64);
     logo = (uint8_t *)res_load(aFdotherDat, NULL, 74);
-    rle_decode(logo, 0, 0, (void *)(uintptr_t)0xA0000u, 320, -1);
+    rle_decode(logo, 0, 0, (void *)(uintptr_t)VGA_P(0xA0000u), 320, -1);
     pal_fade_in();
     svc_wait_ticks(1);
     svc_wait_ticks(30);
     pal_fade_out();
     dword_53A65 = (uint8_t *)res_load(aFdotherDat, dword_53A65, 99);
-    memset((void *)(uintptr_t)0xA0000u, 0, 0xFA00u);
+    memset((void *)(uintptr_t)VGA_P(0xA0000u), 0, 0xFA00u);
     pal_fade_range(0, 255, 0);
     ani_play(3, 90, 1);
     pal_fade_out();
-    memset((void *)(uintptr_t)0xA0000u, 0, 0xFA00u);
+    memset((void *)(uintptr_t)VGA_P(0xA0000u), 0, 0xFA00u);
     dword_53A65 = (uint8_t *)res_load(aFdotherDat, dword_53A65, 101);
     pal_fade_range(0, 255, 64);
 
@@ -150,7 +150,7 @@ int title_screen_run(void)
     for (j = 535; ; --j) {
         if (j < 0)
             break;
-        gfx_copy_rows((void *)(uintptr_t)0xA0000u, 320,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0000u), 320,
                       strip + 320u * (uint32_t)j, 320, 320, 200);
         if (j == 535)
             pal_fade_in();
@@ -180,7 +180,7 @@ int title_screen_run(void)
         goto mark_check;
 
     anim_tail:
-        gfx_copy_rows((void *)(uintptr_t)0xA0000u, 320,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0000u), 320,
                       strip + 320u * (uint32_t)j, 320, 320, 200);
         dword_53A65 = (uint8_t *)res_load(aFdotherDat, dword_53A65, 101);
         pal_fade_in();
@@ -216,12 +216,12 @@ int title_screen_run(void)
 
     img = (uint8_t *)res_load(aFdotherDat, img, 7);
     dword_53A65 = (uint8_t *)res_load(aFdotherDat, dword_53A65, 8);
-    memset((void *)(uintptr_t)0xA0000u, 0, 0xFA00u);
+    memset((void *)(uintptr_t)VGA_P(0xA0000u), 0, 0xFA00u);
     pal_fade_range(0, 255, 0);
     ani_play(1, 15, 1);
     svc_play_sfx2(snd, 3, 1);
     pal_fade_add(0, 255, 64);
-    res_blit6((void *)(uintptr_t)0xA0000u, 320, img, 0);
+    res_blit6((void *)(uintptr_t)VGA_P(0xA0000u), 320, img, 0);
     for (m = 0; m <= 40; ++m) {
         pal_blend_to(0, 255, m, 56, 60, 63);
         j___delay(8);
@@ -273,7 +273,7 @@ int title_screen_run(void)
         j___delay(80);
     }
     pal_fade_out();
-    memset((void *)(uintptr_t)0xA0000u, 0, 0xFA00u);
+    memset((void *)(uintptr_t)VGA_P(0xA0000u), 0, 0xFA00u);
     guest_free(img);
     svc_play_sfx(snd, -1, 1);
     guest_free(snd);

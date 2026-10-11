@@ -75,7 +75,7 @@ void scenario_load(void)
     if (util_sum_tail4(buf, SAVE_FILE_SIZE) !=              /* 0x100AD */
         *(uint32_t *)(buf + SAVE_FILE_SIZE - 4)) {
         msg_open_portrait(75);                              /* 0x100BD */
-        vm_run(dword_53A7D, 436, 696099, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 436,VGA_P(696099), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         dlg_wait_key(0);
         ev4_196CB();
@@ -157,14 +157,14 @@ void scenario_load(void)
 
     /* 9-step band fade at x = 84, plus the location number once j > 6. */
     for (j = 0; j < 9; ++j) {                               /* 0x104A1     */
-        rec = res_draw_subimage(dword_53A81, (void *)0xA0000u,
+        rec = res_draw_subimage(dword_53A81, (void *)VGA_P(0xA0000u),
                                 320, 120, 84, j + 83);
         if (j > 6)
-            dlg_draw_number((void *)0xA726Bu, 320, dword_53BEF, 42, 3);
+            dlg_draw_number((void *)VGA_P(0xA726Bu), 320, dword_53BEF, 42, 3);
         j___delay(70);
         if (j == 8)
             j___delay(500);
-        dlg_snap_restore(rec, (void *)0xA0000u, 320);
+        dlg_snap_restore(rec, (void *)VGA_P(0xA0000u), 320);
     }
 
     /* 4-step map-window fade with k = 2,3,4,9 (the k == 5 slot is skipped). */
@@ -177,7 +177,7 @@ void scenario_load(void)
                                 456, 116, kk + 84, 91);
         dlg_draw_number(dword_53A49 + 0x812F + (kk + 0x5A) * 456,
                         456, dword_53BEF, 42, 3);
-        gfx_copy_rows((void *)0xA0504u, 320, dword_53A49 + 0x8088,
+        gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + 0x8088,
                       456, 312, 192);
         svc_wait_ticks(1);
         dlg_snap_restore(rec, dword_53A49 + 0x8088, 456);

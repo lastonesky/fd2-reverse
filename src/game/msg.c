@@ -55,7 +55,7 @@ typedef void  (*blit_band_fn)(int y, void *dst, void *src);
 
 /* --- original data-segment globals ------------------------------------- */
 
-#define VGA_BASE      0x000A0000u
+#define VGA_BASE      fd2_vga
 #define SCREEN_BYTES  64000        /* 320 * 200 */
 #define BAND_ROWS     86           /* 0x56: nominal band height */
 #define BAND_SRC_OFF  0x8C05       /* 35845 = 112*320 + 5 (portrait top) */
@@ -155,7 +155,7 @@ void msg_show_lines(int id, int sub)
     kbd_flush();
     msg_open_portrait(id);
     kbd_flush();
-    vm_run((void *)(uintptr_t)dword_53A79, sub, 0xA9514,
+    vm_run((void *)(uintptr_t)dword_53A79, sub,VGA_P(0xA9514u),
                  320, 205, 76, 74, 19, 1);
     dlg_blit_dato(dword_53A85, dword_53C67, 0);
     dlg_wait_key(0);
@@ -173,8 +173,7 @@ int msg_show_page(uint16_t *counter, const uint8_t *range, int sub, int page)
             dlg_scroll_text(dword_53C67);
         }
         kbd_flush();
-        vm_run((void *)(uintptr_t)dword_53A7D, sub,
-                     page * 6080 + 0xA951F, 320, 205, 76, 74, 19, 1);
+        vm_run((void *)(uintptr_t)dword_53A7D, sub, VGA_P(page * 6080 + 0xA951Fu), 320, 205, 76, 74, 19, 1);
         *counter += (uint16_t)dword_53AE1;
         page++;
     }

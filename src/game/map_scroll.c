@@ -47,7 +47,7 @@ void map_scroll_down(int rec)
                         (int)dword_53AA9, dword_53AAD);
         dlg_portraits_refresh();
         row += by;
-        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, dword_53A49 + row,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320, dword_53A49 + row,
                       456, 0x138, 0xC0);
         ev5_13460();
     }
@@ -93,7 +93,7 @@ void map_scroll_left(int rec)
         dword_53AED = 0;
         dlg_portraits_refresh();
         row += by;
-        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, dword_53A49 + row,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320, dword_53A49 + row,
                       456, 0x138, 0xC0);
         ev5_13460();
     }
@@ -144,7 +144,7 @@ void map_scroll_up(int rec)
         }
         dlg_portraits_refresh();
         row += by;
-        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, dword_53A49 + row,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320, dword_53A49 + row,
                       456, 0x138, 0xC0);
         ev5_13460();
     }
@@ -189,7 +189,7 @@ void map_scroll_right(int rec)
                         (int)dword_53AA9, dword_53AAD);
         dlg_portraits_refresh();
         row += by;
-        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, dword_53A49 + row,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320, dword_53A49 + row,
                       456, 0x138, 0xC0);
         ev5_13460();
     }

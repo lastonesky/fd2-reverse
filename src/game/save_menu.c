@@ -15,23 +15,23 @@
 #define SAVE_FILE_SIZE 0x59CBu
 
 /* 0x29AB2 */
-void save_slot_rows(int selected, int dst, int base)
+void save_slot_rows(int selected, uint8_t *dst, int base)
 {
     int i;
 
     for (i = 0; i < 4; ++i) {
-        int     v5   = 320 * (19 * i + 119) + dst;
+        uint8_t *v5  = dst + (320 * (19 * i + 119));
         int     fg   = (i == selected) ? 201 : 205;
         int     slot = 2600 * i + base + 12587;
         uint8_t id   = *(const uint8_t *)(uintptr_t)(slot + 2560);
 
         dword_53AE1 = i + 1;
-        vm_run(dword_53A7D, 549, v5 + 10, 320, fg, 76, 0, 0, 0);
+        vm_run(dword_53A7D, 549,v5 + 10, 320, fg, 76, 0, 0, 0);
         if (id == 0xFF) {
-            vm_run(dword_53A7D, 514, v5 + 88, 320, fg, 76, 0, 0, 0);
+            vm_run(dword_53A7D, 514,v5 + 88, 320, fg, 76, 0, 0, 0);
         } else {
-            vm_run(dword_53A7D, id + 514, v5 + 40, 320, fg, 76, 0, 0, 0);
-            vm_run(dword_53A7D, id + 550, v5 + 130, 320, fg, 76, 0, 0, 0);
+            vm_run(dword_53A7D, id + 514,v5 + 40, 320, fg, 76, 0, 0, 0);
+            vm_run(dword_53A7D, id + 550,v5 + 130, 320, fg, 76, 0, 0, 0);
         }
     }
 }
@@ -47,7 +47,7 @@ int save_slot_select(int base, int wait_keys)
     dword_53C5F = guest_malloc(0xFA00u);
     dword_53C63 = guest_malloc(0xFA00u);
 
-    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u,
+    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)VGA_P(0xA0000u),
             0xFA00u);
     memmove((void *)(uintptr_t)dword_53C63, (const void *)(uintptr_t)dword_53C5F,
             0xFA00u);
@@ -59,7 +59,7 @@ int save_slot_select(int base, int wait_keys)
                    *(const uint32_t *)(uintptr_t)(dword_53F66 + 0x46u)),
               320);
 
-    save_slot_rows((int)dword_53C57, (int)dword_53C63, base);
+    save_slot_rows((int)dword_53C57, dword_53C63, base);
 
     svc_play_sfx((const void *)(uintptr_t)dword_53EEC, 5, 1);
     for (i = 5; i >= 0; --i)
@@ -81,10 +81,10 @@ int save_slot_select(int base, int wait_keys)
 
         if (key == 0x50 && dword_53C57 != 3) {          /* Down */
             svc_play_sfx((const void *)(uintptr_t)dword_53EEC, 7, 1);
-            save_slot_rows((int)++dword_53C57, 0xA0000, base);
+            save_slot_rows((int)++dword_53C57, VGA_P(0xA0000u), base);
         } else if (key == 0x48 && dword_53C57 != 0) {   /* Up   */
             svc_play_sfx((const void *)(uintptr_t)dword_53EEC, 7, 1);
-            save_slot_rows((int)--dword_53C57, 0xA0000, base);
+            save_slot_rows((int)--dword_53C57, VGA_P(0xA0000u), base);
         } else if (key == 0x1C || key == 0x39) {        /* Enter/Space */
             ret = 1;
         } else if (key == 0x01) {                       /* Esc   */
@@ -140,7 +140,7 @@ void save_slot_write(int wait_keys)
             if (byte_523E7[dword_53C03] == 0) {
                 msg_close_portrait();
                 msg_open_portrait(byte_52387[0]);
-                vm_run(dword_53A7D, 660, 693452, 320, 205, 76, 74, 19, 1);
+                vm_run(dword_53A7D, 660,VGA_P(693452), 320, 205, 76, 74, 19, 1);
                 dlg_blit_dato(dword_53A85, dword_53C67, 0);
                 dlg_wait_key(0);
             }
@@ -180,7 +180,7 @@ void save_slot_load(void)
             if (id != 0xFF) {
                 if (byte_523E7[id] != 0) {
                     msg_open_portrait(byte_52387[0]);
-                    vm_run(dword_53A7D, 479, 693452, 320, 205, 76, 74, 19, 1);
+                    vm_run(dword_53A7D, 479,VGA_P(693452), 320, 205, 76, 74, 19, 1);
                 } else {
                     memmove((void *)(uintptr_t)dword_53BF7, slot, 0xA00u);
                     slot += 0xA00;                          /* +2560 header */
@@ -206,7 +206,7 @@ void save_slot_load(void)
                         (int)dword_53C03, -31);             /* 0x4E809    */
                     ret = -1;
                     msg_open_portrait(byte_52387[0]);
-                    vm_run(dword_53A7D, 478, 693452, 320, 205, 76, 74, 19, 1);
+                    vm_run(dword_53A7D, 478,VGA_P(693452), 320, 205, 76, 74, 19, 1);
                 }
                 dlg_blit_dato(dword_53A85, dword_53C67, 0);
                 dlg_wait_key(0);

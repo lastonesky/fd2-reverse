@@ -60,9 +60,9 @@ typedef uint32_t (*rand_fn)(void);
 /* --- original data-segment globals ------------------------------------- */
 
 #define REC_STRIDE 80
-#define VGA_BASE   0x000A0000u
+#define VGA_BASE   fd2_vga
 
-static void vm(void *stream, int sub, int addr)
+static void vm(void *stream, int sub, uint8_t *addr)
 {
     vm_run(stream, sub, addr, 320, 205, 76, 74, 19, 1);
 }
@@ -185,7 +185,7 @@ void ev3_35854(int arg)
 
     map_cell_info((int)dword_53AB1, (int)dword_53AB5, out);
     dword_53AD9 = (uint32_t)table5[out[2]] + 0xB5;
-    vm(dword_53A7D, 0x1A6, 0xA9F23);
+    vm(dword_53A7D, 0x1A6, VGA_P(0xA9F23u));
     dlg_blit_dato(dword_53A85, dword_53C67, 0);
     dlg_wait_key(0);
     rec_slot_claim(arg, table5[out[2]]);
@@ -207,20 +207,20 @@ void ev3_35A0D(int arg)
     msg_open_portrait(*(uint8_t *)(uintptr_t)(dword_53A45 + REC_STRIDE * arg + 7));
     e = ev3_2AEDB(arg, 0xD0);
     if (e == -1) {
-        vm(dword_53A79, 2, 0xA951F);
+        vm(dword_53A79, 2, VGA_P(0xA951Fu));
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         dlg_wait_key(0);
         ev4_196CB();
         return;
     }
     rec_slot_remove(arg, e);
-    vm(dword_53A79, 3, 0xA951F);
+    vm(dword_53A79, 3, VGA_P(0xA951Fu));
     dlg_wait_key(0);
     ev4_196CB();
 
     buf = res_load("FDOTHER.DAT", NULL, 0x2D);
     for (i = 0; i < 0x3B; i++) {
-        res_blit(buf, i, (void *)(uintptr_t)0xABCE4u, 320, -1);
+        res_blit(buf, i, (void *)(uintptr_t)VGA_P(0xABCE4u), 320, -1);
         svc_wait_ticks(2);
     }
     free(buf);
@@ -351,7 +351,7 @@ void ev3_35FCF(int arg)
 
     if (*(uint8_t *)(uintptr_t)(rec + 8) != 9) {
         msg_open_portrait(*(uint8_t *)(uintptr_t)(rec + 7));
-        vm(dword_53A79, 0, 0xA951F);
+        vm(dword_53A79, 0, VGA_P(0xA951Fu));
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         dlg_wait_key(0);
         ev4_196CB();

@@ -22,7 +22,7 @@
  *      blit the selected portrait (or a random idle frame every v1 frames,
  *      re-seeded to rand()%30+10); blit the two portrait sprites with the
  *      animation phase (dword_53C13/2 added for the selected side); copy the
- *      64000/310-byte bands and gfx_copy_rows the 320x192 area to 0xA0504.
+ *      64000/310-byte bands and gfx_copy_rows the 320x192 area to VGA_P(0xA0504u).
  *
  * The same "&loc_1A599+3" and 12-byte/4-byte table strides as in map_draw_text_
  * window (0x197E5) apply; the shared epilogue at 0x13FCC is a plain return.
@@ -33,7 +33,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#define VGA_BASE     0xA0000u
+#define VGA_BASE     fd2_vga
 #define ROW_STRIDE   456u          /* view buffer pitch */
 #define VIEW_SRC_OFF 32904u        /* dword_53A49 + 0x8088 */
 #define BUF_OFF_1    31076u        /* dword_53A49 + 456*i + 31076 (full 200 rows) */
@@ -89,7 +89,7 @@ int map_window_run(void)
                       (const void *)(base89 + *(const uint32_t *)
                           (const void *)(base89 + 12u * (uint32_t)sel[i])),
                       456);
-        sub_11EB0((char *)0xA0504, 320, (char *)buf + VIEW_SRC_OFF, 456, 0x138u, 192);
+        sub_11EB0((char *)VGA_P(0xA0504u), 320, (char *)buf + VIEW_SRC_OFF, 456, 0x138u, 192);
     }
 
     for (;;) {
@@ -141,7 +141,7 @@ int map_window_run(void)
                                   (const void *)(base89 + 4u * (uint32_t)v13)),
                               456);
                 }
-                sub_11EB0((char *)0xA0504, 320, (char *)buf + VIEW_SRC_OFF,
+                sub_11EB0((char *)VGA_P(0xA0504u), 320, (char *)buf + VIEW_SRC_OFF,
                           456, 0x138u, 192);
             }
         }

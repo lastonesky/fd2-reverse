@@ -36,15 +36,15 @@
 
 /* 0x272D0 - draw the item-list rows.  `items` is the record-index array,
  * `cursor` the highlighted entry, `dst` the row buffer base. */
-void shop_item_rows(int count, const uint8_t *items, int cursor, int dst,
+void shop_item_rows(int count, const uint8_t *items, int cursor, uint8_t *dst,
                     uint8_t half_price);
 
 /* 0x2A0C2 - draw the party rows with a scale-number field. */
-void shop_party_bar_rows(int count, int dst, int cursor,
+void shop_party_bar_rows(int count, uint8_t *dst, int cursor,
                          const uint8_t *members);
 
 /* 0x2A694 - draw the party rows with the shop's equipment labels. */
-void shop_party_equip_rows(int count, int dst, int cursor,
+void shop_party_equip_rows(int count, uint8_t *dst, int cursor,
                            const uint8_t *members, const uint8_t *equip);
 
 #endif /* GAME_SHOP_ROWS_H */

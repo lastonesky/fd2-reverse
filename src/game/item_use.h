@@ -51,7 +51,7 @@ int unit_action_damage(int rec, int action);
 int unit_damage(int rec, int amount);
 
 /* 0x1DA16 */
-int view_draw_unit_sprite(int dst, int pitch, int rec, int mode, int field);
+int view_draw_unit_sprite(uint8_t *dst, int pitch, int rec, int mode, int field);
 
 /* 0x22AF6 */
 int item_apply(int a1, int a2, int count, const uint8_t *list, int field);

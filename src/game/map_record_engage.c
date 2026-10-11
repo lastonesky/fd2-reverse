@@ -67,7 +67,7 @@ void map_wait_anim(int rec)
             dlg_portraits_refresh();
             ui_status_panel((char *)dword_53A49 + width + 32904, 456, rec);
             map_draw_cursor(dword_53A49 + 32904, 456);
-            gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
+            gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320,
                           dword_53A49 + 32904, 456, 0x138, 192);
             baseline = (int)(int16_t)BDA_W(0x46C);
         }

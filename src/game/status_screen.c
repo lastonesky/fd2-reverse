@@ -48,8 +48,7 @@ void status_names_draw(int highlight, int base)
         sprite24_plain49(sprite,
                          (void *)(uintptr_t)(off + base + 320 * (y + 117) + 14),
                          320);
-        vm_run(dword_53A7D, rec[8] + 1,
-               off + base + 320 * (y + 121) + 40, 320,
+        vm_run(dword_53A7D, rec[8] + 1,VGA_P(off + base + 320 * (y + 121) + 40), 320,
                (i + dword_53F4E == highlight) ? 201 : 205, 76, 0, 0, 0);
     }
 }
@@ -73,45 +72,45 @@ void status_panel_draw(int *layout, int mode)
                 status_names_draw(dword_53C57, 655360);
 
             if (dword_53F4E != 0)
-                rle2_blit((void *)(uintptr_t)0xA972Au,
+                rle2_blit((void *)(uintptr_t)VGA_P(0xA972Au),
                           (const void *)(uintptr_t)
                               (dword_53F66 + *(const uint32_t *)(uintptr_t)
                                   (dword_53F66 + 4 * half + 50)), 320);
             else
-                rle2_blit((void *)(uintptr_t)0xA972Au,
+                rle2_blit((void *)(uintptr_t)VGA_P(0xA972Au),
                           (const void *)(uintptr_t)
                               (dword_53F66 + *(const uint32_t *)(uintptr_t)
                                   (dword_53F66 + 74)), 320);
 
             if (dword_53F4E + 6 >= dword_53F5E)
-                rle2_blit((void *)(uintptr_t)0xAE36Au,
+                rle2_blit((void *)(uintptr_t)VGA_P(0xAE36Au),
                           (const void *)(uintptr_t)
                               (dword_53F66 + *(const uint32_t *)(uintptr_t)
                                   (dword_53F66 + 74)), 320);
             else
-                rle2_blit((void *)(uintptr_t)0xAE36Au,
+                rle2_blit((void *)(uintptr_t)VGA_P(0xAE36Au),
                           (const void *)(uintptr_t)
                               (dword_53F66 + *(const uint32_t *)(uintptr_t)
                                   (dword_53F66 + 4 * half + 58)), 320);
         } else if (mode == 2) {
             if (dword_53F4E != 0)
-                rle2_blit((void *)(uintptr_t)0xA972Au,
+                rle2_blit((void *)(uintptr_t)VGA_P(0xA972Au),
                           (const void *)(uintptr_t)
                               (dword_53F66 + *(const uint32_t *)(uintptr_t)
                                   (dword_53F66 + 4 * half + 50)), 320);
             else
-                rle2_blit((void *)(uintptr_t)0xA972Au,
+                rle2_blit((void *)(uintptr_t)VGA_P(0xA972Au),
                           (const void *)(uintptr_t)
                               (dword_53F66 + *(const uint32_t *)(uintptr_t)
                                   (dword_53F66 + 74)), 320);
 
             if (dword_53F4E + 3 >= dword_53F5E)
-                rle2_blit((void *)(uintptr_t)0xAE36Au,
+                rle2_blit((void *)(uintptr_t)VGA_P(0xAE36Au),
                           (const void *)(uintptr_t)
                               (dword_53F66 + *(const uint32_t *)(uintptr_t)
                                   (dword_53F66 + 74)), 320);
             else
-                rle2_blit((void *)(uintptr_t)0xAE36Au,
+                rle2_blit((void *)(uintptr_t)VGA_P(0xAE36Au),
                           (const void *)(uintptr_t)
                               (dword_53F66 + *(const uint32_t *)(uintptr_t)
                                   (dword_53F66 + 4 * half + 58)), 320);

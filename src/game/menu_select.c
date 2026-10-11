@@ -61,7 +61,7 @@ int menu_list_select(void)
     dword_53C5F = guest_malloc(0xFA00u);
     dword_53C63 = guest_malloc(0xFA00u);
 
-    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u,
+    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)VGA_P(0xA0000u),
             0xFA00u);
     memmove((void *)(uintptr_t)dword_53C63, (const void *)(uintptr_t)dword_53C5F,
             0xFA00u);

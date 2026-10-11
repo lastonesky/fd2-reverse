@@ -34,12 +34,12 @@ typedef uint32_t (*mask_records_fn)(void);
 /* --- original data-segment globals ------------------------------------- */
 
 #define REC_STRIDE 80
-#define VGA_BASE   0x000A0000u
+#define VGA_BASE   fd2_vga
 
 /* Every vm_run call in this cluster passes the same eight tail arguments
- * (addr 0xA0000, pitch 320, fg 205, shadow 76, fill 74, line step 19,
+ * (addr VGA_P(0xA0000u), pitch 320, fg 205, shadow 76, fill 74, line step 19,
  * wait 1); only the sub-stream changes. */
-static int vm_sub(int sub)
+static uint8_t *vm_sub(int sub)
 {
     return vm_run((void *)(uintptr_t)dword_53A79, sub, VGA_BASE, 320,
                        205, 76, 74, 19, 1);

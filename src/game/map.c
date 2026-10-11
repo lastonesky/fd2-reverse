@@ -452,7 +452,7 @@ void map_unit_ping(int idx)
 /* 0x11CAC - the whole map-view refresh: advance the animation frame, update
  * the DAC animation when `flag == 0`, re-render the 13x8 tile window at the
  * view origin into the map bitmap, reveal/refresh the cursor and portraits,
- * then push the 192x312 bitmap window to VGA at 0xA0504. */
+ * then push the 192x312 bitmap window to VGA at VGA_P(0xA0504u). */
 void map_view_update(int flag)
 {
     uint8_t *view = dword_53A49 + 0x8088;   /* 32904 */
@@ -464,7 +464,7 @@ void map_view_update(int flag)
     map_reveal_cursor();
     dlg_portraits_refresh();
     map_draw_cursor(view, 456);
-    gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, view, 456, 312, 192);
+    gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320, view, 456, 312, 192);
 }
 
 /* --- map reveal / status queue / view slide (batch of small leaves) ----- */
@@ -599,7 +599,7 @@ void map_draw_status_popups(void)
                             4u * (uint32_t)byte_53C6C[j] + 6u)), 456);
             }
         }
-        gfx_copy_rows((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
+        gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + 32904u, 456, 312, 192);
         delay(2);
     }
     guest_free(p);
@@ -638,12 +638,12 @@ void map_draw_party_icons(int unused, int table_idx, int count, const uint8_t *l
         }
     }
     for (i = 0; i < 5; i++) {
-        gfx_copy_rows((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
+        gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + 32904u, 456, 312, 192);
         svc_wait_ticks(1);
-        gfx_copy_rows((void *)0xA0504u, 320, p + 32904u, 456, 312, 192);
+        gfx_copy_rows((void *)VGA_P(0xA0504u), 320, p + 32904u, 456, 312, 192);
         svc_wait_ticks(1);
     }
-    gfx_copy_rows((void *)0xA0504u, 320, p + 32904u, 456, 312, 192);
+    gfx_copy_rows((void *)VGA_P(0xA0504u), 320, p + 32904u, 456, 312, 192);
     guest_free(p);
 }
 
@@ -682,7 +682,7 @@ void map_draw_party_icons_anim(int unused, int table_idx, int count,
                 rle2_blit_trans(dst, v20, 456);
             }
         }
-        gfx_copy_rows((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
+        gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + 32904u, 456, 312, 192);
         if (i != 0 || v17[table_idx] == 0) {
             int s = -1;
             if (table_idx == 22 && i == 7)                     s = 3;
@@ -704,7 +704,7 @@ void map_draw_party_icons_anim(int unused, int table_idx, int count,
 
 /* 0x197E5 - composite the dialogue/text window: render the map view, copy a
  * band from the staging screen, blit two raw shape blocks with a sliding
- * vertical offset, blit the view to 0xA0504, then copy the lower band back. */
+ * vertical offset, blit the view to VGA_P(0xA0504u), then copy the lower band back. */
 typedef void (*h0v3_fn)(void);
 typedef void (*render3_fn)(uint8_t *, int, int, int, int, int);
 typedef void (*blittrans_fn)(void *, const void *, int);
@@ -740,10 +740,10 @@ void map_draw_text_window(void)
                     *(const uint32_t *)(uintptr_t)(dword_53A89
                         + 12u * v13[j])), 456);
         }
-        gfx_copy_rows((void *)0xA0504u, 320, dword_53A49 + 0x8088u, 456, 312, 192);
+        gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + 0x8088u, 456, 312, 192);
     }
     for (k = 0; k < 86; k++)
-        memmove((uint8_t *)(uintptr_t)0xA8C05u + 320u * (uint32_t)k,
+        memmove((uint8_t *)(uintptr_t)VGA_P(0xA8C05u) + 320u * (uint32_t)k,
                 (const void *)(uintptr_t)(dword_53C63 + 5u
                                           + 320u * (uint32_t)(k + 112)), 310);
 }

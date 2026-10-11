@@ -102,19 +102,19 @@ void map_blink_units(int unused, int colour, int count, const uint8_t *list)
                                    (bank + 4u * (uint32_t)idx),
                           dst, 456, tab[colour], 7 - i % 8);
         }
-        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320,
                       dword_53A49 + 32904u, 456, 312, 192);
         svc_wait_ticks(1);
     }
 
-    gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
+    gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320,
                   scratch + 32904u, 456, 312, 192);
     guest_free(scratch);
 }
 
 /* 0x1CAC7 - draw the record layer twice (animation frames 74 and 75, the
  * second into a scratch buffer) then blink the two 312x192 windows on
- * 0xA0504 four times.  The first two arguments are part of the 4-argument
+ * VGA_P(0xA0504u) four times.  The first two arguments are part of the 4-argument
  * ABI but are never read; the tail `jmp 0x14B72` is ev5_14B16's shared
  * epilogue (plain return). */
 void map_record_layer_blink(int unused1, int unused2, int count,
@@ -132,10 +132,10 @@ void map_record_layer_blink(int unused1, int unused2, int count,
     map_draw_record_layer(scratch, count, list, 75);
 
     for (i = 0; i < 4; ++i) {
-        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320,
                       dword_53A49 + 0x8088u, 456, 312, 192);
         j___delay(90);
-        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320,
                       scratch + 0x8088u, 456, 312, 192);
         j___delay(90);
     }

@@ -80,7 +80,7 @@ void map_units_animate(void)
             }
         }
         sub_129EC();
-        sub_11EB0((char *)0xA0504, 320, (char *)(uintptr_t)dword_53A49 + VIEW_SRC_OFF,
+        sub_11EB0((char *)VGA_P(0xA0504u), 320, (char *)(uintptr_t)dword_53A49 + VIEW_SRC_OFF,
                   456, 0x138u, 192);
         sub_17AA9(1);
     }
@@ -107,7 +107,7 @@ void map_units_animate(void)
                 (const void *)(atlas + 4u * (uint32_t)(n + 68) + 6u);
             sub_4EBAB(v19[i], (int16_t *)(atlas + off), 456);
         }
-        sub_11EB0((char *)0xA0504, 320, (char *)(uintptr_t)dword_53A49 + VIEW_SRC_OFF,
+        sub_11EB0((char *)VGA_P(0xA0504u), 320, (char *)(uintptr_t)dword_53A49 + VIEW_SRC_OFF,
                   456, 0x138u, 192);
         sub_17AA9(1);
     }
@@ -119,7 +119,7 @@ void map_units_animate(void)
                 (const void *)(atlas + 4u * (uint32_t)(j + 68) + 6u);
             sub_4EBAB(v19[i], (int16_t *)(atlas + off), 456);
         }
-        sub_11EB0((char *)0xA0504, 320, (char *)(uintptr_t)dword_53A49 + VIEW_SRC_OFF,
+        sub_11EB0((char *)VGA_P(0xA0504u), 320, (char *)(uintptr_t)dword_53A49 + VIEW_SRC_OFF,
                   456, 0x138u, 192);
         sub_17AA9(1);
     }
@@ -133,7 +133,7 @@ void map_units_animate(void)
 /* 0x22470 - walk-in pass: for each of atlas dword_53AD1's 11 frames 114..124,
  * restore the map view from `scratch`, blit the frame into the cell at
  * (dst_x, dst_y), refresh the portrait layer and publish the 312x192 window
- * to 0xA0504 before waiting one tick.  Arguments decoded from the single call
+ * to VGA_P(0xA0504u) before waiting one tick.  Arguments decoded from the single call
  * site inside 0x22253 (analysis/cseg01_disasm.txt). */
 void map_units_move_walk(int dst_x, int dst_y, void *scratch)
 {
@@ -151,7 +151,7 @@ void map_units_move_walk(int dst_x, int dst_y, void *scratch)
                         + 10944u * (uint32_t)(dst_y - oy) + 456u,
                         sprite, 456);
         dlg_portraits_refresh();
-        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, dword_53A49 + 0x8088u,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320, dword_53A49 + 0x8088u,
                       456, 0x138, 192);
         svc_wait_ticks(1);
     }
@@ -184,7 +184,7 @@ const void *map_units_move_reveal(int dst_x, int dst_y, void *scratch,
 
         memmove(dword_53A49, scratch, 0x25680u);
         reveal_band(cx, cy, 11, (cy / 5) * i, 192, spr);
-        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, dword_53A49 + 0x8088u,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320, dword_53A49 + 0x8088u,
                       456, 0x138, 192);
         j___delay(10);
         last = spr;
@@ -216,7 +216,7 @@ int map_units_move_settle(int unused1, int unused2, void *scratch,
 
         memmove(dword_53A49, scratch, 0x25680u);
         reveal_band(cx, cy, 11, 0, 192, spr);
-        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, dword_53A49 + 0x8088u,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320, dword_53A49 + 0x8088u,
                       456, 0x138, 192);
         r = svc_wait_ticks(1);
     }

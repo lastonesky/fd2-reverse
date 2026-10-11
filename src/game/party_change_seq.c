@@ -60,7 +60,7 @@ void party_change_class_apply(int cls)
             dlg_portrait_glide(i);
             dword_51A83 = 1;
             msg_open_portrait(rec[7]);
-            vm_run(dword_53A7D, 487, 0xA9F23, 320, 205, 76, 74, 19, 1);
+            vm_run(dword_53A7D, 487,VGA_P(0xA9F23u), 320, 205, 76, 74, 19, 1);
             kbd_flush();
             ev5_1E5C0(10);
             ev4_196CB();
@@ -80,7 +80,7 @@ void party_change_class_apply(int cls)
                     dlg_portrait_glide(j);
                     dword_51A83 = 1;
                     msg_open_portrait(rec[7]);
-                    vm_run(dword_53A7D, k + 481, 0xA9F23, 320, 205, 76, 74,
+                    vm_run(dword_53A7D, k + 481,VGA_P(0xA9F23u), 320, 205, 76, 74,
                            19, 1);
                     kbd_flush();
                     ev5_1E5C0(10);
@@ -110,12 +110,12 @@ void party_change_map_seq(void)
         if (rec[6] == 2 && (rec[5] & 0x81) == 0 && rec[37] == 0 &&
             rec[38] == 0 && *(uint16_t *)(rec + 0x40) !=
             *(uint16_t *)(rec + 0x42)) {
-            view_draw_unit_sprite((int)(intptr_t)dword_53A49 + 32904, 456, i,
+            view_draw_unit_sprite(dword_53A49 + 32904, 456, i,
                                   2, 253);
             flag = 1;
         }
     }
-    gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + 32904, 456, 0x138,
+    gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + 32904, 456, 0x138,
                   192);
     if (flag != 0)
         svc_play_sfx(dword_53EEC, 4, 1);
@@ -134,12 +134,12 @@ void party_change_map_seq(void)
             if (raised > max)
                 raised = max;
             *(uint16_t *)(rec + 0x40) = (uint16_t)raised;
-            view_draw_unit_sprite((int)(intptr_t)dword_53A49 + 32904, 456, i,
+            view_draw_unit_sprite(dword_53A49 + 32904, 456, i,
                                   0, 0);
             rec_flag_or80(i);
         }
     }
-    gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + 32904, 456, 0x138,
+    gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + 32904, 456, 0x138,
                   192);
     svc_wait_ticks(0);
     map_view_update(0);
@@ -186,15 +186,15 @@ void party_change_map_seq(void)
         map_view_update(0);
         bgm_play((uint8_t)byte_51E63[dword_53C03], 0);
         for (k = 0; k < 9; k++) {
-            void *saved = res_draw_subimage(dword_53A81, (void *)0xA0000, 320,
+            void *saved = res_draw_subimage(dword_53A81, (void *)VGA_P(0xA0000u), 320,
                                             120, 84, k + 83);
 
             if (k > 6)
-                dlg_draw_number((void *)0xA726B, 320, (int)dword_53BEF, 42, 3);
+                dlg_draw_number((void *)VGA_P(0xA726Bu), 320, (int)dword_53BEF, 42, 3);
             j___delay(70);
             if (k == 8)
                 j___delay(500);
-            dlg_snap_restore(saved, (void *)0xA0000, 320);
+            dlg_snap_restore(saved, (void *)VGA_P(0xA0000u), 320);
         }
         for (m = 2; m < 6; m++) {
             void *saved;
@@ -205,7 +205,7 @@ void party_change_map_seq(void)
                                       116, m * m + 84, 91);
             dlg_draw_number(dword_53A49 + 0x812F + 456 * m * m, 456,
                             (int)dword_53BEF, 42, 3);
-            gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + 32904, 456,
+            gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + 32904, 456,
                           0x138, 192);
             svc_wait_ticks(1);
             dlg_snap_restore(saved, dword_53A49 + 32904, 456);

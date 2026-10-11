@@ -74,7 +74,7 @@ void place_transition(void)
     switch (dword_53F4A) {
     case 1:
         for (i = 0; i < 5; ++i) {
-            res_blit6((void *)(uintptr_t)0xA38E9u, 320,
+            res_blit6((void *)(uintptr_t)VGA_P(0xA38E9u), 320,
                       (void *)(uintptr_t)dword_53F66, i + 0x17);
             svc_wait_ticks(2);
         }
@@ -82,7 +82,7 @@ void place_transition(void)
         break;
     case 3:
         svc_wait_ticks(1);
-        res_blit6((void *)(uintptr_t)0xA3154u, 320,
+        res_blit6((void *)(uintptr_t)VGA_P(0xA3154u), 320,
                   (void *)(uintptr_t)dword_53F66, 0x17);
         svc_wait_ticks(8);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
@@ -91,7 +91,7 @@ void place_transition(void)
         dlg_blit_dato(dword_53A85, dword_53C67, 3);
         svc_wait_ticks(2);
         for (i = 0; i < 9; ++i) {
-            res_blit6((void *)(uintptr_t)0xA2893u, 320,
+            res_blit6((void *)(uintptr_t)VGA_P(0xA2893u), 320,
                       (void *)(uintptr_t)dword_53F66, i + 0x17);
             svc_wait_ticks(2);
         }
@@ -109,7 +109,7 @@ void place_transition(void)
         break;
     case 5:
         for (i = 0; i < 7; ++i) {
-            res_blit6((void *)(uintptr_t)0xA2383u, 320,
+            res_blit6((void *)(uintptr_t)VGA_P(0xA2383u), 320,
                       (void *)(uintptr_t)dword_53F66, i + 0x17);
             svc_wait_ticks(2);
         }
@@ -151,7 +151,7 @@ void place_money_gain(int amount)
             for (m = 0; m < 9; ++m) {
                 for (n = 0; n < 8; ++n) {
                     if (roll[n] != 0) {
-                        ev5_26C9B((void *)(uintptr_t)(6 * n + 0xA7A90u), 320,
+                        ev5_26C9B((void *)VGA_P(6 * n + 0xA7A90u), 320,
                                   roll[n] + 9 * cur[n]);
                         if (++roll[n] == 10 && ++cur[n] == 10)
                             cur[n] = 0;
@@ -198,7 +198,7 @@ void place_money_spend(int amount)
             for (m = 0; m < 9; ++m) {
                 for (n = 0; n < 8; ++n) {
                     if (roll[n] != 0) {
-                        ev5_26C9B((void *)(uintptr_t)(6 * n + 0xA7A90u), 320,
+                        ev5_26C9B((void *)VGA_P(6 * n + 0xA7A90u), 320,
                                   9 * cur[n] + roll[n] - 1);
                         --roll[n];
                     }
@@ -215,7 +215,7 @@ void place_money_spend(int amount)
  * `place` is the current location's table byte (sub_4E809 -> &fd2_data2[0x238D],
  * stride 31, offset -31).  Place 2 plays its scripted intro and, if the party
  * screen confirms, continues as the other places do: snapshot the VGA frame to
- * the guest heap, play the ten-step place_zoom_blit zoom-out (frame + 0xA0000
+ * the guest heap, play the ten-step place_zoom_blit zoom-out (frame + VGA_P(0xA0000u)
  * swapped every step with a pal_fade_range wash), then dispatch to the screen
  * for the place type - 0 -> place_screen_run, 4 -> place_screen4_run, anything
  * else 3/5 -> place_menu_run.  Place 2 returns the confirmed flag without a
@@ -241,7 +241,7 @@ int place_menu_commit(void)
         int v1;
 
         msg_open_portrait(75);                                  /* 0x2674C */
-        vm_run(dword_53A7D, 513, 693535, 320, 205, 76, 74, 19, 1); /* 0x26756 */
+        vm_run(dword_53A7D, 513,VGA_P(693535), 320, 205, 76, 74, 19, 1); /* 0x26756 */
         dword_53A51 = (uint8_t *)(uintptr_t)1;
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         v0 = map_window_run();
@@ -263,7 +263,7 @@ int place_menu_commit(void)
 
     dword_53A45 = (void *)(uintptr_t)dword_53BF7;
     frame       = guest_malloc(0xFA00u);
-    memmove(frame, (const void *)(uintptr_t)0xA0000u, 0xFA00u);
+    memmove(frame, (const void *)(uintptr_t)VGA_P(0xA0000u), 0xFA00u);
     for (i = 1; i <= 10; ++i) {
         int src_x = (byte_52363[6 * (int)place + (int)dword_53F4A] - 150)
                     * i / 10;
@@ -272,12 +272,12 @@ int place_menu_commit(void)
 
         place_zoom_blit(src_x * 128 + 20480, src_y * 128 + 12800,
                         (const char *)frame, 128 - 9 * i);
-        memmove((void *)(uintptr_t)0xA0000u,
+        memmove((void *)(uintptr_t)VGA_P(0xA0000u),
                 (const void *)(uintptr_t)dword_53A49, 0xFA00u);
         pal_fade_range(0, 255, 4 * i);
     }
     pal_fade_range(0, 255, 64);
-    memset((void *)(uintptr_t)0xA0000u, 0, 64000);
+    memset((void *)(uintptr_t)VGA_P(0xA0000u), 0, 64000);
 
     if (dword_53F4A == 0) {
         bgm_play(13, 0);

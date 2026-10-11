@@ -14,7 +14,7 @@
  *
  * The `push 28h; call 0x3702F` prologue is the Watcom stack probe (dropped).
  * The machine code ends these in shared tails reached by `jmp`
- * (0x231DF/0x231C6 = vm_run(stream,sub,...) + unit_refresh + inc dword_53C03;
+ * (0x231DF/0x231C6 = vm_run(stream,sub,VGA_P(...)) + unit_refresh + inc dword_53C03;
  * 0x237C8 = unit_add(n) + inc; 0x231F2 = inc), so the C spells the behaviour
  * out per handler instead of reproducing the jump layout (rounds/30 precedent).
  *
@@ -25,16 +25,16 @@
 #include "fd2_game.h"
 #include "scene_states.h"
 
-#define VGA_BASE 0xA0000u
+#define VGA_BASE fd2_vga
 
 #include <stdint.h>
 #include <string.h>
 
 /* vm_run with the fixed tail tuple used by every state handler:
- * (stream, sub, 0xA0000, 320, 205, 76, 74, 19, 1). */
-static int vm(int sub)
+ * (stream, sub, VGA_P(0xA0000u), 320, 205, 76, 74, 19, 1). */
+static uint8_t *vm(int sub)
 {
-    return sub_15F84(dword_53A79, sub, 0xA0000, 320, 205, 76, 74, 19, 1);
+    return vm_run(dword_53A79, sub, fd2_vga, 320, 205, 76, 74, 19, 1);
 }
 
 /* 0x23296 - funcs_25E23[5] */

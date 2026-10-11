@@ -859,7 +859,7 @@ int fx_dots5(int rec, const void *buf, void *dst, int pitch, int selector)
  * sub_2FF01. The machine code runs the `sel`-th emitter twice per frame - once
  * with selector 4 and once with selector 5 - over a 640-stride work stripe
  * 18880 bytes past `work`, copying `background` into it first and publishing
- * each composed frame to VGA (0xA0000). Two res_blits stamp the caller's own
+ * each composed frame to VGA (VGA_P(0xA0000u). Two res_blits stamp the caller's own
  * LMI buffers on top: `layer0` at the byte index `layer0[0] - 1`, and
  * `layer1`/`layer2` (the first/second half of the loop) at a per-frame row
  * offset. A one-tick wait paces the animation.
@@ -893,7 +893,7 @@ void fx_play(int rec, const void *buf, const void *layer0, const void *layer1,
         res_blit((void *)layer1, 0, scratch + step * 35 * i, 640, -1);
         ((int (*)(int, const void *, void *, int, int))funcs_30469[sel])(
             rec, buf, scratch, 640, 5);
-        gfx_copy_rows((void *)0xA0000, 320, scratch, 640, 320, 200);
+        gfx_copy_rows((void *)VGA_P(0xA0000u), 320, scratch, 640, 320, 200);
         svc_wait_ticks(1);
     }
     for (i = 4; i >= 0; --i) {
@@ -909,7 +909,7 @@ void fx_play(int rec, const void *buf, const void *layer0, const void *layer1,
         res_blit((void *)layer2, 0, scratch + step * 35 * i, 640, -1);
         ((int (*)(int, const void *, void *, int, int))funcs_30469[sel])(
             rec, buf, scratch, 640, 5);
-        gfx_copy_rows((void *)0xA0000, 320, scratch, 640, 320, 200);
+        gfx_copy_rows((void *)VGA_P(0xA0000u), 320, scratch, 640, 320, 200);
         svc_wait_ticks(1);
     }
 }

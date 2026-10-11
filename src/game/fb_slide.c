@@ -10,12 +10,13 @@
  *
  * 0x18409 assembles one step: it restores `dst` from `saved`, overlays the
  * three bands at the offsets selected by the step index x (0..11) and finally
- * copies the composed frame to the VGA framebuffer 0xA0000.
+ * copies the composed frame to the VGA framebuffer VGA_P(0xA0000u).
  */
 #include "fb_slide.h"
 
 #include <string.h>
 #include <stdint.h>
+#include "fd2_game.h"
 
 /* 0x182AD */
 void fb_slide_band_a(int x, char *dst, char *src)
@@ -91,5 +92,5 @@ void fb_slide_step(int x, char *dst, char *src, char *saved)
     if (x < 6)
         fb_slide_band_c(16 * x + 94, dst, src);
 
-    memmove((void *)0xA0000, dst, 0xFA00);
+    memmove((void *)VGA_P(0xA0000u), dst, 0xFA00);
 }

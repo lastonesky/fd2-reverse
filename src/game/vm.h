@@ -42,7 +42,7 @@
 #include <stdint.h>
 
 /* 0x15F84 - run the word stream; returns the final write address. */
-int vm_run(void *stream, int sub, int addr, int pitch,
-           int fg, int shadow, int bgfill, int line_step, int wait);
+uint8_t *vm_run(void *stream, int sub, uint8_t *addr, int pitch,
+                int fg, int shadow, int bgfill, int line_step, int wait);
 
 #endif /* GAME_VM_H */

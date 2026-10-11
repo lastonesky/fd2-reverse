@@ -39,7 +39,7 @@ static const void *shop_unit_sprite(int rec, int frame)
 }
 
 /* 0x272D0 */
-void shop_item_rows(int count, const uint8_t *items, int cursor, int dst,
+void shop_item_rows(int count, const uint8_t *items, int cursor, uint8_t *dst,
                     uint8_t half_price)
 {
     int rows = count;
@@ -57,17 +57,16 @@ void shop_item_rows(int count, const uint8_t *items, int cursor, int dst,
         int type = it[0];
         int off  = 148 * (i % 2) + 10;
         int fg   = (i + dword_53F4E == (uint32_t)cursor) ? 201 : 205;
-        int base = 320 * (26 * (i / 2) + 121) + off + dst;
+        uint8_t *base = dst + (320 * (26 * (i / 2) + 121) + off);
         int tile = 59;
 
         if (type >= 0x15)
             tile = (type >= 0x20) ? 61 : 60;
         dlg_frame_tile((void *)(uintptr_t)
-                           (320 * (26 * (i / 2) + 119) + off + dst),
+                           (dst + (320 * (26 * (i / 2) + 119) + off)),
                        320, dword_53A81, tile);
 
-        vm_run(dword_53A7D, idx + 181,
-               320 * (26 * (i / 2) + 122) + off + dst + 28, 320,
+        vm_run(dword_53A7D, idx + 181,dst + (320 * (26 * (i / 2) + 122) + off + 28), 320,
                fg, 76, 0, 0, 0);
 
         if (type < 0x15) {
@@ -92,12 +91,12 @@ void shop_item_rows(int count, const uint8_t *items, int cursor, int dst,
                             *(const int16_t *)(const void *)(it + 14), 42, 3);
         } else {
             res_blit6((void *)(uintptr_t)
-                          (off + dst + 95 + 320 * (26 * (i / 2) + 123)),
+                          (dst + (off + 95 + 320 * (26 * (i / 2) + 123))),
                       320, dword_53A81, 41);
         }
 
         dlg_frame_tile((void *)(uintptr_t)
-                           (off + dst + 95 + 320 * (26 * (i / 2) + 131)),
+                           (dst + (off + 95 + 320 * (26 * (i / 2) + 131))),
                        320, (const void *)(uintptr_t)dword_53F66, 15);
 
         {
@@ -106,14 +105,14 @@ void shop_item_rows(int count, const uint8_t *items, int cursor, int dst,
             if (half_price)
                 v = (3 * v) >> 2;
             dlg_draw_number((void *)(uintptr_t)
-                                (320 * (26 * (i / 2) + 131) + dst + off + 104),
+                                (dst + (320 * (26 * (i / 2) + 131) + off + 104)),
                             320, (int)v, 119, 5);
         }
     }
 }
 
 /* 0x2A0C2 */
-void shop_party_bar_rows(int count, int dst, int cursor,
+void shop_party_bar_rows(int count, uint8_t *dst, int cursor,
                          const uint8_t *members)
 {
     int frame = dword_53F72;
@@ -129,31 +128,31 @@ void shop_party_bar_rows(int count, int dst, int cursor,
         uint8_t idx = members[i + dword_53F4E];
         const uint8_t *rec = (const uint8_t *)dword_53A45 + 80u * idx;
         int fg   = (i + dword_53F4E == (uint32_t)cursor) ? 201 : 205;
-        int base = 320 * (26 * i + 121) + dst;
+        uint8_t *base = dst + (320 * (26 * i + 121));
         int hp   = rec[33];
         int tier = rec[32] - 1;
 
         sprite24_plain49(shop_unit_sprite(idx, frame),
-                         (void *)(uintptr_t)(dst + 320 * (26 * i + 117) + 14),
+                         dst + (320 * (26 * i + 117) + 14),
                          320);
 
-        vm_run(dword_53A7D, rec[8] + 1, base + 40, 320, fg, 76, 0, 0, 0);
-        vm_run(dword_53A7D, rec[31] + 140, base + 130, 320, fg, 76, 0, 0, 0);
-        vm_run(dword_53A7D, rec[32] + 150, base + 175, 320, fg, 76, 0, 0, 0);
+        vm_run(dword_53A7D, rec[8] + 1,base + 40, 320, fg, 76, 0, 0, 0);
+        vm_run(dword_53A7D, rec[31] + 140,base + 130, 320, fg, 76, 0, 0, 0);
+        vm_run(dword_53A7D, rec[32] + 150,base + 175, 320, fg, 76, 0, 0, 0);
 
         {
-            int strip = 320 * (26 * i + 125) + dst;
+            uint8_t *strip = dst + (320 * (26 * i + 125));
 
-            dlg_frame_tile((void *)(uintptr_t)(strip + 220), 320,
+            dlg_frame_tile(strip + 220, 320,
                            (const void *)(uintptr_t)dword_53F66, 15);
-            dlg_draw_number((void *)(uintptr_t)(strip + 228), 320,
+            dlg_draw_number(strip + 228, 320,
                             hp * (int)(int16_t)word_52399[tier], 119, 5);
         }
     }
 }
 
 /* 0x2A694 */
-void shop_party_equip_rows(int count, int dst, int cursor,
+void shop_party_equip_rows(int count, uint8_t *dst, int cursor,
                            const uint8_t *members, const uint8_t *equip)
 {
     int frame = dword_53F72;
@@ -170,15 +169,15 @@ void shop_party_equip_rows(int count, int dst, int cursor,
         const uint8_t *rec = (const uint8_t *)dword_53A45 + 80u * idx;
         const uint8_t *eq  = shop_equip_rec(equip[i + dword_53F4E]);
         int fg   = (i + dword_53F4E == (uint32_t)cursor) ? 201 : 205;
-        int base = 320 * (26 * i + 121) + dst;
+        uint8_t *base = dst + (320 * (26 * i + 121));
 
         sprite24_plain49(shop_unit_sprite(idx, frame),
-                         (void *)(uintptr_t)(dst + 320 * (26 * i + 117) + 14),
+                         dst + (320 * (26 * i + 117) + 14),
                          320);
 
-        vm_run(dword_53A7D, rec[8] + 1, base + 40, 320, fg, 76, 0, 0, 0);
-        vm_run(dword_53A7D, rec[32] + 150, base + 130, 320, fg, 76, 0, 0, 0);
-        vm_run(dword_53A7D, 593, base + 175, 320, fg, 76, 0, 0, 0);
-        vm_run(dword_53A7D, eq[0] + 150, base + 239, 320, fg, 76, 0, 0, 0);
+        vm_run(dword_53A7D, rec[8] + 1,base + 40, 320, fg, 76, 0, 0, 0);
+        vm_run(dword_53A7D, rec[32] + 150,base + 130, 320, fg, 76, 0, 0, 0);
+        vm_run(dword_53A7D, 593,base + 175, 320, fg, 76, 0, 0, 0);
+        vm_run(dword_53A7D, eq[0] + 150,base + 239, 320, fg, 76, 0, 0, 0);
     }
 }

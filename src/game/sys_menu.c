@@ -43,7 +43,7 @@ typedef void (*ail_vol_fn)(void *h, int32_t volume, int32_t ms);
  * case-1/2 abort paths follow it with kbd_flush. */
 static void sys_menu_cancel_frame(void)
 {
-    vm_run(dword_53A7D, 412, 0xAB6E3, 320, 205, 76, 74, 19, 1);
+    vm_run(dword_53A7D, 412,VGA_P(0xAB6E3u), 320, 205, 76, 74, 19, 1);
     j___delay(200);
     ev4_196CB();
 }
@@ -78,7 +78,7 @@ int sys_menu_run(void)
     case 1:
         rec0 = (uint8_t *)dword_53A45;
         msg_open_portrait(rec0[7]);
-        vm_run(dword_53A7D, 417, 0xA9F23, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 417,VGA_P(0xA9F23u), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         v2 = map_window_run();
         map_draw_text_window();
@@ -86,7 +86,7 @@ int sys_menu_run(void)
             sys_menu_cancel_frame();
             return 1;
         }
-        vm_run(dword_53A7D, 418, 0xAB6E3, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 418,VGA_P(0xAB6E3u), 320, 205, 76, 74, 19, 1);
         j___delay(200);
         ev4_196CB();
         saved = qword_53AB1;
@@ -119,7 +119,7 @@ int sys_menu_run(void)
         int v6;
 
         msg_open_portrait(75);
-        vm_run(dword_53A7D, 419, 0xA9F23, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 419,VGA_P(0xA9F23u), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         v6 = map_window_run();
         map_draw_text_window();
@@ -127,7 +127,7 @@ int sys_menu_run(void)
             sys_menu_cancel_frame();
             return 1;
         }
-        vm_run(dword_53A7D, 420, 0xAB6E3, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 420,VGA_P(0xAB6E3u), 320, 205, 76, 74, 19, 1);
         j___delay(200);
         ev4_196CB();
         byte_51AAC = 0;
@@ -227,7 +227,7 @@ int sys_menu_system(void)
 
     case 1:
         msg_open_portrait(75);
-        vm_run(dword_53A7D, 410, 0xA9F23, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 410,VGA_P(0xA9F23u), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         v8 = map_window_run();
         map_draw_text_window();
@@ -272,9 +272,9 @@ int sys_menu_system(void)
             fclose(fp);
             guest_free(v9);
 
-            vm_run(dword_53A7D, 411, 0xAB6E3, 320, 205, 76, 74, 19, 1);
+            vm_run(dword_53A7D, 411,VGA_P(0xAB6E3u), 320, 205, 76, 74, 19, 1);
         } else {
-            vm_run(dword_53A7D, 412, 0xAB6E3, 320, 205, 76, 74, 19, 1);
+            vm_run(dword_53A7D, 412,VGA_P(0xAB6E3u), 320, 205, 76, 74, 19, 1);
         }
         j___delay(200);
         ev4_196CB();
@@ -283,12 +283,12 @@ int sys_menu_system(void)
 
     case 2:
         msg_open_portrait(75);
-        vm_run(dword_53A7D, 413, 0xA9F23, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 413,VGA_P(0xA9F23u), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         v13 = map_window_run();
         map_draw_text_window();
         if (v13 == 1 && dword_53C57 == 0) {
-            vm_run(dword_53A7D, 414, 0xAB6E3, 320, 205, 76, 74, 19, 1);
+            vm_run(dword_53A7D, 414,VGA_P(0xAB6E3u), 320, 205, 76, 74, 19, 1);
             j___delay(200);
             ev4_196CB();
             bgm_play(-1, 0);
@@ -296,7 +296,7 @@ int sys_menu_system(void)
             kbd_flush();
             return 1;
         }
-        vm_run(dword_53A7D, 412, 0xAB6E3, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 412,VGA_P(0xAB6E3u), 320, 205, 76, 74, 19, 1);
         j___delay(200);
         ev4_196CB();
         kbd_flush();
@@ -304,7 +304,7 @@ int sys_menu_system(void)
 
     default:
         msg_open_portrait(75);
-        vm_run(dword_53A7D, 415, 0xA9F23, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 415,VGA_P(0xA9F23u), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         v14 = map_window_run();
         map_draw_text_window();
@@ -312,7 +312,7 @@ int sys_menu_system(void)
             sys_menu_cancel_frame();       /* no kbd_flush on this shared tail */
             return 1;
         }
-        vm_run(dword_53A7D, 416, 0xAB6E3, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 416,VGA_P(0xAB6E3u), 320, 205, 76, 74, 19, 1);
         bgm_play(-1, 1);
         j___delay(200);
         ev4_196CB();

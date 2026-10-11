@@ -44,7 +44,7 @@ int party_member_present(int count, int id)
     if (found == 0) {
         msg_open_portrait(75);
         dword_53AD9 = (uint32_t)(uint8_t)id + 1;
-        vm_run(dword_53A7D, 657, 0xA951F, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 657,VGA_P(0xA951Fu), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         dword_53A51 = (uint8_t *)(uintptr_t)1;   /* non-NULL sentinel */
         dlg_wait_key(0);
@@ -166,7 +166,7 @@ void party_change_draw(const uint8_t *screen, int count,
     frame = dword_53C0B;
     if (frame == 3)
         frame = 1;
-    box_status_draw(cursor + 1, (int)dword_53C63);
+    box_status_draw(cursor + 1, dword_53C63);
 
     bank = (const uint8_t *)dword_53A4D;
     sprite24_plain(bank + *(const uint32_t *)(bank + 6),
@@ -198,7 +198,7 @@ int party_change_wait_key(const uint8_t *screen, int count,
         if (tick != (int32_t)dword_53F46) {
             dword_53F46 = (uint32_t)tick;
             party_change_draw(screen, count, selected, cursor);
-            memmove((void *)(uintptr_t)0xA0000u,
+            memmove((void *)(uintptr_t)VGA_P(0xA0000u),
                     (const void *)(uintptr_t)dword_53C63, 0xFA00u);
         }
     }
@@ -234,7 +234,7 @@ int party_change_run(void)
     dword_53C63 = guest_malloc(0xFA00u);
 
     memmove((void *)(uintptr_t)dword_53C5F,
-            (const void *)(uintptr_t)0xA0000u, 0xFA00u);
+            (const void *)(uintptr_t)VGA_P(0xA0000u), 0xFA00u);
     memmove(buf, (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
 
     rle2_blit(buf + 2332,
@@ -291,7 +291,7 @@ int party_change_run(void)
             cursor += 10;
         }
         party_change_draw(buf, count, selected, cursor);
-        memmove((void *)(uintptr_t)0xA0000u,
+        memmove((void *)(uintptr_t)VGA_P(0xA0000u),
                 (const void *)(uintptr_t)dword_53C63, 0xFA00u);
     } while (result == 0);
 
@@ -302,7 +302,7 @@ int party_change_run(void)
                       (char *)(uintptr_t)dword_53C63,
                       (char *)(uintptr_t)dword_53C5F);
     }
-    memmove((void *)(uintptr_t)0xA0000u,
+    memmove((void *)(uintptr_t)VGA_P(0xA0000u),
             (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
 
     guest_free((void *)(uintptr_t)dword_53C5B);
@@ -372,7 +372,7 @@ done:
     }
 
     msg_open_portrait(75);
-    vm_run(dword_53A7D, 658, 0xA951F, 320, 205, 76, 74, 19, 1);
+    vm_run(dword_53A7D, 658,VGA_P(0xA951Fu), 320, 205, 76, 74, 19, 1);
     dlg_blit_dato(dword_53A85, dword_53C67, 0);
     dword_53A51 = (uint8_t *)(uintptr_t)1;
     kbd_flush();

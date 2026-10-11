@@ -183,11 +183,11 @@ void party_panel_draw(uint8_t *dst, int pitch)
     dlg_draw_number(dst + 228 + 159 * pitch, pitch, ev5_1B5F1(1), 42, 2);
 
     sub = 2 * dword_53C03 + 597;
-    vm_run(strm, sub, (int)(uintptr_t)(dst + 80 + 61 * pitch),
+    vm_run(strm, sub,dst + 80 + 61 * pitch,
            pitch, 205, 76, 0, 19, 0);
     if (dword_53C03 == 16 && unit_exists(18) == 0)
         sub -= 2;
-    vm_run(strm, sub + 1, (int)(uintptr_t)(dst + 80 + 116 * pitch),
+    vm_run(strm, sub + 1,dst + 80 + 116 * pitch,
            pitch, 205, 76, 0, 19, 0);
 }
 
@@ -197,7 +197,7 @@ void party_panel_draw(uint8_t *dst, int pitch)
  * the rows in over 12 steps (band_b/c/d/e).  Then hold: while no key is
  * pending, redraw the live map view and the panel placed at dword_53A49+0x7964
  * every time the BIOS tick differs from `baseline`, publishing the 312x192
- * window to the VGA staging page 0xA0504.  On a key: flush, slide the rows
+ * window to the VGA staging page VGA_P(0xA0504u).  On a key: flush, slide the rows
  * back out over 12 steps (band_a/c/d/e), restore the backdrop, free the two
  * scratch buffers and flush again.
  *
@@ -240,7 +240,7 @@ void party_panel_run(void)
         party_panel_band_c(scratch, i);
         party_panel_band_d(scratch, i);
         party_panel_band_e(scratch, i);
-        memmove((void *)(uintptr_t)0xA0000u, dword_53A49, 0xFA00u);
+        memmove((void *)(uintptr_t)VGA_P(0xA0000u), dword_53A49, 0xFA00u);
     }
 
     for (;;) {
@@ -253,7 +253,7 @@ void party_panel_run(void)
                             (int)dword_53AA9, dword_53AAD);
             dlg_portraits_refresh();
             party_panel_draw(dword_53A49 + 0x7964, 456);
-            gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
+            gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320,
                           dword_53A49 + 0x8088, 456, 312, 192);
         }
 
@@ -265,9 +265,9 @@ void party_panel_run(void)
                 party_panel_band_c(scratch, i);
                 party_panel_band_d(scratch, i);
                 party_panel_band_e(scratch, i);
-                memmove((void *)(uintptr_t)0xA0000u, dword_53A49, 0xFA00u);
+                memmove((void *)(uintptr_t)VGA_P(0xA0000u), dword_53A49, 0xFA00u);
             }
-            memmove((void *)(uintptr_t)0xA0000u, backdrop, 0xFA00u);
+            memmove((void *)(uintptr_t)VGA_P(0xA0000u), backdrop, 0xFA00u);
             guest_free(backdrop);
             guest_free(scratch);
             kbd_flush();

@@ -26,7 +26,7 @@
 
 #define MAP_VIEW_OFF   0x8088u  /* dword_53A49 + 32904: first map-view byte */
 #define MAP_VIEW_PITCH 456      /* 0x1C8: map-view stride in bytes         */
-#define VGA_SPARE      0xA0504u /* 320x200 scratch page gfx_copy_rows uses */
+#define VGA_SPARE      (fd2_vga + 0x504u) /* 320x200 scratch page gfx_copy_rows uses */
 
 #define BLOCK_ROWS     72       /* 0x48 rows of the stashed window block    */
 #define BLOCK_BYTES    72       /* 0x48 bytes per row -> 72x72 block        */

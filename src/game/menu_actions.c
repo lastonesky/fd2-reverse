@@ -32,8 +32,7 @@ typedef int  (*load_fn)(int);
 /* 0x33206/0x3312D: draw one menu sub-stream, then move the portrait back. */
 static void menu_vm(int sub)
 {
-    vm_run((void *)(uintptr_t)dword_53A79, sub,
-            0xA0000, 0x140, 0xCD, 0x4C, 0x4A, 0x13, 1);
+    vm_run((void *)(uintptr_t)dword_53A79, sub,VGA_P(0xA0000u), 0x140, 0xCD, 0x4C, 0x4A, 0x13, 1);
 }
 
 /* loc_3344D */

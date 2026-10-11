@@ -21,7 +21,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define VGA_FRAME 0xA0000u /* the visible 320x200 frame                      */
+#define VGA_FRAME fd2_vga /* the visible 320x200 frame                      */
 #define WORK_SIZE 0x1F400u /* 640-stride figure work buffer (a4 of 0x2F4D4)  */
 #define SCR_SIZE  0xFA00u  /* 320-stride screen buffer (a3 of 0x2F4D4)       */
 
@@ -68,7 +68,7 @@ void figure_bg_scroll(int unit, const void *figure, void *screen, void *tmp,
     memset(work, 0, WORK_SIZE);
     memset(screen, 0, SCR_SIZE);
     rle_decode(bg, 0, 50, screen, 320, -1);
-    ui_status_panel_at((int)(uintptr_t)screen, unit);
+    ui_status_panel_at(screen, unit);
     gfx_copy_rows(work, 640, screen, 320, 320, 200);
     res_blit((void *)(uintptr_t)figure, 0, work, 640, -1);
     for (i = 9; i >= 0; --i) {
@@ -120,7 +120,7 @@ void figure_play(int unit, int mode, const void *figure, const void *base,
             svc_play_sfx((const void *)(uintptr_t)dword_5414B, sub[5], 1);
         if (sub[4] == 1) {
             rec_sub_table5(unit, mode);
-            ui_status_panel_at((int)(uintptr_t)scr, unit);
+            ui_status_panel_at(scr, unit);
             if (mode < 10 || mode >= 32) {
                 const uint8_t *strip =
                     dword_53A6D +
@@ -193,7 +193,7 @@ void figure_bg_scroll_portrait(int unit, const void *figure,
     memset(scr, 0, SCR_SIZE);
     rle_decode(bg, 0, 50, scr, 320, -1);
     rle_decode(portrait, 164, 157, scr, 320, -1);
-    ui_status_panel_at((int)(uintptr_t)scr, unit);
+    ui_status_panel_at(scr, unit);
     gfx_copy_rows(wrk + 320, 640, scr, 320, 320, 200);
     res_blit((void *)(uintptr_t)figure, 0, wrk + 320, 640, -1);
     for (i = 1; i <= 10; ++i) {
@@ -390,7 +390,7 @@ int figure_attack_play(int attacker, int defender, const uint8_t *figure,
                     v30 = 0;
                 *(uint16_t *)(void *)(rec_def + 0x40) = (uint16_t)v30;
                 if (dword_54133 == 0)
-                    ui_status_panel_at((int)(uintptr_t)screen, defender);
+                    ui_status_panel_at(screen, defender);
                 if (out[0] != 0) {
                     if (s[5] != 0)
                         svc_play_sfx((const void *)(intptr_t)snd, 0, 1);
@@ -618,7 +618,7 @@ void figure_attack_view(int attacker, int defender)
     dword_5413B = res_load(
         aBgDat, (void *)(uintptr_t)dword_5413B, bg_att);
     if (dword_54133 == 0)
-        ui_status_panel_at((int)(uintptr_t)screen, attacker);
+        ui_status_panel_at(screen, attacker);
     if (ev5_1F0DC(attacker, defender) == 1 || dword_54133 != 0)
         fig_def_next = res_load(aFiganiDat, fig_def_next, 3 * def_row + 1);
 
@@ -646,7 +646,7 @@ void figure_attack_view(int attacker, int defender)
         rle_decode((const void *)(uintptr_t)dword_5413B, 0, 50, screen, 320,
                    -1);
         if (dword_54133 == 0)
-            ui_status_panel_at((int)(uintptr_t)screen, defender);
+            ui_status_panel_at(screen, defender);
     }
 
     if (dword_54133 == 0) {
@@ -701,7 +701,7 @@ void figure_attack_view(int attacker, int defender)
         figure_tmp_load();
         svc_wait_ticks(6);
         pal_fade_out();
-        memset((void *)(uintptr_t)0xA0000, 0, 0xFA00);
+        memset((void *)(uintptr_t)VGA_P(0xA0000u), 0, 0xFA00);
         map_view_update(1);
         svc_play_sfx((const void *)(uintptr_t)dword_5414B, -1, 1);
         if (dword_5414B != 0)
@@ -754,7 +754,7 @@ void figure_scene_play(int unit)
     fig_b = res_load(aFiganiDat, NULL, 3 * group + 1);
     pal_fade_out();
     dword_5413B = res_load(aBgDat, NULL, cell[6]);
-    ui_status_panel_at((int)(uintptr_t)screen, unit);
+    ui_status_panel_at(screen, unit);
     rle_decode((const void *)(uintptr_t)dword_5413B, 0, 50, screen, 320, -1);
     dword_5414B = ev5_314DE(fig_b);
     figure_attack_scroll(unit, 1, fig_a, fig_a, work, screen, tai);
@@ -878,11 +878,11 @@ void figure_party_show(int unit, int mode, int count, const uint8_t *units)
     screen = guest_malloc(SCR_SIZE);
     work   = guest_malloc(WORK_SIZE);
     memset(screen, 0, SCR_SIZE);
-    ui_status_panel_at((int)(uintptr_t)screen, unit);
+    ui_status_panel_at(screen, unit);
 
     if (mode == 28) {
         rle_decode(bg_pick, 0, 50, screen, 320, -1);
-        ui_status_panel_at((int)(uintptr_t)screen, units[0]);
+        ui_status_panel_at(screen, units[0]);
     } else {
         rle_decode(bg_a, 0, 50, screen, 320, -1);
     }
@@ -937,7 +937,7 @@ void figure_party_show(int unit, int mode, int count, const uint8_t *units)
                 ++posture_i;
                 *(uint16_t *)(void *)((uint8_t *)r + 0x40) = (uint16_t)(
                     base_hp - (uint8_t)posture_i * dmg / posture_n);
-                ui_status_panel_at((int)(uintptr_t)screen, units[i]);
+                ui_status_panel_at(screen, units[i]);
             }
             for (k = 0; k < sub[6]; ++k) {
                 uint8_t *win = work + 320;
@@ -1041,7 +1041,7 @@ void figure_demo_show(int unit, int mode, int count, const uint8_t *units)
     work   = guest_malloc(WORK_SIZE);
     memset(screen, 0, SCR_SIZE);
     rle_decode(bg, 0, 50, screen, 320, -1);
-    ui_status_panel_at((int)(uintptr_t)screen, unit);
+    ui_status_panel_at(screen, unit);
     pal_fade_out();
 
     i     = 3 * rec[7];
@@ -1284,8 +1284,8 @@ void figure_effect_play(int unit, int mode, int count, const uint8_t *units)
     screen = guest_malloc(0xFA00);
     work   = guest_malloc(0x2A300);
     memset(screen, 0, 0xFA00);
-    ui_status_panel_at((int)(uintptr_t)screen, unit);
-    ui_status_panel_at((int)(uintptr_t)screen, units[0]);
+    ui_status_panel_at(screen, unit);
+    ui_status_panel_at(screen, units[0]);
     rle_decode(bg, 0, 50, screen, 320, -1);
 
     i     = 3 * rec[7];
@@ -1318,7 +1318,7 @@ void figure_effect_play(int unit, int mode, int count, const uint8_t *units)
             if (k != 10)
                 res_blit(fig_a, 0, work - 10 * k + 320, 640, -1);
             res_blit(groups[0], 0, work + 320, 640, -1);
-            gfx_copy_rows((uint8_t *)0xA0000, 320, work + 320, 640, 320, 200);
+            gfx_copy_rows((uint8_t *)VGA_P(0xA0000u), 320, work + 320, 640, 320, 200);
         }
         j___delay(500);
     }
@@ -1335,7 +1335,7 @@ void figure_effect_play(int unit, int mode, int count, const uint8_t *units)
             res_blit(fig_b, v60, dst, 640, -1);
         anim_cycle_frame(groups[0], -1, work + v73, 640);
         fx_table[mode](unit, p, work + v73, 640, 2);
-        gfx_copy_rows((uint8_t *)0xA0000, 320, work + v73, 640, 320, 200);
+        gfx_copy_rows((uint8_t *)VGA_P(0xA0000u), 320, work + v73, 640, 320, 200);
         svc_wait_ticks(1);
     }
 
@@ -1387,20 +1387,20 @@ void figure_effect_play(int unit, int mode, int count, const uint8_t *units)
                     if (v24 >= v70) {
                         *(uint16_t *)(void *)(r + 0x40) = (uint16_t)(v65 -
                             v70 * (v65 - v59) / v24);
-                        ui_status_panel_at((int)(uintptr_t)screen, units[n]);
+                        ui_status_panel_at(screen, units[n]);
                         ++v70;
                     }
                     v72 = 0;
                     v64 = 1 - (int)(util_rand() % 3);
                 }
             }
-            gfx_copy_rows((uint8_t *)0xA0000, 320, work + v73, 640, 320, 200);
+            gfx_copy_rows((uint8_t *)VGA_P(0xA0000u), 320, work + v73, 640, 320, 200);
             svc_wait_ticks(1);
         }
         if (count - 1 != n) {
             fx_play(unit, p, fig_b, groups[n], work, screen, groups[n + 1],
                     mode);
-            ui_status_panel_at((int)(uintptr_t)screen, units[n + 1]);
+            ui_status_panel_at(screen, units[n + 1]);
         }
     }
 
@@ -1414,7 +1414,7 @@ void figure_effect_play(int unit, int mode, int count, const uint8_t *units)
             res_blit(fig_b, v60, dst, 640, -1);
         anim_cycle_frame(groups[count - 1], -1, work + v73, 640);
         fx_table[mode](unit, p, work + v73, 640, 8);
-        gfx_copy_rows((uint8_t *)0xA0000, 320, work + v73, 640, 320, 200);
+        gfx_copy_rows((uint8_t *)VGA_P(0xA0000u), 320, work + v73, 640, 320, 200);
         svc_wait_ticks(1);
     }
 
@@ -1423,7 +1423,7 @@ void figure_effect_play(int unit, int mode, int count, const uint8_t *units)
             gfx_copy_rows(work + 320, 640, screen, 320, 320, 200);
             res_blit(fig_a, 0, work - 10 * kk + 320, 640, -1);
             res_blit(groups[0], 0, work + 320, 640, -1);
-            gfx_copy_rows((uint8_t *)0xA0000, 320, work + 320, 640, 320, 200);
+            gfx_copy_rows((uint8_t *)VGA_P(0xA0000u), 320, work + 320, 640, 320, 200);
         }
     }
 
@@ -1435,7 +1435,7 @@ void figure_effect_play(int unit, int mode, int count, const uint8_t *units)
         rle_decode_lut(tai, 164, 157, screen, 320, strip);
         res_blit(fig_b, 0, work, 320, -1);
         anim_cycle_frame(groups[count - 1], -1, work, 320);
-        gfx_copy_rows((uint8_t *)0xA0000, 320, work, 320, 320, 200);
+        gfx_copy_rows((uint8_t *)VGA_P(0xA0000u), 320, work, 320, 320, 200);
         svc_wait_ticks(1);
     }
 
@@ -1444,7 +1444,7 @@ void figure_effect_play(int unit, int mode, int count, const uint8_t *units)
     rle_decode(tai, 164, 157, screen, 320, -1);
     res_blit(fig_b, 0, work, 320, -1);
     anim_cycle_frame(groups[count - 1], -1, work, 320);
-    gfx_copy_rows((uint8_t *)0xA0000, 320, work, 320, 320, 200);
+    gfx_copy_rows((uint8_t *)VGA_P(0xA0000u), 320, work, 320, 320, 200);
     svc_play_sfx((const void *)(uintptr_t)dword_54153, -1, 1);
     guest_free((void *)(uintptr_t)dword_54153);
     guest_free(p);
@@ -1463,7 +1463,7 @@ void figure_effect_play(int unit, int mode, int count, const uint8_t *units)
     figure_tmp_load();
     svc_wait_ticks(8);
     pal_fade_out();
-    memset((uint8_t *)0xA0000, 0, 0xFA00);
+    memset((uint8_t *)VGA_P(0xA0000u), 0, 0xFA00);
     map_view_update(1);
     pal_fade_in();
 }

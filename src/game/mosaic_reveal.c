@@ -76,7 +76,7 @@ void mosaic_blit(int block, uint8_t *dst, uint8_t *src)
  * background under both strips inside the map window (dword_53A49+0x8088,
  * stride 456), draws sub-image `index` in the left strip at column 85-offset
  * and sub-image 81 in the right strip at column 165+offset (both on row 82),
- * copies the 312x192 window to the VGA scratch page 0xA0504, waits a tick and
+ * copies the 312x192 window to the VGA scratch page VGA_P(0xA0504u), waits a tick and
  * restores the saved background.  Ends in the shared epilogue at 0x184BA
  * (add esp,0xC drops the two restore record args) - a plain return here. */
 void reveal_slide_draw(int offset, int index)
@@ -87,7 +87,7 @@ void reveal_slide_draw(int offset, int index)
     void *right = res_draw_subimage(dword_53A81, buf, REVEAL_STRIDE,
                                     offset + 165, 82, 81);
 
-    gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, buf, REVEAL_STRIDE,
+    gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320, buf, REVEAL_STRIDE,
                   0x138, 192);
     svc_wait_ticks(1);
     dlg_snap_restore(left, buf, REVEAL_STRIDE);
@@ -101,7 +101,7 @@ void reveal_mosaic_out(int index)
     uint8_t *scratch = guest_malloc(0xFA00u);
     int i, j;
 
-    memmove(scratch, (const void *)(uintptr_t)0xA0000u, 0xFA00u);
+    memmove(scratch, (const void *)(uintptr_t)VGA_P(0xA0000u), 0xFA00u);
 
     for (i = 4; i >= 0; --i)
         reveal_slide_draw(25 * i, index);
@@ -122,7 +122,7 @@ void reveal_mosaic_out(int index)
         guest_free(p);
 
         pal_fade_range(16, 255, j);
-        memmove((void *)(uintptr_t)0xA0000u, scratch, 0xFA00u);
+        memmove((void *)(uintptr_t)VGA_P(0xA0000u), scratch, 0xFA00u);
         svc_wait_ticks(1);
     }
 
@@ -150,7 +150,7 @@ void reveal_mosaic_in(int index)
         guest_free(p);
 
         pal_fade_range(16, 255, i);
-        memmove((void *)(uintptr_t)0xA0000u, scratch, 0xFA00u);
+        memmove((void *)(uintptr_t)VGA_P(0xA0000u), scratch, 0xFA00u);
         svc_wait_ticks(1);
     }
 

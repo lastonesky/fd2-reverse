@@ -42,7 +42,7 @@ void unit_stat_totals(int rec_index, int item, int out[4]);
  * prospective item previewed through unit_stat_totals; `cursor` is the
  * highlighted entry; `dst` is the row buffer base. */
 void shop_party_stat_rows(int count, const uint8_t *members, int item,
-                          int cursor, int dst);
+                          int cursor, uint8_t *dst);
 
 /* 0x27F4A - the preview screen driver.  `count` member indices are read from
  * `members`, `item` is the prospective item previewed through

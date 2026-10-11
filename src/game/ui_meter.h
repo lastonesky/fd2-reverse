@@ -23,19 +23,21 @@
 #ifndef GAME_UI_METER_H
 #define GAME_UI_METER_H
 
+#include <stdint.h>
+
 /* 0x17D6F */
-void ui_meter_tiles(int dst, int pitch, int count, int tile);
+void ui_meter_tiles(uint8_t *dst, int pitch, int count, int tile);
 
 /* 0x18795 */
-void ui_meter_bar(int dst, int pitch, int tile, int value, int max);
+void ui_meter_bar(uint8_t *dst, int pitch, int tile, int value, int max);
 
 /* 0x18C6D */
 void ui_status_panel(char *dst, int pitch, int rec);
 
 /* 0x2FACD */
-void ui_status_panel_at(int dst, int rec);
+void ui_status_panel_at(uint8_t *dst, int rec);
 
 /* 0x1E739 - fixed 70-tile gauge (tiles 23/24/25 filled, 29 empty, 30 end cap) */
-void ui_meter_fixed(int dst, int pitch, int count);
+void ui_meter_fixed(uint8_t *dst, int pitch, int count);
 
 #endif /* GAME_UI_METER_H */

@@ -162,7 +162,7 @@ int map_zoom_run(void)
                       cy0 + (k + 1) * (cy1 - cy0) / 8,
                       k * zoom_w / 7 + 128,
                       cells);
-        memmove((void *)(uintptr_t)0xA0000u, dword_53A49, 0xFA00u);
+        memmove((void *)(uintptr_t)VGA_P(0xA0000u), dword_53A49, 0xFA00u);
     }
 
     kbd_flush();
@@ -205,7 +205,7 @@ int map_zoom_run(void)
                       cy0 + (k + 1) * (cy1 - cy0) / 8,
                       k * zoom_w / 7 + 128,
                       cells);
-        memmove((void *)(uintptr_t)0xA0000u, dword_53A49, 0xFA00u);
+        memmove((void *)(uintptr_t)VGA_P(0xA0000u), dword_53A49, 0xFA00u);
     }
 
     guest_free(cells);

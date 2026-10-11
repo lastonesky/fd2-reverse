@@ -19,7 +19,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#define VGA_FRAME 0xA0000u /* the visible 320x200 frame                      */
+#define VGA_FRAME fd2_vga /* the visible 320x200 frame                      */
 #define WORK_SIZE 0x1F400u /* 640-stride figure work buffer                  */
 #define SCR_SIZE  0xFA00u  /* 320-stride screen / dialogue buffer            */
 #define FADE_SIZE 0x36B00u /* the 320-stride fade-in scratch buffer          */
@@ -60,8 +60,7 @@ void figure_showcase_run(void)
 
     fade_buf = guest_malloc(FADE_SIZE);
     memset(fade_buf, 0, FADE_SIZE);
-    vm_run((void *)(uintptr_t)dword_53A79, 44,
-           (int)(uintptr_t)(fade_buf + 76848), 320, 205, 76, 0, 25, 0);
+    vm_run((void *)(uintptr_t)dword_53A79, 44,fade_buf + 76848, 320, 205, 76, 0, 25, 0);
 
     fade = 40;
     for (i = 0; i < 500; ++i) {
@@ -140,20 +139,17 @@ void figure_showcase_run(void)
                                                    col)),
                 320);
             anim_cycle_frame(fig_base, -1, work, 320);
-            vm_run((void *)(uintptr_t)dword_53A79, 10,
-                   (int)(uintptr_t)(work + 5865), 320, 205, 76, 0, 0, 0);
-            vm_run(dword_53A7D, rec[8] + 1, (int)(uintptr_t)(work + 5915), 320,
+            vm_run((void *)(uintptr_t)dword_53A79, 10,work + 5865, 320, 205, 76, 0, 0, 0);
+            vm_run(dword_53A7D, rec[8] + 1,work + 5915, 320,
                    205, 76, 0, 0, 0);
-            vm_run((void *)(uintptr_t)dword_53A79, 11,
-                   (int)(uintptr_t)(work + 12265), 320, 205, 76, 0, 0, 0);
-            vm_run(dword_53A7D, rec[32] + 150, (int)(uintptr_t)(work + 12315),
+            vm_run((void *)(uintptr_t)dword_53A79, 11,work + 12265, 320, 205, 76, 0, 0, 0);
+            vm_run(dword_53A7D, rec[32] + 150,work + 12315,
                    320, 205, 76, 0, 0, 0);
             if (n >= 220)
                 line_sub = 45;
             else
                 line_sub = (uint8_t)(rec[8] + 12);
-            vm_run((void *)(uintptr_t)dword_53A79, line_sub,
-                   (int)(uintptr_t)(work + 32008), 320, 205, 76, 0, 20, 0);
+            vm_run((void *)(uintptr_t)dword_53A79, line_sub,work + 32008, 320, 205, 76, 0, 20, 0);
             gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, work, 320, 0x140,
                           200);
             svc_wait_ticks(1);

@@ -648,7 +648,7 @@ tail:
  * source-base table over it, then play the three-frame map zoom (fixed-point
  * centre and zoom taken from the 0x52096 / 0x520A2 / 0x520AE dword tables)
  * while re-drawing the unflagged record portraits, cycle the four scratch
- * frames into 0xA0504 for 60 ticks (playing SFX bank-13 sample 2 whenever
+ * frames into VGA_P(0xA0504u) for 60 ticks (playing SFX bank-13 sample 2 whenever
  * n < 43 and n % 6 == 0), and finally resolve action `table_idx` on every
  * listed record (queueing the dealt number, or the idle cursor sprite on a
  * miss), refresh the view and pop the status numbers.  `table_idx` is 10/11/12
@@ -725,7 +725,7 @@ int map_action_zoom_resolve(int a1, int table_idx, int count,
     for (n = 0; n < 60; ++n) {
         if (n < 43 && n % 6 == 0)
             svc_play_sfx((const void *)(uintptr_t)dword_53B13, 13, 1);
-        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, pool[n % 4] + 0x8088,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320, pool[n % 4] + 0x8088,
                       456, 312, 192);
         j___delay(10);
     }

@@ -333,7 +333,7 @@ void unit_map_render(int idx)
                 rle2_blit_trans(dst, src, 456);
             }
         }
-        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320,
                        (const void *)(uintptr_t)(dword_53A49 + 32904),
                        456, 312, 192);
 

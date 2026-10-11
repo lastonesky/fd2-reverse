@@ -49,7 +49,7 @@ int map_levelup_run(int rec)
 
     kbd_flush();
     msg_open_portrait((int)cls);
-    vm_run(dword_53A7D, 488, 693535, 320, 205, 76, 74, 19, 1);
+    vm_run(dword_53A7D, 488,VGA_P(693535), 320, 205, 76, 74, 19, 1);
     dlg_blit_dato(dword_53A85, dword_53C67, 0);
 
     while (xp >= 100) {
@@ -57,7 +57,7 @@ int map_levelup_run(int rec)
 
         kbd_flush();
         ++r[33];
-        vm_run(dword_53A7D, 489, 699615, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 489,VGA_P(699615), 320, 205, 76, 74, 19, 1);
 
         page = msg_show_page((uint16_t *)(void *)(r + 0x37), tbl, 490, page);
         page = msg_show_page((uint16_t *)(void *)(r + 0x39), tbl + 2, 491, page);
@@ -76,7 +76,7 @@ int map_levelup_run(int rec)
 
                     dword_53AD9 = (uint32_t)(gain + 441);
                     map_levelup_mark_gain(rec, gain);
-                    vm_run(dword_53A7D, 587, 6080 * page + 693535,
+                    vm_run(dword_53A7D, 587,VGA_P(6080 * page + 693535),
                            320, 205, 76, 74, 19, 1);
                 }
             }

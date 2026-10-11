@@ -226,7 +226,7 @@ int ani_play(int index, int delay_ms, int wait_key)
         sfx = res_load(aFdotherDat, NULL, 78);
     palette = guest_malloc(0x300);
     scratch = guest_malloc(0xFA00);
-    ani_target_set(0xFA00, (void *)(uintptr_t)0xA0000, palette);
+    ani_target_set(0xFA00, (void *)(uintptr_t)VGA_P(0xA0000u), palette);
     fp = fopen(aAniDat, aRb_13);              /* ANI.DAT, rb */
     fseek(fp, 4L * index + 6, SEEK_SET);
     fread(scratch, 1, 8, fp);                 /* directory entry */

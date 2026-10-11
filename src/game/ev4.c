@@ -40,7 +40,7 @@ extern uint32_t dos_lowmem_base;
 
 #define REC_STRIDE 80
 #define MAP_BASE   (dword_53A49 + 32904u)   /* 0x8088 */
-#define SCR_BASE   0x000A0000u
+#define SCR_BASE   fd2_vga
 
 /* 0x1366A - scene move-animation. The script (sub_4EB48(sel)) is a list of
  * groups: [n][count, m, (idx,val)*m]...; count's bit7 selects the "place"
@@ -122,7 +122,7 @@ void ev4_1366A(int sel)
                     dword_53A49 = save;
                 }
                 map_refresh_records();
-                gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
+                gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320,
                               (const void *)(uintptr_t)MAP_BASE, 456, 312, 192);
                 svc_wait_ticks(2);
                 map_view_update(0);
@@ -272,7 +272,7 @@ void ev4_24B4D(int frames)
                     (int)dword_53AA9, (int)dword_53AAD);
     map_view_update(0);
     for (i = 0; i < frames; i++) {
-        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
+        gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320,
                       (const void *)(uintptr_t)(456 * (i & 1) + MAP_BASE), 456, 312, 192);
         delay(20);
     }

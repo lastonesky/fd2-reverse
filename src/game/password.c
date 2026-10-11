@@ -78,7 +78,7 @@ void password_frame_draw(void *image, const void *screen, int number,
     for (i = 0; i < entered_n; ++i)
         password_glyph_blit(image, entered[i], tmp, 320, 32 * i + 116, 97);
     password_glyph_blit(dword_53A4D, 0, tmp, 320, 25 * sel + 86, 132);
-    memmove((void *)(uintptr_t)0x000A0000u, tmp, 0xFA00u);
+    memmove((void *)(uintptr_t)VGA_P(0xA0000u), tmp, 0xFA00u);
     guest_free(tmp);
 }
 
@@ -161,7 +161,7 @@ void password_screen_run(void)
     guest_free(buf);
     guest_free(img98);
     pal_fade_out();
-    memset((void *)(uintptr_t)0x000A0000u, 0, 0xFA00u);
+    memset((void *)(uintptr_t)VGA_P(0xA0000u), 0, 0xFA00u);
     map_view_update(1);
     pal_fade_in();
 }

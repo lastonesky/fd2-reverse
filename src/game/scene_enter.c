@@ -2,7 +2,7 @@
  *
  * Restored from the pseudocode + offline disassembly verification of the shared
  * tails (see scene_states.c for the leave-table counterparts):
- *   0x3312D = vm_run(stream, sub, 0xA0000, 320, 205, 76, 74, 19, 1)
+ *   0x3312D = vm_run(stream, sub,VGA_P(0xA0000u), 320, 205, 76, 74, 19, 1)
  *             + 0x134E4() + 0x12D7B(0) + retn         (sub pushed by the caller)
  *   0x33594 = push 0; call 0x12D7B; add esp,4; pop ebx; retn
  * The `push 28h; call 0x3702F` prologue is the Watcom stack probe (dropped).
@@ -14,9 +14,9 @@
 #include <stdint.h>
 
 /* vm_run with the fixed tail tuple used by the whole scene family. */
-static int vm(int sub)
+static uint8_t *vm(int sub)
 {
-    return sub_15F84(dword_53A79, sub, 0xA0000, 320, 205, 76, 74, 19, 1);
+    return vm_run(dword_53A79, sub, fd2_vga, 320, 205, 76, 74, 19, 1);
 }
 
 /* 0x32FB2 - funcs_25E3A[3] */

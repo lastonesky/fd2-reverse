@@ -27,7 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define VGA_BASE 0xA0000u
+#define VGA_BASE fd2_vga
 /* REC_STRIDE (80) comes from the migrated rec.h */
 #define SAVE_FILE_SIZE 0x59CBu   /* 22987 bytes = FD2.SAV payload */
 #define SLOT_STRIDE 2600u        /* bytes per save slot */
@@ -306,7 +306,7 @@ int scene_apply_state(void)
         memset((void *)(uintptr_t)VGA_BASE, 0, 320u * 200u);
         sub_11D40(0, 255, 0);
         sub_1956B(75);
-        sub_15F84(dword_53A7D, 410, 0xA9524, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 410, VGA_P(0xA9524u), 320, 205, 76, 74, 19, 1);
         /* 0x16559: the machine code pushes ONE arg (see 0x262D8) while port/'s
            dlg_blit_dato takes 3 and passed dlgcheck(800); port/'s own call sites
            pass (dword_53A85, dword_53C67, idx). ABI question recorded in PROGRESS 0-F. */
@@ -418,7 +418,7 @@ int scene_apply_state(void)
 /* ---- 0x265EC -------------------------------------------------------------
  * Redraw the map view: copy the saved view buffer back, blit the location
  * panel and name, stamp the map cursor sprite for the current record cell and
- * publish the 312x192 window to the VGA staging page 0xA0504.  Reached from
+ * publish the 312x192 window to the VGA staging page VGA_P(0xA0504u).  Reached from
  * scene_apply_state's interactive branch (0x26434 / 0x2647E) once per frame.
  * The machine leaves eax from gfx_copy_rows; the callers ignore the value.
  */
@@ -435,8 +435,7 @@ int scene_map_view_draw(void)
     memmove(dword_53A49, dword_53A5D, 0x25680u);    /* 0x53A5D -> 0x53A49      */
     rle2_blit(dword_53A49 + 0x1A20C,
               (const void *)(uintptr_t)dword_53F5A, 456);
-    vm_run(dword_53A7D, (int)(dword_53F4A + 495),
-           (int)(uintptr_t)(dword_53A49 + 0x1ACC4), 456, 205, 76, 74, 19, 0);
+    vm_run(dword_53A7D, (int)(dword_53F4A + 495),dword_53A49 + 0x1ACC4, 456, 205, 76, 74, 19, 0);
 
     if (frame == 3)                                 /* frame 3 aliases frame 1 */
         frame = 1;
@@ -444,7 +443,7 @@ int scene_map_view_draw(void)
     col = byte_52363[6 * v2 + dword_53F4A];
     row = byte_52375[6 * v2 + dword_53F4A];
     sprite24_plain(src, dword_53A49 + 32904 + 456 * row + col, 456);
-    gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + 32904, 456, 312, 192);
+    gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + 32904, 456, 312, 192);
 
     return 0;
 }

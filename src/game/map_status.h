@@ -21,7 +21,7 @@
 
 /* 0x1E7F6 - draw record `rec`'s HP gauge at pos[0]/pos[1] below the frame base
  * `dst`; nothing is drawn while the current HP word (record+0x40) is zero. */
-void map_status_gauge(int dst, int pitch, int rec, const int *pos);
+void map_status_gauge(uint8_t *dst, int pitch, int rec, const int *pos);
 
 /* 0x1E611 - draw the full status frame for the actor/target record pair. */
 void map_status_frame(const int *pos, int actor, int target);

@@ -30,7 +30,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#define VGA_FRAME  0xA0000u /* the visible 320x200 frame               */
+#define VGA_FRAME  fd2_vga /* the visible 320x200 frame               */
 #define WORK_SIZE  0x1F400u /* 640-stride sprite work buffer           */
 #define SCR_SIZE   0xFA00u  /* one 320-stride 320x200 page             */
 

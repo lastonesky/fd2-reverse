@@ -23,7 +23,7 @@
 #include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
-#define VGA_BASE 0x000A0000u
+#define VGA_BASE fd2_vga
 
 /* --- service entry points ---------------------------------------------- */
 typedef void  (*bgm_fn)(int track, int loop_count);
@@ -80,7 +80,7 @@ void scene_card(void)
  * `push 28h; call 0x3702F` prologue is the Watcom stack probe (_chkstk), not
  * an argument - the same artifact as in vm.c/unit.c (rounds/08 §37.3).
  *
- * All six draw the same 0xA0000 VGA cell with the same 9 vm_run arguments
+ * All six draw the same VGA_P(0xA0000u) VGA cell with the same 9 vm_run arguments
  * (pitch 320, fg 205, shadow 76, fill 74, line step 19, wait 1); only the
  * sub-stream differs (the one exception, 0x239BD, computes its sub-stream from
  * unit_exists). dword_53C03 is the observable side effect: 0x22EF6
@@ -88,21 +88,21 @@ void scene_card(void)
  * (0x23790/0x2389F/0x23E39 all tail-jump to 0x231F2); the C spells the
  * behaviour out per handler instead of reproducing the jump layout. */
 
-/* The shared vm_run(stream=dword_53A79, sub, ...) with the fixed 8 tail args. */
-static int vm9(void)
+/* The shared vm_run(stream=dword_53A79, sub,VGA_P(...)) with the fixed 8 tail args. */
+static uint8_t *vm9(void)
 {
-    return vm_run((void *)(uintptr_t)dword_53A79, 9, 0xA0000, 320, 205, 76, 74, 19, 1);
+    return vm_run((void *)(uintptr_t)dword_53A79, 9,VGA_P(0xA0000u), 320, 205, 76, 74, 19, 1);
 }
-static int vm4(void)
+static uint8_t *vm4(void)
 {
-    return vm_run((void *)(uintptr_t)dword_53A79, 4, 0xA0000, 320, 205, 76, 74, 19, 1);
+    return vm_run((void *)(uintptr_t)dword_53A79, 4,VGA_P(0xA0000u), 320, 205, 76, 74, 19, 1);
 }
-static int vm3(void)
+static uint8_t *vm3(void)
 {
-    return vm_run((void *)(uintptr_t)dword_53A79, 3, 0xA0000, 320, 205, 76, 74, 19, 1);
+    return vm_run((void *)(uintptr_t)dword_53A79, 3,VGA_P(0xA0000u), 320, 205, 76, 74, 19, 1);
 }
 
-/* 0x22EF6 - funcs_25E23[0]: vm_run(...,9,...), refresh, then *set* state 1. */
+/* 0x22EF6 - funcs_25E23[0]: vm_run(...,9,VGA_P(...)), refresh, then *set* state 1. */
 void scene_state_00(void)
 {
     vm9();
@@ -110,7 +110,7 @@ void scene_state_00(void)
     dword_53C03 = 1;
 }
 
-/* 0x231BC - funcs_25E23[3]: vm_run(...,4,...), refresh, advance state. */
+/* 0x231BC - funcs_25E23[3]: vm_run(...,4,VGA_P(...)), refresh, advance state. */
 void scene_state_03(void)
 {
     vm4();
@@ -118,7 +118,7 @@ void scene_state_03(void)
     dword_53C03++;
 }
 
-/* 0x23790 - funcs_25E23[10]: vm_run(...,3,...), refresh, join unit 14. */
+/* 0x23790 - funcs_25E23[10]: vm_run(...,3,VGA_P(...)), refresh, join unit 14. */
 void scene_state_10(void)
 {
     vm3();
@@ -127,7 +127,7 @@ void scene_state_10(void)
     dword_53C03++;
 }
 
-/* 0x2389F - funcs_25E23[12]: vm_run(...,9,...), refresh, join unit 3. */
+/* 0x2389F - funcs_25E23[12]: vm_run(...,9,VGA_P(...)), refresh, join unit 3. */
 void scene_state_12(void)
 {
     vm9();
@@ -148,13 +148,13 @@ void scene_state_14(void)
     int exists = unit_exists(12);
     int sub    = (int)(uint8_t)((exists ^ 1) + 12);
 
-    vm_run((void *)(uintptr_t)dword_53A79, sub, 0xA0000, 320, 205, 76, 74, 19, 1);
+    vm_run((void *)(uintptr_t)dword_53A79, sub,VGA_P(0xA0000u), 320, 205, 76, 74, 19, 1);
     unit_refresh_all();
     unit_add(15);
     dword_53C03++;
 }
 
-/* 0x23E39 - funcs_25E23[18]: refresh *before* vm_run(...,3,...), advance. */
+/* 0x23E39 - funcs_25E23[18]: refresh *before* vm_run(...,3,VGA_P(...)), advance. */
 void scene_state_18(void)
 {
     unit_refresh_all();

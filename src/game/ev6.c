@@ -23,10 +23,10 @@ typedef int  (*delay_fn)(int);
 
 #define REC 0x50
 
-/* Tail of every handler: vm_run(stream, sub, 0xA0000, 320, 205, 76, 74, 19, 1). */
+/* Tail of every handler: vm_run(stream, sub,VGA_P(0xA0000), 320, 205, 76, 74, 19, 1). */
 static void vm_play(int sub)
 {
-    vm_run((void *)(uintptr_t)dword_53A79, sub, 0x000A0000, 320,
+    vm_run((void *)(uintptr_t)dword_53A79, sub,VGA_P(0xA0000u), 320,
                 205, 76, 74, 19, 1);
 }
 

@@ -28,7 +28,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#define VGA_BASE     0xA0000u
+#define VGA_BASE     fd2_vga
 #define SCREEN_BYTES 0xFA00u
 
 /* 0x24336 */

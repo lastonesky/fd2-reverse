@@ -17,7 +17,7 @@
  *
  * Boxes: dword_53C67 holds the box's VGA offset (0 = closed, 0x728 = top
  * box, 0x9017 = bottom). Opening a box resets the text origin to
- * 0xA0000 + 0xB4F / 0xA0000 + 0x951F and the paragraph counter to 0.
+ * VGA_P(0xA0000u) + 0xB4F / VGA_P(0xA0000u) + 0x951F and the paragraph counter to 0.
  *
  * The two registers that survive across opcodes matter:
  *   cur   (ebp)  current VGA write address, threaded through the recursion
@@ -41,11 +41,11 @@
 #include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
-#define VGA_BASE      0x000A0000u
+#define VGA_BASE      fd2_vga
 #define BOX_TOP       0x00000728        /* dword_53C67: upper dialog box     */
 #define BOX_BOTTOM    0x00009017        /* dword_53C67: lower dialog box     */
-#define ADDR_TOP      0x000A0B4Fu       /* text origin inside the top box    */
-#define ADDR_BOTTOM   0x000A951Fu       /* ... inside the bottom box         */
+#define ADDR_TOP      (fd2_vga + 0x0B4Fu)       /* text origin inside the top box    */
+#define ADDR_BOTTOM   (fd2_vga + 0x951Fu)       /* ... inside the bottom box         */
 #define RECORD_SIZE   80                /* stride of the dword_53A45 table   */
 #define FACE_KEEP     39                /* -17 operand: keep the held record */
 
@@ -84,10 +84,10 @@ static void close_open_box(int box, int mode)
  * origin. `rec` is deliberately left pointing at the RLE block, exactly
  * where the machine code leaves EDI. */
 static void open_and_blit(int box_id, uint8_t *rec, int mode, int rle_top,
-                          int *box, uint8_t **rec_io, int *start, int *cur)
+                          int *box, uint8_t **rec_io, uint8_t **start, uint8_t **cur)
 {
     uint8_t *buf;
-    int      origin = (box_id == BOX_TOP) ? (int)ADDR_TOP : (int)ADDR_BOTTOM;
+    uint8_t *origin = (box_id == BOX_TOP) ? ADDR_TOP : ADDR_BOTTOM;
 
     *box = (int)(intptr_t)dlg_open_box(rec[0], rec[1], mode);
 
@@ -104,14 +104,14 @@ static void open_and_blit(int box_id, uint8_t *rec, int mode, int rle_top,
     *cur   = origin;
 }
 
-int vm_run(void *stream, int sub, int addr, int pitch,
-           int fg, int shadow, int bgfill, int line_step, int wait)
+uint8_t *vm_run(void *stream, int sub, uint8_t *addr, int pitch,
+                int fg, int shadow, int bgfill, int line_step, int wait)
 {
     const uint8_t *s   = (const uint8_t *)stream;
     const int16_t *p   = (const int16_t *)(s +
                           *(const int16_t *)(s + 2 * sub));
-    int      start = addr;                      /* arg_8: text origin      */
-    int      cur   = addr;                      /* ebp: write address      */
+    uint8_t *start = addr;                      /* arg_8: text origin      */
+    uint8_t *cur   = addr;                      /* ebp: write address      */
     int      line  = 0;                         /* var_18: paragraph index */
     int      box   = 0;                         /* var_1C: open box handle */
     int      mode  = 0;                         /* var_20: box row count   */
@@ -176,7 +176,7 @@ int vm_run(void *stream, int sub, int addr, int pitch,
             sprintf(num, "%d", dword_53AE1);
             len = (int)strlen(num);
             for (i = 0; i < len; i++) {
-                gfx_draw_glyph(dword_53A75, num[i] - '0', (void *)(uintptr_t)cur, pitch,
+                gfx_draw_glyph(dword_53A75, num[i] - '0', cur, pitch,
                           fg, shadow, bgfill);
                 if (kbd_pending())
                     wait = 0;
@@ -258,7 +258,7 @@ int vm_run(void *stream, int sub, int addr, int pitch,
         }
 
         default:                                /* one glyph              */
-            gfx_draw_glyph(dword_53A75, op, (void *)(uintptr_t)cur, pitch, fg, shadow, bgfill);
+            gfx_draw_glyph(dword_53A75, op, cur, pitch, fg, shadow, bgfill);
             cur += 16;
             p = next;
             if (kbd_pending())

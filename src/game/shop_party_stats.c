@@ -84,7 +84,7 @@ void unit_stat_totals(int rec_index, int item, int out[4])
 
 /* 0x2825B */
 void shop_party_stat_rows(int count, const uint8_t *members, int item,
-                          int cursor, int dst)
+                          int cursor, uint8_t *dst)
 {
     int frame = (int)dword_53F72;
     int rows = count;
@@ -106,18 +106,18 @@ void shop_party_stat_rows(int count, const uint8_t *members, int item,
         int cur3 = *(const uint16_t *)(const void *)(rec + 0x4E);
         int row  = 26 * i + 117;
         int fg   = (i + dword_53F4E == (uint32_t)cursor) ? 201 : 205;
-        int v16  = 320 * (row + 4) + dst;
-        int v11  = 320 * (row + 3) + dst;
-        int v12  = 320 * (row + 12) + dst;
-        int v17  = 320 * (row + 13) + dst;
+        uint8_t *v16 = dst + (320 * (row + 4));
+        uint8_t *v11 = dst + (320 * (row + 3));
+        uint8_t *v12 = dst + (320 * (row + 12));
+        uint8_t *v17 = dst + (320 * (row + 13));
         int color;
 
         unit_stat_totals(idx, item, totals);
 
         sprite24_plain49(unit_sprite(idx, frame),
-                         (void *)(uintptr_t)(dst + 320 * row + 14), 320);
+                         dst + (320 * row + 14), 320);
 
-        vm_run(dword_53A7D, rec[8] + 1, v16 + 40, 320, fg, 76, 0, 0, 0);
+        vm_run(dword_53A7D, rec[8] + 1,v16 + 40, 320, fg, 76, 0, 0, 0);
 
         color = ev5_2860A(cur0, totals[0]);
         rle2_blit((void *)(uintptr_t)(v11 + 122), label_sub(78), 320);
@@ -155,7 +155,7 @@ int shop_party_stat_run(int count, const uint8_t *members, int item)
     dword_53C5F = guest_malloc(0xFA00u);
     dword_53C63 = guest_malloc(0xFA00u);
 
-    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u,
+    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)VGA_P(0xA0000u),
             0xFA00u);
     memmove((void *)(uintptr_t)dword_53C63, (const void *)(uintptr_t)dword_53C5F,
             0xFA00u);
@@ -171,7 +171,7 @@ int shop_party_stat_run(int count, const uint8_t *members, int item)
               320);
 
     shop_party_stat_rows(count, members, item, (int)dword_53C57,
-                         (int)dword_53C63);
+                         dword_53C63);
 
     for (i = 5; i >= 0; --i)
         msg_blit_band(13 * i + 112, (void *)(uintptr_t)dword_53C5B,
@@ -190,7 +190,7 @@ int shop_party_stat_run(int count, const uint8_t *members, int item)
             }
         repaint:
             shop_party_stat_rows(count, members, item, (int)dword_53C57,
-                                 0xA0000u);
+                                 VGA_P(0xA0000u));
             break;
         case 72:                                  /* up   */
             if (dword_53C57 == 0)

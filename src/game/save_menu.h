@@ -53,7 +53,7 @@
 #include <stdint.h>
 
 /* 0x29AB2 - draw the four slot rows of the `base` image into `dst`. */
-void save_slot_rows(int selected, int dst, int base);
+void save_slot_rows(int selected, uint8_t *dst, int base);
 
 /* 0x29BCB - run the four-slot selector over `base`; returns 1 on confirm,
  * -1 on cancel. */

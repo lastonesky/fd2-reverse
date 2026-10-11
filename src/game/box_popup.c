@@ -21,7 +21,7 @@ static const uint8_t *item_rec(int index)
 }
 
 /* 0x17FC0 */
-void box_status_draw(int rec, int base)
+void box_status_draw(int rec, uint8_t *base)
 {
     const uint8_t *r = (const uint8_t *)dword_53A45 + 80u * (uint32_t)rec;
     int v13 = *(const int16_t *)(const void *)(r + 64);
@@ -57,9 +57,9 @@ void box_status_draw(int rec, int base)
     dlg_draw_number((void *)(uintptr_t)(base + 25397), 320,
                     *(const int16_t *)(const void *)(r + 78), v8, 3);
 
-    vm_run(dword_53A7D, r[8] + 1, base + 4259, 320, 205, 76, 0, 0, 0);
-    vm_run(dword_53A7D, r[31] + 140, base + 4371, 320, 205, 76, 0, 0, 0);
-    vm_run(dword_53A7D, r[32] + 150, base + 4411, 320, 205, 76, 0, 0, 0);
+    vm_run(dword_53A7D, r[8] + 1,base + 4259, 320, 205, 76, 0, 0, 0);
+    vm_run(dword_53A7D, r[31] + 140,base + 4371, 320, 205, 76, 0, 0, 0);
+    vm_run(dword_53A7D, r[32] + 150,base + 4411, 320, 205, 76, 0, 0, 0);
 
     v9 = (r[6] == 0) ? 54 : 53;
     dlg_frame_tile((void *)(uintptr_t)(base + 9701), 320, dword_53A81, v9);
@@ -72,7 +72,7 @@ void box_status_draw(int rec, int base)
 }
 
 /* 0x184C0 */
-void box_items_draw(int rec, int highlight, int base)
+void box_items_draw(int rec, int highlight, uint8_t *base)
 {
     const uint8_t *r = (const uint8_t *)dword_53A45 + 80u * (uint32_t)rec;
     int i;
@@ -80,7 +80,8 @@ void box_items_draw(int rec, int highlight, int base)
 
     for (i = 0; i < 8; ++i) {
         int v15 = (int8_t)r[2 * i + 10];
-        int v16, v5, v6, v7, v8, v9, v17, v18, v10, drawn = 1;
+        int v16, v5, v6, v7, v8, v18, v10, drawn = 1;
+        uint8_t *v9, *v17;
         const uint8_t *v13;
 
         if (v15 < 0)                 /* bit 0x80: empty slot */
@@ -101,18 +102,16 @@ void box_items_draw(int rec, int highlight, int base)
         if (v15 & 0x40)
             v5 += 3;
 
-        dlg_frame_tile((void *)(uintptr_t)(320 * (22 * (v3 & 3) + 101) +
-                                           v18 + base - 29),
+        dlg_frame_tile(base + (320 * (22 * (v3 & 3) + 101) + v18 - 29),
                        320, dword_53A81, v5);
 
         v6 = (i == highlight) ? 201 : 205;
-        vm_run(dword_53A7D, v16 + 181,
-               v18 + base + 320 * (22 * (v3 & 3) + 103), 320, v6, 76, 0, 0, 0);
+        vm_run(dword_53A7D, v16 + 181,base + (v18 + 320 * (22 * (v3 & 3) + 103)), 320, v6, 76, 0, 0, 0);
 
         v7 = v13[0];
         v8 = 320 * (22 * (v3 & 3) + 107);
-        v17 = v8 + v18 + base + 93;
-        v9  = v18 + base + 68 + v8;
+        v17 = base + (v8 + v18 + 93);
+        v9  = base + (v18 + 68 + v8);
 
         v10 = 0;
         if (v7 >= 0x15) {
@@ -123,15 +122,14 @@ void box_items_draw(int rec, int highlight, int base)
                 } else if (v13[0] == 32 && v13[13] == 11) {
                     int v11 = 320 * (22 * (v3 & 3) + 107);
 
-                    dlg_frame_tile((void *)(uintptr_t)(v11 + v18 + base + 68),
+                    dlg_frame_tile(base + (v11 + v18 + 68),
                                    320, dword_53A81, 67);
-                    dlg_draw_number((void *)(uintptr_t)(v18 + base + 93 + v11),
+                    dlg_draw_number(base + (v18 + 93 + v11),
                                     320, *(const int16_t *)(const void *)(v13 + 14),
                                     42, 3);
                     drawn = 0;
                 } else {
-                    res_blit6((void *)(uintptr_t)(v18 + base + 68 +
-                                                  320 * (22 * (v3 & 3) + 107)),
+                    res_blit6(base + (v18 + 68 + 320 * (22 * (v3 & 3) + 107)),
                               320, dword_53A81, 41);
                     drawn = 0;
                 }
@@ -152,7 +150,7 @@ void box_items_draw(int rec, int highlight, int base)
 }
 
 /* 0x17EEF */
-void box_open_init(int rec, int base)
+void box_open_init(int rec, uint8_t *base)
 {
     const uint8_t *r;
     const uint8_t *dato;
@@ -165,13 +163,13 @@ void box_open_init(int rec, int base)
     dato = (const uint8_t *)dword_53A85;
     v2 = (const void *)(dato + dato[0]);
 
-    dlg_box_stage((void *)(uintptr_t)base, 320, 5, 7, 5, 5);
-    rle2_blit((void *)(uintptr_t)(dword_53C67 + base), v2, 320);
-    rle2_blit((void *)(uintptr_t)(base + 2332),
+    dlg_box_stage(base, 320, 5, 7, 5, 5);
+    rle2_blit(base + dword_53C67, v2, 320);
+    rle2_blit(base + 2332,
               (const void *)(uintptr_t)
                   (*(const uint32_t *)(const void *)((uintptr_t)dword_53A81 + 86) +
                    (uintptr_t)dword_53A81), 320);
-    rle2_blit((void *)(uintptr_t)(base + 30085),
+    rle2_blit(base + 30085,
               (const void *)(uintptr_t)
                   (*(const uint32_t *)(const void *)((uintptr_t)dword_53A81 + 90) +
                    (uintptr_t)dword_53A81), 320);
@@ -188,11 +186,11 @@ void box_open_anim(int rec)
     dword_53C5F = guest_malloc(0xFA00u);
     dword_53C63 = guest_malloc(0xFA00u);
 
-    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u, 0xFA00u);
+    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)VGA_P(0xA0000u), 0xFA00u);
     memmove((void *)(uintptr_t)dword_53C63, (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
 
-    box_open_init(rec, (int)dword_53C63);
-    box_items_draw(rec, -1, (int)dword_53C63);
+    box_open_init(rec, dword_53C63);
+    box_items_draw(rec, -1, dword_53C63);
 
     for (i = 11; i >= 0; --i) {
         if (i == 11 || i == 5)
@@ -212,7 +210,7 @@ int box_input(int rec, int mode)
     const uint8_t *r;
     int            i, key;
 
-    box_items_draw(rec, dword_53C57, 655360);
+    box_items_draw(rec, dword_53C57, VGA_P(655360u));
 
     r = (const uint8_t *)dword_53A45 + 80u * (uint32_t)rec;
     for (i = 0; i < 8; ++i) {
@@ -282,7 +280,7 @@ int box_popup(int rec, int mode)
                       (char *)(uintptr_t)dword_53C63,
                       (char *)(uintptr_t)dword_53C5F);
 
-    memmove((void *)(uintptr_t)0xA0000u, (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
+    memmove((void *)(uintptr_t)VGA_P(0xA0000u), (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
 
     guest_free((void *)(uintptr_t)dword_53C5B);
     guest_free((void *)(uintptr_t)dword_53C5F);
@@ -327,7 +325,7 @@ void box_run(int rec)
                 fb_slide_step(i, (char *)(uintptr_t)dword_53C5B,
                               (char *)(uintptr_t)dword_53C63,
                               (char *)(uintptr_t)dword_53C5F);
-            memmove((void *)(uintptr_t)0xA0000u,
+            memmove((void *)(uintptr_t)VGA_P(0xA0000u),
                     (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
             guest_free((void *)(uintptr_t)dword_53C5B);
             guest_free((void *)(uintptr_t)dword_53C5F);
@@ -339,10 +337,10 @@ void box_run(int rec)
             box_item_select(rec, (int)dword_53C57);
             unit_metrics(rec);
             memmove((void *)(uintptr_t)dword_53A49,
-                    (const void *)(uintptr_t)0xA0000u, 0xFA00u);
-            box_open_init(rec, (int)dword_53A49);
-            box_items_draw(rec, -1, (int)dword_53A49);
-            memmove((void *)(uintptr_t)0xA0000u,
+                    (const void *)(uintptr_t)VGA_P(0xA0000u), 0xFA00u);
+            box_open_init(rec, dword_53A49);
+            box_items_draw(rec, -1, dword_53A49);
+            memmove((void *)(uintptr_t)VGA_P(0xA0000u),
                     (const void *)(uintptr_t)dword_53A49, 0xFA00u);
         }
     }

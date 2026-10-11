@@ -46,15 +46,14 @@ int map_cell_event(int rec_index)
 
     kbd_flush();
     msg_open_portrait(rec[7]);
-    vm_run(dword_53A7D, (tile & 0x20) ? 0x1A5 : 0x1AC,
-           0xA9F23, 320, 205, 76, 74, 19, 1);
+    vm_run(dword_53A7D, (tile & 0x20) ? 0x1A5 : 0x1AC,VGA_P(0xA9F23u), 320, 205, 76, 74, 19, 1);
     dlg_blit_dato(dword_53A85, dword_53C67, 0);
     r = map_window_run();
     map_draw_text_window();
 
     if (r != 1 || dword_53C57 != 0) {
         j___delay(100);
-        vm_run(dword_53A7D, 0x19C, 0xAB6E3, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 0x19C,VGA_P(0xAB6E3u), 320, 205, 76, 74, 19, 1);
         j___delay(200);
         ev4_196CB();
         return 0;
@@ -69,8 +68,7 @@ int map_cell_event(int rec_index)
 
     if (kind == 0) {
         dword_53AD9 = (uint32_t)(value + 181);
-        vm_run(dword_53A7D, (tile & 0x20) ? 0x1A6 : 0x1AD,
-               0xAB6E3, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, (tile & 0x20) ? 0x1A6 : 0x1AD,VGA_P(0xAB6E3u), 320, 205, 76, 74, 19, 1);
         if (rec_slot_claim(rec_index, value) != -1) {
             ((uint8_t *)(uintptr_t)dword_53AD5)[flag] = 1;
             dlg_blit_dato(dword_53A85, dword_53C67, 0);
@@ -84,12 +82,12 @@ int map_cell_event(int rec_index)
         ev4_196CB();
         j___delay(100);
         msg_open_portrait(rec[7]);
-        vm_run(dword_53A7D, 0x1A7, 0xA9F23, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 0x1A7,VGA_P(0xA9F23u), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         r = map_window_run();
         map_draw_text_window();
         if (r != 1 || dword_53C57 != 0) {
-            vm_run(dword_53A7D, 0x1A8, 0xAB6E3, 320, 205, 76, 74, 19, 1);
+            vm_run(dword_53A7D, 0x1A8,VGA_P(0xAB6E3u), 320, 205, 76, 74, 19, 1);
         } else {
             ev4_196CB();
             if (box_popup(rec_index, 0)) {
@@ -101,7 +99,7 @@ int map_cell_event(int rec_index)
                 j___delay(100);
                 msg_open_portrait(rec[7]);
                 dword_53ADD = r + 181;
-                vm_run(dword_53A7D, 0x1A9, 0xA9F23, 320, 205, 76, 74, 19, 1);
+                vm_run(dword_53A7D, 0x1A9,VGA_P(0xA9F23u), 320, 205, 76, 74, 19, 1);
                 dlg_blit_dato(dword_53A85, dword_53C67, 0);
                 dlg_wait_key(0);
                 ev4_196CB();
@@ -109,7 +107,7 @@ int map_cell_event(int rec_index)
             }
             j___delay(100);
             msg_open_portrait(rec[7]);
-            vm_run(dword_53A7D, 0x1A8, 0xA9F23, 320, 205, 76, 74, 19, 1);
+            vm_run(dword_53A7D, 0x1A8,VGA_P(0xA9F23u), 320, 205, 76, 74, 19, 1);
         }
         j___delay(200);
         ev4_196CB();
@@ -124,7 +122,7 @@ int map_cell_event(int rec_index)
         } else {
             sub = (tile & 0x20) ? 0x1AB : 0x1AF;
         }
-        vm_run(dword_53A7D, sub, 0xAB6E3, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, sub,VGA_P(0xAB6E3u), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         dlg_wait_key(0);
         ev4_196CB();

@@ -53,16 +53,16 @@ void map_attack_sprite(int attacker, int defender)
                 svc_play_sfx((const void *)(uintptr_t)dword_53B0F, sfx, 1);
         }
         if (byte_53C6B == 0 && i == 0)
-            view_draw_unit_sprite(0xA0504, 320, defender, 2, 253);
+            view_draw_unit_sprite(VGA_P(0xA0504u), 320, defender, 2, 253);
         else if (byte_53C6B == 0 && i == 1)
-            view_draw_unit_sprite(0xA0504, 320, defender, 0, 0);
+            view_draw_unit_sprite(VGA_P(0xA0504u), 320, defender, 0, 0);
 
         {
             void *saved = res_draw_subimage((const void *)(uintptr_t)dword_53AD1,
-                                            (void *)0xA0000, 320, x, y,
+                                            (void *)VGA_P(0xA0000u), 320, x, y,
                                             script[2 * i + 1]);
             j___delay(80);
-            dlg_snap_restore(saved, (void *)0xA0000, 320);
+            dlg_snap_restore(saved, (void *)VGA_P(0xA0000u), 320);
         }
     }
 }
@@ -177,7 +177,7 @@ int map_attack_resolve(int attacker, int defender)
  * `defender`'s record supplies the HP word (+0x40 current / +0x42 max); the
  * pre-attack bar length is 70*cur/max segments, the target after each
  * map_attack_resolve is 69*remaining/max + 1.  The bar is drawn as decreasing
- * ui_meter_fixed segments at pos[0] + 320*(pos[1]+6) + 0xA0000 + 7.  The whole
+ * ui_meter_fixed segments at pos[0] + 320*(pos[1]+6) + VGA_P(0xA0000u) + 7.  The whole
  * drain repeats a second time when the attacker's item effect type is 3 or a
  * 3% roll hits (the machine's count-down do/while).
  *
@@ -207,7 +207,7 @@ int map_attack_bar_drain(int attacker, int defender, int *pos)
         map_attack_sprite(attacker, defender);
 
         while (v8 >= 69 * rem / v9 + 1) {
-            ui_meter_fixed(pos[0] + 320 * (pos[1] + 6) + 655360 + 7, 320, v8);
+            ui_meter_fixed(VGA_P(655360u + pos[0] + 320 * (pos[1] + 6) + 7), 320, v8);
             j___delay(8);
             --v8;
         }
@@ -368,9 +368,9 @@ int map_attack_run(int actor, int mode)
             ev5_1F04A((int)dword_53C4B, actor);
 
         pos = map_status_overlay_play(actor, (int)dword_53C4B);
-        map_status_gauge(0xA0000, 320, (int)dword_53C4B, pos);
+        map_status_gauge(VGA_P(0xA0000u), 320, (int)dword_53C4B, pos);
         if (ev5_1F0DC(actor, (int)dword_53C4B) == 1)
-            map_status_gauge(0xA0000, 320, actor, pos + 2);
+            map_status_gauge(VGA_P(0xA0000u), 320, actor, pos + 2);
 
         dlg_portrait_clear();
         rem = map_attack_bar_drain(actor, (int)dword_53C4B, pos);

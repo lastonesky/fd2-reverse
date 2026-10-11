@@ -33,7 +33,7 @@ void shop_items_paint(int count, const uint8_t *items, uint8_t half_price)
     dword_53C5F = guest_malloc(0xFA00u);
     dword_53C63 = guest_malloc(0xFA00u);
 
-    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u,
+    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)VGA_P(0xA0000u),
             0xFA00u);
     memmove((void *)(uintptr_t)dword_53C63, (const void *)(uintptr_t)dword_53C5F,
             0xFA00u);
@@ -45,7 +45,7 @@ void shop_items_paint(int count, const uint8_t *items, uint8_t half_price)
                    *(const uint32_t *)(uintptr_t)(dword_53F66 + 70u)),
               320);
 
-    shop_item_rows(count, items, (int)dword_53C57, (int)dword_53C63,
+    shop_item_rows(count, items, (int)dword_53C57, dword_53C63,
                    half_price);
 
     for (i = 5; i >= 0; --i)
@@ -94,7 +94,7 @@ int shop_items_run(int count, const uint8_t *items, uint8_t half_price)
                 screen_band_forward();
             }
         repaint:
-            shop_item_rows(count, items, (int)dword_53C57, 0xA0000u,
+            shop_item_rows(count, items, (int)dword_53C57, VGA_P(0xA0000u),
                            half_price);
             break;
         case 28:                                  /* Enter */
@@ -122,7 +122,7 @@ int shop_party_run(int count, const uint8_t *members)
     dword_53C5F = guest_malloc(0xFA00u);
     dword_53C63 = guest_malloc(0xFA00u);
 
-    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u,
+    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)VGA_P(0xA0000u),
             0xFA00u);
     memmove((void *)(uintptr_t)dword_53C63, (const void *)(uintptr_t)dword_53C5F,
             0xFA00u);
@@ -139,7 +139,7 @@ int shop_party_run(int count, const uint8_t *members)
                    *(const uint32_t *)(uintptr_t)(dword_53F66 + 70u)),
               320);
 
-    shop_party_bar_rows(count, (int)dword_53C63, (int)dword_53C57, members);
+    shop_party_bar_rows(count, dword_53C63, (int)dword_53C57, members);
 
     for (i = 5; i >= 0; --i)
         msg_blit_band(13 * i + 112, (void *)(uintptr_t)dword_53C5B,
@@ -156,7 +156,7 @@ int shop_party_run(int count, const uint8_t *members)
                 screen_band_backward();
             }
         repaint:
-            shop_party_bar_rows(count, 0xA0000u, (int)dword_53C57, members);
+            shop_party_bar_rows(count, VGA_P(0xA0000u), (int)dword_53C57, members);
             break;
         case 80:                                  /* down */
             if ((int32_t)(count - 1) <= (int32_t)dword_53C57)
@@ -193,7 +193,7 @@ int shop_party_equip_run(int count, const uint8_t *members,
     dword_53C5F = guest_malloc(0xFA00u);
     dword_53C63 = guest_malloc(0xFA00u);
 
-    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u,
+    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)VGA_P(0xA0000u),
             0xFA00u);
     memmove((void *)(uintptr_t)dword_53C63, (const void *)(uintptr_t)dword_53C5F,
             0xFA00u);
@@ -210,7 +210,7 @@ int shop_party_equip_run(int count, const uint8_t *members,
                    *(const uint32_t *)(uintptr_t)(dword_53F66 + 70u)),
               320);
 
-    shop_party_equip_rows(count, (int)dword_53C63, (int)dword_53C57, members,
+    shop_party_equip_rows(count, dword_53C63, (int)dword_53C57, members,
                           equip);
 
     for (i = 5; i >= 0; --i)
@@ -228,7 +228,7 @@ int shop_party_equip_run(int count, const uint8_t *members,
                 screen_band_backward();
             }
         repaint:
-            shop_party_equip_rows(count, 0xA0000u, (int)dword_53C57, members,
+            shop_party_equip_rows(count, VGA_P(0xA0000u), (int)dword_53C57, members,
                                   equip);
             break;
         case 80:                                  /* down */
@@ -289,7 +289,7 @@ int shop_sell_run(void)
         if (n == 0) {
             dword_53AD9 = (uint32_t)rec[7] + 1;
             msg_open_portrait(byte_52387[dword_53F4A]);
-            vm_run(dword_53A7D, v10[dword_53F4A], 0xA94CC, 320, 205, 76, 74,
+            vm_run(dword_53A7D, v10[dword_53F4A],VGA_P(0xA94CCu), 320, 205, 76, 74,
                    19, 1);
             dlg_blit_dato(dword_53A85, dword_53C67, 0);
             dlg_wait_key(1);
@@ -316,7 +316,7 @@ int shop_sell_run(void)
                                 >> 2);
 
         msg_open_portrait(byte_52387[dword_53F4A]);
-        vm_run(dword_53A7D, v9[dword_53F4A], 0xA94CC, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, v9[dword_53F4A],VGA_P(0xA94CCu), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         if (map_window_run() == -1 || dword_53C57 == 1) {
             msg_close_portrait();
@@ -373,7 +373,7 @@ int shop_buy_run(void)
         count = shop_usable_items(items);
         if (count == 0) {
             msg_open_portrait(byte_5238B);
-            vm_run(dword_53A7D, 588, 0xA94CC, 320, 205, 76, 74, 19, 1);
+            vm_run(dword_53A7D, 588,VGA_P(0xA94CCu), 320, 205, 76, 74, 19, 1);
             dlg_blit_dato(dword_53A85, dword_53C67, 0);
             dlg_wait_key(0);
             msg_close_portrait();
@@ -381,7 +381,7 @@ int shop_buy_run(void)
         }
 
         msg_open_portrait(byte_5238B);
-        vm_run(dword_53A7D, 589, 0xA94CC, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 589,VGA_P(0xA94CCu), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         dlg_wait_key(1);
         msg_close_portrait();
@@ -396,13 +396,13 @@ int shop_buy_run(void)
         dword_53AD9 = (uint32_t)rec[8] + 1;
         dword_53AE1 = (int32_t)(int16_t)word_52397[rec[32]] * (int32_t)rec[33];
 
-        vm_run(dword_53A7D, 590, 0xA94CC, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 590,VGA_P(0xA94CCu), 320, 205, 76, 74, 19, 1);
         if (map_window_run() == -1 || dword_53C57 != 0) {
             msg_close_portrait();
             continue;
         }
         if ((int32_t)dword_53BF3 < (int32_t)dword_53AE1) {
-            vm_run(dword_53A7D, 504, 0xAC44C, 320, 205, 76, 74, 19, 1);
+            vm_run(dword_53A7D, 504,VGA_P(0xAC44Cu), 320, 205, 76, 74, 19, 1);
             dlg_blit_dato(dword_53A85, dword_53C67, 0);
             dlg_wait_key(1);
             msg_close_portrait();
@@ -480,7 +480,7 @@ int shop_place_buy_run(int count, const uint8_t *items)
 
         if (glyph[0] < 0x20u && n == 0) {
             msg_open_portrait(byte_52387[dword_53F4A]);
-            vm_run(dword_53A7D, *((int16_t *)&v12[8] + dword_53F4A), 0xA94CC,
+            vm_run(dword_53A7D, *((int16_t *)&v12[8] + dword_53F4A),VGA_P(0xA94CCu),
                    320, 205, 76, 74, 19, 1);
             dlg_blit_dato(dword_53A85, dword_53C67, 0);
             dlg_wait_key(1);
@@ -492,7 +492,7 @@ int shop_place_buy_run(int count, const uint8_t *items)
         dword_53F5E = (uint32_t)n;
         dword_53F62 = list;
         msg_open_portrait(byte_52387[dword_53F4A]);
-        vm_run(dword_53A7D, *((int16_t *)&v12[11] + dword_53F4A), 0xA94CC,
+        vm_run(dword_53A7D, *((int16_t *)&v12[11] + dword_53F4A),VGA_P(0xA94CCu),
                320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         window_ret = map_window_run();
@@ -502,7 +502,7 @@ int shop_place_buy_run(int count, const uint8_t *items)
             continue;
         }
         if ((int32_t)dword_53BF3 < (int32_t)dword_53AE1) {
-            vm_run(dword_53A7D, *((int16_t *)&v12[17] + dword_53F4A), 0xAC44C,
+            vm_run(dword_53A7D, *((int16_t *)&v12[17] + dword_53F4A),VGA_P(0xAC44Cu),
                    320, 205, 76, 74, 19, 1);
             dlg_blit_dato(dword_53A85, dword_53C67, 0);
             dlg_wait_key(1);
@@ -525,7 +525,7 @@ int shop_place_buy_run(int count, const uint8_t *items)
                 dword_53AD9 = (uint32_t)(*((const uint8_t *)dword_53A45 +
                                            80u * (uint32_t)member + 7u)) + 1u;
                 msg_open_portrait(byte_52387[dword_53F4A]);
-                vm_run(dword_53A7D, word_5238D[dword_53F4A], 0xA94CC,
+                vm_run(dword_53A7D, word_5238D[dword_53F4A],VGA_P(0xA94CCu),
                        320, 205, 76, 74, 19, 1);
                 dlg_blit_dato(dword_53A85, dword_53C67, 0);
                 dlg_wait_key(1);
@@ -535,8 +535,7 @@ int shop_place_buy_run(int count, const uint8_t *items)
             rec_slot_claim(member, item);
             if (glyph[0] < 0x20u) {
                 msg_open_portrait(byte_52387[dword_53F4A]);
-                vm_run(dword_53A7D, *((int16_t *)&v12[14] + dword_53F4A),
-                       0xA94CC, 320, 205, 76, 74, 19, 1);
+                vm_run(dword_53A7D, *((int16_t *)&v12[14] + dword_53F4A),VGA_P(0xA94CCu), 320, 205, 76, 74, 19, 1);
                 dlg_blit_dato(dword_53A85, dword_53C67, 0);
                 i = list[dword_53C57];
                 window_ret = map_window_run();
@@ -575,7 +574,7 @@ void shop_give_run(void)
 
     for (;;) {
         msg_open_portrait(byte_52387[dword_53F4A]);
-        vm_run(dword_53A7D, 512, 0xA94CC, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 512,VGA_P(0xA94CCu), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         dlg_wait_key(1);
         msg_close_portrait();
@@ -595,7 +594,7 @@ void shop_give_run(void)
         if (n == 0) {
             dword_53AD9 = (uint32_t)rec[8] + 1;
             msg_open_portrait(byte_52387[dword_53F4A]);
-            vm_run(dword_53A7D, 511, 0xA94CC, 320, 205, 76, 74, 19, 1);
+            vm_run(dword_53A7D, 511,VGA_P(0xA94CCu), 320, 205, 76, 74, 19, 1);
             dlg_blit_dato(dword_53A85, dword_53C67, 0);
             dlg_wait_key(1);
             msg_close_portrait();
@@ -615,7 +614,7 @@ void shop_give_run(void)
         msg_close_portrait();
 
         msg_open_portrait(byte_52387[dword_53F4A]);
-        vm_run(dword_53A7D, 510, 0xA94CC, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 510,VGA_P(0xA94CCu), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
         dlg_wait_key(1);
         msg_close_portrait();
@@ -630,7 +629,7 @@ void shop_give_run(void)
                 (uint32_t)(*((const uint8_t *)dword_53A45 +
                              80u * (uint32_t)dword_53C57 + 8u)) + 1u;
             msg_open_portrait(byte_52387[dword_53F4A]);
-            vm_run(dword_53A7D, word_5238D[dword_53F4A], 0xA94CC,
+            vm_run(dword_53A7D, word_5238D[dword_53F4A],VGA_P(0xA94CCu),
                    320, 205, 76, 74, 19, 1);
             dlg_blit_dato(dword_53A85, dword_53C67, 0);
             dlg_wait_key(1);
@@ -680,7 +679,7 @@ int place_menu_run(const char *src)
 
     dword_53F66 = res_load(aFdotherDat,
                     (void *)(uintptr_t)dword_53F66, index);
-    res_blit6((void *)(uintptr_t)0xA0000u, 320,
+    res_blit6((void *)(uintptr_t)VGA_P(0xA0000u), 320,
               (void *)(uintptr_t)dword_53F66, 0);
     pal_fade_in();
     j___delay(200);
@@ -690,13 +689,13 @@ int place_menu_run(const char *src)
     panel = (const void *)(uintptr_t)
         (dword_53F66 +
          *(const uint32_t *)(uintptr_t)(dword_53F66 + 10u));
-    rle2_blit((void *)(uintptr_t)0xA76C5u, panel, 320);
-    dlg_draw_number((void *)(uintptr_t)0xA7BD0u, 320, (int)dword_53BF3, 31, 8);
+    rle2_blit((void *)(uintptr_t)VGA_P(0xA76C5u), panel, 320);
+    dlg_draw_number((void *)(uintptr_t)VGA_P(0xA7BD0u), 320, (int)dword_53BF3, 31, 8);
     rle2_blit((void *)(uintptr_t)(dword_53C5F + 30405u), panel, 320);
     dlg_draw_number((void *)(uintptr_t)(dword_53C5F + 31696u), 320,
                     (int)dword_53BF3, 31, 8);
 
-    vm_run(dword_53A7D, (dword_53F4A == 1) ? 501 : 440, 0xA94CC,
+    vm_run(dword_53A7D, (dword_53F4A == 1) ? 501 : 440,VGA_P(0xA94CCu),
            320, 205, 76, 74, 19, 1);
     dlg_blit_dato(dword_53A85, dword_53C67, 0);
     dword_53F6A = 0;
@@ -724,7 +723,7 @@ int place_menu_run(const char *src)
                 shop_give_run();
             }
             msg_open_portrait(byte_52387[dword_53F4A]);
-            vm_run(dword_53A7D, (dword_53F4A == 1) ? 503 : 440, 0xA94CC,
+            vm_run(dword_53A7D, (dword_53F4A == 1) ? 503 : 440,VGA_P(0xA94CCu),
                    320, 205, 76, 74, 19, 1);
             dlg_blit_dato(dword_53A85, dword_53C67, 0);
         }
@@ -733,7 +732,7 @@ int place_menu_run(const char *src)
             break;
     }
 
-    res_blit6((void *)(uintptr_t)0xA0000u, 320,
+    res_blit6((void *)(uintptr_t)VGA_P(0xA0000u), 320,
               (void *)(uintptr_t)dword_53F66, 0);
     j___delay(200);
     pal_fade_out();
@@ -747,7 +746,7 @@ int place_menu_run(const char *src)
             ((i * ((int)byte_52375[6 * place + dword_53F4A] - 100) / 10) * 128)
                 + 12800,
             src, 128 - 9 * i);
-        memmove((void *)(uintptr_t)0xA0000u, dword_53A49, 0xFA00u);
+        memmove((void *)(uintptr_t)VGA_P(0xA0000u), dword_53A49, 0xFA00u);
         pal_fade_range(0, 255, 4 * i);
     }
 

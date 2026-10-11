@@ -46,12 +46,12 @@ int place_screen_run(void *src)
 
     dword_53F66 = res_load(aFdotherDat,
                     (void *)(uintptr_t)dword_53F66, 13);
-    res_blit6((void *)(uintptr_t)0xA0000u, 320,
+    res_blit6((void *)(uintptr_t)VGA_P(0xA0000u), 320,
               (void *)(uintptr_t)dword_53F66, 0);
     pal_fade_in();
     j___delay(200);
     msg_open_portrait(byte_52387[0]);
-    vm_run(dword_53A7D, 585, 0xA94CC, 320, 205, 76, 74, 19, 1);
+    vm_run(dword_53A7D, 585,VGA_P(0xA94CCu), 320, 205, 76, 74, 19, 1);
     dlg_blit_dato(dword_53A85, dword_53C67, 0);
 
     for (;;) {
@@ -73,12 +73,12 @@ int place_screen_run(void *src)
             save_slot_load();
         } else {
             msg_open_portrait(byte_52387[0]);
-            vm_run(dword_53A7D, 415, 0xA94CC, 320, 205, 76, 74, 19, 1);
+            vm_run(dword_53A7D, 415,VGA_P(0xA94CCu), 320, 205, 76, 74, 19, 1);
             dlg_blit_dato(dword_53A85, dword_53C67, 0);
             v2 = map_window_run();
             map_draw_text_window();
             if (v2 != -1 && dword_53C57 == 0) {
-                vm_run(dword_53A7D, 416, 0xAAc8C, 320, 205, 76, 74, 19, 1);
+                vm_run(dword_53A7D, 416,VGA_P(0xAAC8Cu), 320, 205, 76, 74, 19, 1);
                 j___delay(200);
                 msg_close_portrait();
                 return 1;
@@ -87,11 +87,11 @@ int place_screen_run(void *src)
         }
 
         msg_open_portrait(byte_52387[0]);
-        vm_run(dword_53A7D, 586, 0xA94CC, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 586,VGA_P(0xA94CCu), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
     }
 
-    res_blit6((void *)(uintptr_t)0xA0000u, 320,
+    res_blit6((void *)(uintptr_t)VGA_P(0xA0000u), 320,
               (void *)(uintptr_t)dword_53F66, 0);
     j___delay(200);
     pal_fade_out();
@@ -105,7 +105,7 @@ int place_screen_run(void *src)
             ((i * ((int)byte_52375[6 * v5 + dword_53F4A] - 100) / 10) * 128)
                 + 12800,
             (const char *)src, 128 - 9 * i);
-        memmove((void *)(uintptr_t)0xA0000u, dword_53A49, 0xFA00u);
+        memmove((void *)(uintptr_t)VGA_P(0xA0000u), dword_53A49, 0xFA00u);
         pal_fade_range(0, 255, 4 * i);
     }
 
@@ -131,7 +131,7 @@ int place_screen4_run(void *src)
 
     dword_53F66 = res_load(aFdotherDat,
                     (void *)(uintptr_t)dword_53F66, 14);
-    res_blit6((void *)(uintptr_t)0xA0000u, 320,
+    res_blit6((void *)(uintptr_t)VGA_P(0xA0000u), 320,
               (void *)(uintptr_t)dword_53F66, 0);
     pal_fade_in();
     j___delay(200);
@@ -142,13 +142,13 @@ int place_screen4_run(void *src)
     panel = (const void *)(uintptr_t)
         (dword_53F66 +
          *(const uint32_t *)(uintptr_t)(dword_53F66 + 10u));
-    rle2_blit((void *)(uintptr_t)0xA76C5u, panel, 320);
-    dlg_draw_number((void *)(uintptr_t)0xA7BD0u, 320, (int)dword_53BF3, 31, 8);
+    rle2_blit((void *)(uintptr_t)VGA_P(0xA76C5u), panel, 320);
+    dlg_draw_number((void *)(uintptr_t)VGA_P(0xA7BD0u), 320, (int)dword_53BF3, 31, 8);
     rle2_blit((void *)(uintptr_t)(dword_53C5F + 30405u), panel, 320);
     dlg_draw_number((void *)(uintptr_t)(dword_53C5F + 31696u), 320,
                     (int)dword_53BF3, 31, 8);
 
-    vm_run(dword_53A7D, 585, 0xA94CC, 320, 205, 76, 74, 19, 1);
+    vm_run(dword_53A7D, 585,VGA_P(0xA94CCu), 320, 205, 76, 74, 19, 1);
     dlg_blit_dato(dword_53A85, dword_53C67, 0);
 
     for (;;) {
@@ -173,11 +173,11 @@ int place_screen4_run(void *src)
         }
 
         msg_open_portrait(byte_5238B);
-        vm_run(dword_53A7D, 586, 0xA94CC, 320, 205, 76, 74, 19, 1);
+        vm_run(dword_53A7D, 586,VGA_P(0xA94CCu), 320, 205, 76, 74, 19, 1);
         dlg_blit_dato(dword_53A85, dword_53C67, 0);
     }
 
-    res_blit6((void *)(uintptr_t)0xA0000u, 320,
+    res_blit6((void *)(uintptr_t)VGA_P(0xA0000u), 320,
               (void *)(uintptr_t)dword_53F66, 0);
     j___delay(200);
     pal_fade_out();
@@ -189,7 +189,7 @@ int place_screen4_run(void *src)
             ((i * ((int)byte_52375[6 * v5 + dword_53F4A] - 100) / 10) * 128)
                 + 12800,
             (const char *)src, 128 - 9 * i);
-        memmove((void *)(uintptr_t)0xA0000u, dword_53A49, 0xFA00u);
+        memmove((void *)(uintptr_t)VGA_P(0xA0000u), dword_53A49, 0xFA00u);
         pal_fade_range(0, 255, 4 * i);
     }
 

@@ -35,13 +35,13 @@
 #define GAME_BOX_POPUP_H
 
 /* 0x17FC0 */
-void box_status_draw(int rec, int base);
+void box_status_draw(int rec, uint8_t *base);
 
 /* 0x184C0 */
-void box_items_draw(int rec, int highlight, int base);
+void box_items_draw(int rec, int highlight, uint8_t *base);
 
 /* 0x17EEF */
-void box_open_init(int rec, int base);
+void box_open_init(int rec, uint8_t *base);
 
 /* 0x17E0B */
 void box_open_anim(int rec);

@@ -2951,3 +2951,30 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 ### 5.4 待办
 
 - **C3**：~100 处 `0xA0000/0xA0504` VGA 与 `fd2_lowmem`/`MEMORY` 抽 framebuffer/平台缝。
+
+### 5.4 C3 完成：VGA/低内存抽成 framebuffer 缝（本轮）
+
+- 新增 `src/game/vga.h` + `vga.c`：`uint8_t *fd2_vga` 是唯一的 mode-13h 帧缓冲入口，
+  `VGA_P(addr)` 把 guest 线性地址（0xA0000 窗口）换算成宿主指针。native 指向
+  宿主数组 `vga_store[0xFA00]`，`FD2_GUEST_FIXED` 指向真实 0xA0000 窗口。
+- 全库不再出现裸 0xA0000/0xA0504/0xA94CC… 的指针转换：约 100 处
+  `(uintptr_t)0x…` 与 268 处裸地址字面量统一走 `VGA_P(...)`；各 VGA 基址宏
+  （`VGA_BASE`/`VGA_FRAME`/`SCR_BASE`/`VGA_SPARE`/`TITLE_BAND*_DST`/`ADDR_TOP`
+  /`ADDR_BOTTOM`）改为 `fd2_vga`/`fd2_vga+N`。
+- `vm_run` 的 `addr` 由 int 改为 `uint8_t *`（返回同类型），把 VGA 地址真正指针化；
+  `ui_meter_tiles/bar/fixed`、`ui_status_panel_at`、`map_status_gauge`、
+  `save_slot_rows`、`shop_item_rows/party_bar_rows/party_equip_rows/party_stat_rows`、
+  `view_draw_unit_sprite`、`box_status_draw/box_items_draw/box_open_init` 的
+  `dst/base` 参数改为指针，调用点同步去掉 `(int)(uintptr_t)` 截断转换。
+- 低内存仍走 `fd2_lowmem`/`DOS_LOWMEM_BASE`（平台缝），无裸 0x4xx。
+- 验收：standalone strict 0 error、hybrid 0、`--full` 两 profile `-Werror` rc=0。
+- C1–C4 至此全部完成；剩余为 AIL/CRT 库边界（引擎层）与低内存平台实现。
+
+### 5.5 阶段 C 收尾状态
+
+| 切片 | 内容 | 状态 |
+|---|---|---|
+| C1 | 45 个指针单元改真实 C 存储 | ✅ |
+| C4 | 删除全部 `ORIG_*` 机器码回调（594 调用点） | ✅ |
+| C2 | 7 张游戏分派表改真实函数指针数组；`fd2_relocate` no-op | ✅ |
+| C3 | VGA 帧缓冲缝；`vm_run` 及全部绘图层地址参数指针化 | ✅ |

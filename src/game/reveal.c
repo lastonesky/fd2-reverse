@@ -98,7 +98,7 @@ int portrait_reveal(int col, int row, int offset, int step)
 
         memmove(dword_53A49, scratch, 0x25680u);
         reveal_band(col * 24 + 12, row * 24 + 16, offset, 0, 192, tbl);
-        gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + REVEAL_MAP_OFF,
+        gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + REVEAL_MAP_OFF,
                       REVEAL_STRIDE, 0x138, 192);
         offset += step;
         j___delay(5);
@@ -138,7 +138,7 @@ int portrait_reveal_cell(int rec, int radius, int step)
         memmove(dword_53A49, scratch, 0x25680u);
         reveal_arc(vx, vy, radius, 12, 0, 192, tbl);
         dlg_portraits_refresh();
-        gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + REVEAL_MAP_OFF,
+        gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + REVEAL_MAP_OFF,
                       REVEAL_STRIDE, 0x138, 192);
         radius += step;
     }
@@ -168,7 +168,7 @@ int portrait_reveal_zoom(int radius, int step)
 
         memmove(dword_53A49, scratch, 0x25680u);
         reveal_band(vx, vy, radius, 0, 192, tbl);
-        gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + REVEAL_MAP_OFF,
+        gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + REVEAL_MAP_OFF,
                       REVEAL_STRIDE, 0x138, 192);
         radius += step;
         j___delay(5);
@@ -184,7 +184,7 @@ int portrait_reveal_zoom(int radius, int step)
 
         memmove(dword_53A49, scratch, 0x25680u);
         reveal_band(vx, vy, radius, 0, 192, tbl);
-        gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + REVEAL_MAP_OFF,
+        gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + REVEAL_MAP_OFF,
                       REVEAL_STRIDE, 0x138, 192);
         j___delay(5);
     }

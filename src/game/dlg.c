@@ -58,12 +58,12 @@
 #include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
-#define VGA_BASE 0x000A0000u
+#define VGA_BASE fd2_vga
 
 /* ------------------------------------------------ app-level part ------- */
 /* The game's data segment (IDA names kept so the C reads like the original
  * decompilation). Addresses verified against E:\FD2\FD2.EXE.i64. */
-#define VGA        ((uint8_t *)(uintptr_t)VGA_BASE)
+#define VGA        (fd2_vga)
 
 typedef void  (*delay_fn)(unsigned ms);
 typedef void  (*flush_fn)(void);
@@ -255,7 +255,7 @@ void dlg_wait_key(int speaker)
     int     tile       = 18;            /* esi: speaker tile index        */
     int     fast       = 0;             /* edi: 3-tick tile flip counter  */
     int     base       = 0x47A0;        /* var_1C: text area row step     */
-    int     area;                       /* var_20: text area base         */
+    uint8_t *area;                      /* var_20: text area base         */
     int     mouth_wait;                 /* ebp: ticks to hold the mouth   */
     int16_t tick_at;                    /* var_18                         */
 
@@ -264,7 +264,7 @@ void dlg_wait_key(int speaker)
 
     tick_at    = (int16_t)pal_tick_word();
     mouth_wait = (int)(util_rand() % 30) + 2;
-    area = (dword_53C67 == 0x728) ? 0xA0B4F : 0xA951F;
+    area = (dword_53C67 == 0x728) ? VGA_P(0xA0B4Fu) : VGA_P(0xA951Fu);
 
     if (speaker == 1)
         dlg_frame_tile((void *)(uintptr_t)(area + base + 0x640), 320,
@@ -353,8 +353,7 @@ void dlg_scroll_text(int box_pos)
     if (box_pos != 0x728 && box_pos != 0x9017)
         return;
 
-    base = (uint8_t *)(uintptr_t)(uint32_t)((box_pos == 0x728) ? 0xA0B4Fu
-                                                                 : 0xA951Fu);
+    base = (box_pos == 0x728) ? VGA_P(0xA0B4Fu) : VGA_P(0xA951Fu);
 
     for (i = 0; i < 5; i++) {
         for (j = 0; j < 72; j++)

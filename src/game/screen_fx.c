@@ -24,7 +24,7 @@ void screen_curtain(int mode)
     memcpy(tbl, (const void *)(uintptr_t)SCREEN_CURTAIN_TBL, sizeof tbl);
 
     p = (uint8_t *)guest_malloc(0xFA00u);
-    memmove(p, (const void *)(uintptr_t)0xA0000u, 0xFA00u);
+    memmove(p, (const void *)(uintptr_t)VGA_P(0xA0000u), 0xFA00u);
     for (i = 0; i < 20; ++i)
         memset(p + 320 * i + 54281, 74, 104);
 
@@ -41,18 +41,18 @@ void screen_curtain(int mode)
 
             gfx_blit_transparent(v2 + tbl[k] / div, src, 320);
         }
-        memmove((void *)(uintptr_t)0xA0000u, dword_53A49, 0xFA00u);
+        memmove((void *)(uintptr_t)VGA_P(0xA0000u), dword_53A49, 0xFA00u);
     }
 
     if (mode != 0)
-        memmove((void *)(uintptr_t)0xA0000u, p, 0xFA00u);
+        memmove((void *)(uintptr_t)VGA_P(0xA0000u), p, 0xFA00u);
 
     guest_free(p);
 }
 
 /* Screen-band scroll: a 284-byte-wide band at 0xA8FCA is memmoved from / to a
- * backing copy at 0xA974A (and 0xA99CA for the tail), with a 284x6 fill at
- * 0xAEC4A. The three passes plus delays make the sliding shutter. */
+ * backing copy at VGA_P(0xA974Au) (and VGA_P(0xA99CAu) for the tail), with a 284x6 fill at
+ * VGA_P(0xAEC4Au). The three passes plus delays make the sliding shutter. */
 
 /* 0x27816 */
 void screen_band_forward(void)
@@ -61,17 +61,17 @@ void screen_band_forward(void)
 
     for (i = 0; i < 3; ++i) {
         for (j = 0; j < 74; ++j)
-            memmove((void *)(uintptr_t)(0xA8FCAu + 320 * j),
-                    (const void *)(uintptr_t)(0xA974Au + 320 * j), 0x11C);
+            memmove((void *)(uintptr_t)(VGA_P(0xA8FCAu) + 320 * j),
+                    (const void *)(uintptr_t)(VGA_P(0xA974Au) + 320 * j), 0x11C);
         for (k = 0; k < 6; ++k)
-            memset((void *)(uintptr_t)(0xAEC4Au + 320 * k), 0x49, 0x11C);
+            memset((void *)(uintptr_t)(VGA_P(0xAEC4Au) + 320 * k), 0x49, 0x11C);
         j___delay(10);
     }
     for (j = 0; j < 72; ++j)
-        memmove((void *)(uintptr_t)(0xA8FCAu + 320 * j),
-                (const void *)(uintptr_t)(0xA99CAu + 320 * j), 0x11C);
+        memmove((void *)(uintptr_t)(VGA_P(0xA8FCAu) + 320 * j),
+                (const void *)(uintptr_t)(VGA_P(0xA99CAu) + 320 * j), 0x11C);
     for (k = 0; k < 8; ++k)
-        memset((void *)(uintptr_t)(0xAE9CAu + 320 * k), 0x49, 0x11C);
+        memset((void *)(uintptr_t)(VGA_P(0xAE9CAu) + 320 * k), 0x49, 0x11C);
 }
 
 /* 0x278E7 */
@@ -81,15 +81,15 @@ void screen_band_backward(void)
 
     for (i = 0; i < 3; ++i) {
         for (j = 73; j >= 0; --j)
-            memmove((void *)(uintptr_t)(0xA974Au + 320 * j),
-                    (const void *)(uintptr_t)(0xA8FCAu + 320 * j), 0x11C);
+            memmove((void *)(uintptr_t)(VGA_P(0xA974Au) + 320 * j),
+                    (const void *)(uintptr_t)(VGA_P(0xA8FCAu) + 320 * j), 0x11C);
         for (k = 0; k < 6; ++k)
-            memset((void *)(uintptr_t)(0xA8FCAu + 320 * k), 0x49, 0x11C);
+            memset((void *)(uintptr_t)(VGA_P(0xA8FCAu) + 320 * k), 0x49, 0x11C);
         j___delay(10);
     }
     for (j = 71; j >= 0; --j)
-        memmove((void *)(uintptr_t)(0xA99CAu + 320 * j),
-                (const void *)(uintptr_t)(0xA8FCAu + 320 * j), 0x11C);
+        memmove((void *)(uintptr_t)(VGA_P(0xA99CAu) + 320 * j),
+                (const void *)(uintptr_t)(VGA_P(0xA8FCAu) + 320 * j), 0x11C);
     for (k = 0; k < 8; ++k)
-        memset((void *)(uintptr_t)(0xA8FCAu + 320 * k), 0x49, 0x11C);
+        memset((void *)(uintptr_t)(VGA_P(0xA8FCAu) + 320 * k), 0x49, 0x11C);
 }

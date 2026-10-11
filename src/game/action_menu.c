@@ -39,7 +39,7 @@ void action_menu_draw(int rec, int sel, int base)
         int y2 = 320 * (22 * (i % 4) + 108);
         const uint8_t *e = action_entry(list[i]);
 
-        vm_run(dword_53A7D, list[i] + 441, x + base + y, 320, fg, 76, 0, 0, 0);
+        vm_run(dword_53A7D, list[i] + 441,VGA_P(x + base + y), 320, fg, 76, 0, 0, 0);
 
         dlg_frame_tile((void *)(uintptr_t)(y2 + x + base + 50),
                        320, dword_53A81, 92);
@@ -68,7 +68,7 @@ void action_menu_open(int rec)
                             (char *)(uintptr_t)dword_53C63);
             fb_slide_band_c(16 * i + 94, (char *)(uintptr_t)dword_53C5B,
                             (char *)(uintptr_t)dword_53C63);
-            memmove((void *)(uintptr_t)0xA0000u,
+            memmove((void *)(uintptr_t)VGA_P(0xA0000u),
                     (const void *)(uintptr_t)dword_53C5B, 0xFA00u);
         }
 
@@ -78,7 +78,7 @@ void action_menu_open(int rec)
                         (char *)(uintptr_t)dword_53C63);
         fb_slide_band_b(7, (char *)(uintptr_t)dword_53C5B,
                         (char *)(uintptr_t)dword_53C63);
-        memmove((void *)(uintptr_t)0xA0000u,
+        memmove((void *)(uintptr_t)VGA_P(0xA0000u),
                 (const void *)(uintptr_t)dword_53C5B, 0xFA00u);
 
         rle2_blit((void *)(uintptr_t)(dword_53C63 + 30085),
@@ -99,7 +99,7 @@ void action_menu_open(int rec)
                             (char *)(uintptr_t)dword_53C63);
             fb_slide_band_c(16 * j + 94, (char *)(uintptr_t)dword_53C5B,
                             (char *)(uintptr_t)dword_53C63);
-            memmove((void *)(uintptr_t)0xA0000u,
+            memmove((void *)(uintptr_t)VGA_P(0xA0000u),
                     (const void *)(uintptr_t)dword_53C5B, 0xFA00u);
         }
 
@@ -114,7 +114,7 @@ void action_menu_open(int rec)
                       (char *)(uintptr_t)dword_53C5F);
     }
 
-    memmove((void *)(uintptr_t)0xA0000u,
+    memmove((void *)(uintptr_t)VGA_P(0xA0000u),
             (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
 
     guest_free((void *)(uintptr_t)dword_53C5B);
@@ -192,11 +192,11 @@ int action_menu_run(int rec)
     dword_53C5F = guest_malloc(0xFA00u);
     dword_53C63 = guest_malloc(0xFA00u);
     memmove((void *)(uintptr_t)dword_53C5F,
-            (const void *)0xA0000u, 0xFA00u);
+            (const void *)VGA_P(0xA0000u), 0xFA00u);
     memmove((void *)(uintptr_t)dword_53C63,
             (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
 
-    box_open_init(rec, (int)dword_53C63);
+    box_open_init(rec, dword_53C63);
     action_menu_draw(rec, -1, (int)dword_53C63);
     for (i = 11; i >= 0; --i) {
         fb_slide_step(i, (char *)(uintptr_t)dword_53C5B,
@@ -214,7 +214,7 @@ int action_menu_run(int rec)
                       (char *)(uintptr_t)dword_53C63,
                       (char *)(uintptr_t)dword_53C5F);
     }
-    memmove((void *)0xA0000u, (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
+    memmove((void *)VGA_P(0xA0000u), (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
     guest_free((void *)(uintptr_t)dword_53C5B);
     guest_free((void *)(uintptr_t)dword_53C5F);
     guest_free((void *)(uintptr_t)dword_53C63);
