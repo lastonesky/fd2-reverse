@@ -2570,9 +2570,34 @@ callee 已解（真闭包＝自身；`0x3702F` 是 chkstk 探针）。函数体�
 - **归属**：新建 `map_record_engage`（`0x18890` 记录交互动画驱动器＋其帧泵）；头加进伞含（排在 `map_record.h` 与 `map_records.h` 之间）；
   调用者 `0x117E7` 仍以 IDA 名 `sub_18890` 引用，按既有约定不在新头加 `#define` 别名。无对拍器，标“已还原未验证”。
 
+### 102) 游戏内菜单簇 `0x16F55`/`0x1728C`/`0x19DF7` → `sys_menu_run`/`sys_menu_audio`/`sys_menu_system`（本轮，3 函数，§2 最小传递待还原闭包）→ `src/game/sys_menu.c/.h`（新建）
+
+本轮闭包就绪游戏内容项仍为空——§101 之后待还原只剩 CRT/库包装（`0x3645D`/`0x365DA`/`0x36C56`/`0x365AB`，既定策略跳过）
+与伪函数条目（`0x10000`/`0x36B00`）。故按 §2 取“最小传递待还原闭包”：互递归簇 `0x16F55`/`0x1728C`/`0x19DF7`（u1）——
+`0x16F55` 调 `0x19DF7` 与 `0x1728C`，二者又回指 `0x16F55`，闭包＝三者自身（共 2470B，3 函数 ≤ §4 的 8 函数上限）。函数体：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x16F55` | `sys_menu_run()` | 外层地图命令菜单：快照两张 4-int 光标表 `0x51E9F`/`0x53EF2`，跑方向补丁选单（`map_cursor_patch_expand`→`map_cursor_dir_select`→`map_cursor_patch_collapse`）→ `map_view_update(0)`；`dword_53C57`＝-1 直接 `return 1`，否则分派：0→`sys_menu_system`；1→记录交战序（`msg_open_portrait(rec[7])`＋`vm_run(417/418)`＋`map_window_run`＋对 `dword_53BEB` 条记录的 `map_slide_view`/`map_move_toward`/`funcs_1199C` 派发/`dlg_portrait_clear`/`rec_flag_or80` 环＋`party_change_map_seq`）；2→`sys_menu_audio`（`return 0`）；3→另一对话序（`vm_run(419/420)`＋`party_change_map_seq`）；余 `return 0`。 |
+| `0x1728C` | `sys_menu_audio()` | 四个声音开关（`byte_51E61` 音乐/`byte_51E62` 音效/`byte_53AF9`/`byte_51AAB`）：每轮由四标志重建 `0x51EAF` 补丁表（值 18/20/22/24，`==0` 与 `!=0` 决定 +0/+1）→ 选单 → 翻转命中的开关；音乐开关走 `AIL_set_sequence_volume(0x3B124)`（开 127／关 0，1000 ms）。选单返回 -1 则 `return`。 |
+| `0x19DF7` | `sys_menu_system()` | 存档/读档/队伍面板菜单：①探测 FD2.SAV（`fopen`+读 0x59CB 到临时缓冲后**丢弃**，仅取 open 结果；不存在则 `b_tiles[2]=1`）；②扫描 `dword_53BEB` 条记录，凡 +5 位 0 清零且位 7 置位者 `b_tiles[1]=1`；③选单：0→`party_panel_run`（`return 1`）；1→存盘（分配 0x59CB，读入现档 `aFd2Sav_0`→`util_deobfuscate`，写回头 0x30D5 字节区＋`0x59C7`＝`util_sum_tail4`→再 `util_deobfuscate`→`fwrite` 到 `aFd2Sav_1`）后 `vm_run(411)`，取消/失败 `vm_run(412)`，`kbd_flush`＋`return 1`；2→读档（`vm_run(413/414)`＋`bgm_play(-1,0)`＋`scenario_load()`）或 `vm_run(412)`＋`return 1`；余→退出序列（`vm_run(415/416)`＋`bgm_play(-1,1)`），确认 `return -1`，取消走共享尾（`return 1`）。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享帧＝跨函数尾声**：三函数帧布局完全相同（`push ebx/esi/edi; sub esp,20h`＋前置 Watcom 栈探针），故 `0x1728C`/`0x19DF7` 尾 `jmp 0x16FDD` 落入 `0x16F55` 的公共尾声（普通 `return`），
+  `0x19DF7` 的默认（退出）分支取消路径更直接跳进 `0x16F55` 的**函数体** `0x1716F` 执行其“取消帧”（`vm_run(412)`＋`j___delay(200)`＋`ev4_196CB`）后再 `return 1`。C 侧以私有 helper `sys_menu_cancel_frame()` 复现该共享帧，调用者返回 1（诚实标注）。
+- **chkstk**：`push 0x54/0x3C; call 0x3702F`（三函数）均不分配帧，丢弃。
+- **16 字节局部＝`rep movs` 表拷贝**：`0x16F55` 拷 `0x51E9F`/`0x53EF2`，`0x1728C` 拷 `0x51EAF`/`0x53F02`，`0x19DF7` 拷 `0x51EF5`/`0x53F22`（均在 dseg02 `fd2_data1`）；`0x1728C` 的 `[esp+0x10]` 四槽随即被菜单值覆盖。
+- **`0x177FC` 第二实参丢失**：`0x16FA9`/`0x17334`/`0x19EC6` 处机器压入两张 4-int 表（Hex-Rays 只留一个），按 `map_cursor.h`（同族 `0x1BBDC` 已还原）用 `map_cursor_dir_select(a_tiles, b_tiles)`。
+- **无副作用探测**：`0x19DF7` 首次读 FD2.SAV 到新缓冲后立即 `free` 而不使用（仅判断存在性）；存盘时现档尾部（`0x30D5..0x59CB`）保留原文件内容，无档时该段未初始化——原版如此，C 侧逐字节复现。
+- **CRT/堆缝**：`fopen/fread/fwrite/fclose` 走 libc；`malloc/free`（`0x3706E`/`0x3776E`）走 `guest_malloc`/`guest_free`；`AIL_set_sequence_volume`（`0x3B124`）按 `bgm.c`/`svc.c` 惯例以原址函数指针调用。
+- **归属**：新建 `sys_menu`；头加进伞含（排在 `svc.h` 与 `tables.h` 之间）；调用者 `0x117E7` 仍以 IDA 名 `sub_16F55` 引用，不在新头加 `#define` 别名。无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
+- `function-map.csv`：本轮 §102 取走 `0x16F55`/`0x1728C`/`0x19DF7`（§2 最小传递待还原闭包），待还原 **17 → 14**（−3），已还原未验证 **306 → 309**（+3）。
+- **闭包就绪游戏内容项**：本轮 §102 取走互递归菜单簇 `0x16F55`/`0x1728C`/`0x19DF7` 后，余下待还原仅 CRT/库包装
+  （`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）。无独立游戏内容余项。
 - `function-map.csv`：本轮 §101 取走 `0x18890`/`0x18B84`（§2 最小传递待还原闭包），待还原 **19 → 17**（−2），已还原未验证 **304 → 306**（+2）。
 - **闭包就绪游戏内容项**：本轮取走 `0x18890`/`0x18B84` 后，闭包就绪待还原**已无游戏内容项**——只剩 CRT/库包装
   （`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）；

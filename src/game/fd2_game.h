@@ -84,6 +84,7 @@
 #include "sprite24.h"
 #include "status_screen.h"
 #include "svc.h"
+#include "sys_menu.h"
 #include "tables.h"
 #include "title_screen.h"
 #include "unit.h"

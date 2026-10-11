@@ -1042,3 +1042,19 @@
 # signature.  Watcom stack probes dropped; no differential harness.
 0x18890 sub_18890 game/map_record_engage.h
 0x18B84 sub_18B84 game/map_record_engage.h
+
+# 0x16F55/0x1728C/0x19DF7 - the in-game menu cluster (see game/sys_menu.h).
+# 0x16F55 is the outer map command menu (the event tick 0x117E7's
+# `while (sub_16F55() == 0)` loop); 0x1728C is its four sound toggles; 0x19DF7
+# is the save/load/party-panel menu.  All three share ONE frame layout, so
+# 0x1728C/0x19DF7 tail-jump into 0x16F55's epilogue at 0x16FDD (a plain return)
+# and 0x19DF7's default path jumps into 0x16F55's body at 0x1716F - reproduced
+# as the local sys_menu_cancel_frame() helper plus an explicit `return 1`.
+# The 16-byte locals are `rep movs` copies of the cursor tables
+# 0x51E9F/0x53EF2 (0x16F55), 0x51EAF/0x53F02 (0x1728C), 0x51EF5/0x53F22 (0x19DF7);
+# Hex-Rays drops the second argument of 0x177FC.  Watcom stack probes dropped;
+# the CRT fopen/fread/fwrite/fclose map to libc and malloc/free to the
+# guest-heap seam.  No differential harness.
+0x16F55 sub_16F55 game/sys_menu.h
+0x1728C sub_1728C game/sys_menu.h
+0x19DF7 sub_19DF7 game/sys_menu.h
