@@ -1966,15 +1966,40 @@ figure 播放器（`0x2FB2C`=item_menu_figure_play 的姊妹），故追加至�
 - **`out` 块即 `map_attack_result` 的 6 dword 结果区**（`[esp+0x18..0x2C]`）；`out[0]`=命中、`out[1]`=暴击、`out[2]`=反击/效果、`out[4]`=效果 3、`out[5]`=伤害。
 - **归属**：追加至既有 `figure_view`（§0-D/§0-F 已建，伞头已含）；唯一 caller `0x2E2B0` 仍待还原。无对拍器，标“已还原未验证”。
 
+### 77) 换人屏（队伍变更）三角 `0x2AF28`/`0x2B4FB`/`0x2B67F`（本轮，3 函数）→ `src/game/party_roster.c/.h`（追加）
+
+§76 记“下批按 §2 取最小传递待还原闭包”。闭包就绪列表已无 in-budget 游戏内容项（仅 CRT/库包装与伪函数），
+故取**最小传递待还原闭包**的游戏内容簇——换人屏（队伍变更）三角：真闭包＝此三件（`sub_26152` 是伪 callee、
+`sub_3702F` 是 chkstk），合计 1887B（略超 §1 的 ~1500B 指引，属 §2 的“整闭包拉出”）。逐指令核过离线反汇编
+`2af28..2b748`。三者与既有 `party_roster`（换人屏的成员助手）同族，故追加至该模块。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2AF28` | `party_change_run()` | 快照并合成面板 → 12 步滑入（`fb_slide_step`，i==11/5 播音效）→ 选择环（`party_change_wait_key`：Enter 切换所选、`ev5_2B749(selected)==count` 且 `party_roster_apply_selection` 时确认；Esc 取消；左/右/上/下 `4B/4D/48/50` 移动光标）→ 12 步滑出 → 若确认则释放 `dword_53A61`+重载 FDICON.B24+按 `dword_53C03` 分支做 `party_member_present`/`party_member_move_front`+招募肖像序列（`msg_open_portrait(75)`/`vm_run(658)`/`dlg_blit_dato(0)`/`map_window_run`/`map_draw_text_window`/`msg_close_portrait`）。**返回 1=确认，0=取消**（`map_window_run==-1` 或 `dword_53C57!=0` 也返回 0） |
+| `0x2B4FB` | `party_change_draw(screen,count,selected,cursor)` | 把快照 `screen` 拷入 `dword_53C63` → 两位计数（`dlg_draw_number` @ `+0x2BFD`/`+0x5B7D`，后者值＝`count-ev5_2B749(selected)`）→ `anim_frame_step` → `box_status_draw(cursor+1,…)` → 光标精灵（bank `dword_53A4D`，`+*(u32*)(+6)`）→ 逐槽 i=0..`dword_53BFB-2` 画图标（bank `dword_53A61`，索引 `12*i+frame+12`，`frame=dword_53C0B` 且 3→1；选中用 `sprite24_plain`（落点 +960），否则 `sprite24_ramp24`） |
+| `0x2B67F` | `party_change_wait_key(...)` | `while(!kbd_pending())`：BIOS tick（BDA 0x46C，经 `BDA_W` 镜像）变化时重绘并回写 VGA；随后 `byte_53A8E=0x10` + `int386(0x16,…)` 取键，E0/52/空格→1C、53→01，返回扫描码 |
+
+**陷阱 / 伪代码伪影**：
+- **伪 callee / 共享尾声**：机器把 `sub_2AF28` 的 callee 列为含 `sub_26152`（尾 `jmp 0x2B434` 是 `0x2B4FB` 的
+  共享 `return`，落在 `0x2AF28` 体内）；`sub_3702F`＝Watcom chkstk（不分配帧）。真依赖＝本 3 函数 + 上列已还原资产。
+- **重复调用**：`0x2B4FB` 连调 `ev5_2B749(selected)` 两次（首次结果丢弃），离线反汇编 `2b544/2b54d` 确证，C 侧照写。
+- **双栈槽别名**：机器把屏幕拷贝指针分别存 `[esp+20h]`(`v12`) 与 `[esp+28h]`(`p`)，`[esp+24h]` 后被 `fopen` 句柄复用；
+  C 侧建模为 `buf` + `fp`（与 Hex-Rays 局部布局一致）。
+- **堆缝/资源**：`malloc/free`（`0x3706E/0x3776E`）→ `guest_malloc/guest_free`；DATO 暂存 `dword_53A61` 亦走 `guest_free`；
+  `rle2_blit` 源＝`dword_53A81 + *(u32*)((u8*)dword_53A81+0x56/0x5A)`（与 `box_popup.c` 先例一致），再 `res_blit6(+0x8C5,137)`。
+- **`dlg_blit_dato`** 按已验证 3 参 API 传 `(dword_53A85, dword_53C67, 0)`（同 `party_member_present`）。
+- **字符串**：`fopen(aFdiconB24_5(0x50291), aRb_9(0x5028E))`＝`"FDICON.B24","rb"`。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **55 → 54**（本轮 §76 −1），已还原未验证 **268 → 269**（本轮 +1）。
-- **闭包就绪游戏内容项**：本轮 §76 取走超预算单函数 `0x2EBE1` 后，闭包就绪待还原仅剩 CRT/库包装
+- `function-map.csv`：待还原 **54 → 51**（本轮 §77 −3），已还原未验证 **269 → 272**（本轮 +3）。
+- **闭包就绪游戏内容项**：本轮 §77 取走换人屏三角后，闭包就绪待还原仅剩 CRT/库包装
   （`0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`/`0x365AB`，既定策略跳过）与伪函数条目
-  （`0x10000`/`0x36B00`）；下批按 §2 取“最小传递待还原闭包”的游戏内容簇——换人屏三角
-  `0x2AF28`(1297B)/`0x2B4FB`(388B)/`0x2B67F`(202B)（真闭包＝此三件，合计 1887B）或地图攻击视图
-  簇 `0x2E2B0`(1707B)/`0x2E9A8`(503B)（合计 2210B，另含库包装 `0x2E95B`）。
+  （`0x10000`/`0x36B00`）；下批按 §2 取“最小传递待还原闭包”的游戏内容簇——地图攻击视图
+  簇 `0x2E2B0`(1707B)/`0x2E9A8`(503B)（合计 2210B，另含库包装 `0x2E95B`）或存档场景加载链
+  头 `0x1548E`(496B，闭包 4 件 2783B)。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 

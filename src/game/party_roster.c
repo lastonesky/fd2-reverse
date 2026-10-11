@@ -19,10 +19,15 @@
  */
 #include "fd2_game.h"
 #include "party_roster.h"
+#include "../dos.h"
 
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+/* BIOS tick word (BDA 40:6C), read through the low-memory mirror exactly as
+ * anim.c/box_popup.c do. */
+#define BDA_W(off)  (*(volatile uint16_t *)(uintptr_t)(DOS_LOWMEM_BASE + (off)))
 
 /* 0x2B439 - 1 when member `id` is already in party slots 1..count; otherwise
  * plays the recruit portrait and returns 0. */
@@ -123,4 +128,260 @@ void party_roster_apply_selection(const uint8_t *selected)
             memmove(party + REC_STRIDE * next++, tmp + REC_STRIDE * (i + 1), 0x50u);
     }
     guest_free(tmp);
+}
+
+/* ------------------------------------------------------------------ *
+ * Party-change screen: 0x2AF28 and its two helpers 0x2B4FB / 0x2B67F.
+ *
+ * Decompiler artifacts handled here (the offline disassembly is the
+ * authority):
+ *   - the three `sub_3702F` stack probes allocate no frame and are dropped;
+ *   - the machine writes the screen-copy pointer to two stack slots
+ *     ([esp+20h] `v12` and [esp+28h] `p`); the [esp+24h] slot is later reused
+ *     for the fopen() handle, so they are modelled as one `buf` plus `fp`;
+ *   - malloc/free go through the game heap (guest_malloc/guest_free), and the
+ *     DATO scratch bank dword_53A61 is freed through guest_free too;
+ *   - the BIOS key read uses the global REGS cell word_53A8D / byte_53A8E
+ *     (AH = 0x10) via int386, and the idle loop polls the BIOS tick word at
+ *     BDA 0x46C (through the low-memory mirror, as anim.c/box_popup.c do);
+ *   - dlg_blit_dato takes its (dato_buf, box_pos, idx) globals explicitly,
+ *     matching the verified port/ API (see scene_core.c);
+ *   - a `jmp 0x2B434` at the tail of 0x2B4FB is a shared `return` in 0x2AF28.
+ */
+
+/* 0x2B4FB - one panel frame: counters, status box, cursor and slot icons. */
+void party_change_draw(const uint8_t *screen, int count,
+                       const uint8_t *selected, int cursor)
+{
+    uint8_t *work = (uint8_t *)(uintptr_t)dword_53C63;
+    const uint8_t *bank;
+    int      frame;
+    int      i;
+
+    memmove(work, screen, 0xFA00u);
+    dlg_draw_number(work + 11261, 320, count, 31, 2);
+    ev5_2B749(selected);
+    dlg_draw_number(work + 23421, 320, count - ev5_2B749(selected), 42, 2);
+    anim_frame_step();
+    frame = dword_53C0B;
+    if (frame == 3)
+        frame = 1;
+    box_status_draw(cursor + 1, (int)dword_53C63);
+
+    bank = (const uint8_t *)dword_53A4D;
+    sprite24_plain(bank + *(const uint32_t *)(bank + 6),
+                   work + (30 * (cursor / 10) + 104) * 320
+                        + 28 * (cursor % 10) + 23, 320);
+
+    for (i = 0; i < (int)dword_53BFB - 1; ++i) {
+        int            off;
+        const uint8_t *src;
+
+        bank = (const uint8_t *)dword_53A61;
+        src  = bank + *(const uint32_t *)(bank
+                        + 4u * (uint32_t)(12 * i + frame + 12));
+        off  = (30 * (i / 10) + 100) * 320 + 28 * (i % 10) + 23;
+        if (selected[i] != 0)
+            sprite24_plain(src, work + off + 960, 320);
+        else
+            sprite24_ramp24(src, work + off, 320);
+    }
+}
+
+/* 0x2B67F - idle+animate until a key is pending, then read and remap it. */
+int party_change_wait_key(const uint8_t *screen, int count,
+                          const uint8_t *selected, int cursor)
+{
+    while (kbd_pending() == 0) {
+        int32_t tick = (int32_t)(int16_t)BDA_W(0x46C);
+
+        if (tick != (int32_t)dword_53F46) {
+            dword_53F46 = (uint32_t)tick;
+            party_change_draw(screen, count, selected, cursor);
+            memmove((void *)(uintptr_t)0xA0000u,
+                    (const void *)(uintptr_t)dword_53C63, 0xFA00u);
+        }
+    }
+
+    byte_53A8E = 0x10;
+    int386(0x16, &word_53A8D, &word_53A8D);
+    if (byte_53A8E == 0xE0 || byte_53A8E == 0x52
+        || (uint8_t)word_53A8D == 0x20)
+        byte_53A8E = 0x1C;
+    if (byte_53A8E == 0x53)
+        byte_53A8E = 0x01;
+    return byte_53A8E;
+}
+
+/* 0x2AF28 */
+int party_change_run(void)
+{
+    uint8_t  selected[32];
+    uint8_t *buf;
+    FILE    *fp;
+    int      count  = 15;
+    int      result = 0;    /* edi: 1 confirmed, -1 escaped        */
+    int      cursor = 0;    /* esi                                 */
+    int      i, key, sel, wret;
+
+    memset(selected, 0, 30);
+    if (dword_53C03 > 26)
+        count = 19;
+
+    dword_53C5B = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    dword_53C5F = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    buf         = (uint8_t *)guest_malloc(0xFA00u);
+    dword_53C63 = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+
+    memmove((void *)(uintptr_t)dword_53C5F,
+            (const void *)(uintptr_t)0xA0000u, 0xFA00u);
+    memmove(buf, (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
+
+    rle2_blit(buf + 2332,
+              (const void *)(uintptr_t)
+                  (*(const uint32_t *)((uintptr_t)dword_53A81 + 86)
+                   + (uintptr_t)dword_53A81), 320);
+    rle2_blit(buf + 30085,
+              (const void *)(uintptr_t)
+                  (*(const uint32_t *)((uintptr_t)dword_53A81 + 90)
+                   + (uintptr_t)dword_53A81), 320);
+    res_blit6(buf + 2245, 320, (void *)(uintptr_t)dword_53A81, 137);
+
+    party_change_draw(buf, count, selected, 0);
+
+    for (i = 11; i >= 0; --i) {
+        if (i == 11 || i == 5)
+            svc_play_sfx((const void *)(uintptr_t)dword_53EEC, 5, 1);
+        fb_slide_step(i, (char *)(uintptr_t)dword_53C5B,
+                      (char *)(uintptr_t)dword_53C63,
+                      (char *)(uintptr_t)dword_53C5F);
+    }
+
+    kbd_flush();
+
+    do {
+        key = party_change_wait_key(buf, count, selected, cursor);
+        if (key == 1)
+            result = -1;
+        if (key == 28) {
+            svc_play_sfx2((const void *)(uintptr_t)dword_53EEC, 7, 1);
+            selected[cursor] ^= 1;
+            key = 77;
+            if (ev5_2B749(selected) == count) {
+                result = 1;
+                party_roster_apply_selection(selected);
+            }
+        }
+        if (key == 75) {
+            svc_play_sfx((const void *)(uintptr_t)dword_53EEC, 0, 1);
+            if (--cursor == -1)
+                cursor = (int)dword_53BFB - 2;
+        }
+        if (key == 77) {
+            svc_play_sfx((const void *)(uintptr_t)dword_53EEC, 0, 1);
+            if (++cursor == (int)dword_53BFB - 1)
+                cursor ^= (int)dword_53BFB - 1;
+        }
+        if (key == 72 && cursor > 9) {
+            svc_play_sfx((const void *)(uintptr_t)dword_53EEC, 0, 1);
+            cursor -= 10;
+        }
+        if (key == 80 && cursor < (int)dword_53BFB - 11) {
+            svc_play_sfx((const void *)(uintptr_t)dword_53EEC, 0, 1);
+            cursor += 10;
+        }
+        party_change_draw(buf, count, selected, cursor);
+        memmove((void *)(uintptr_t)0xA0000u,
+                (const void *)(uintptr_t)dword_53C63, 0xFA00u);
+    } while (result == 0);
+
+    for (i = 0; i <= 11; ++i) {
+        if (i == 0 || i == 7)
+            svc_play_sfx((const void *)(uintptr_t)dword_53EEC, 6, 1);
+        fb_slide_step(i, (char *)(uintptr_t)dword_53C5B,
+                      (char *)(uintptr_t)dword_53C63,
+                      (char *)(uintptr_t)dword_53C5F);
+    }
+    memmove((void *)(uintptr_t)0xA0000u,
+            (const void *)(uintptr_t)dword_53C5F, 0xFA00u);
+
+    guest_free((void *)(uintptr_t)dword_53C5B);
+    guest_free((void *)(uintptr_t)dword_53C5F);
+    guest_free(buf);
+    guest_free((void *)(uintptr_t)dword_53C63);
+
+    if (result == 1) {
+        guest_free((void *)(uintptr_t)dword_53A61);   /* free `buf` DATO bank */
+        fp = fopen(aFdiconB24_5, aRb_9);              /* "FDICON.B24","rb"     */
+        dword_53BDF = 0;
+        for (i = 0; i < (int)dword_53BFB; ++i)
+            unit_entry_data(((const uint8_t *)(uintptr_t)dword_53BF7)[80 * i + 7],
+                            fp);
+        fclose(fp);
+
+        if (dword_53C03 == 16 && unit_exists(18) != 0) {
+            sel = party_member_present(count, 18);
+        } else if (dword_53C03 == 17 || dword_53C03 == 19 || dword_53C03 > 25) {
+            sel = party_member_present(count, 9);
+        } else {
+            switch (dword_53C03) {
+            case 18:
+                sel = party_member_present(count, 16);
+                break;
+            case 20:
+                sel = party_member_present(count, 21);
+                break;
+            case 21:
+            case 22:
+                sel = party_member_present(count, 24);
+                break;
+            case 25:
+                result = party_member_present(count, 9);
+                if (result == 0)
+                    goto done;
+                sel = party_member_present(count, 29);
+                break;
+            default:
+                goto done;
+            }
+        }
+        result = sel;
+    }
+done:
+    if (result != 1)
+        return 0;
+
+    if (dword_53C03 == 17 || dword_53C03 == 19 || dword_53C03 > 25) {
+        party_member_move_front(9);
+    } else {
+        switch (dword_53C03) {
+        case 20:
+            party_member_move_front(21);
+            break;
+        case 21:
+        case 22:
+            party_member_move_front(24);
+            break;
+        case 25:
+            party_member_move_front(9);
+            party_member_move_front(29);
+            break;
+        default:
+            break;
+        }
+    }
+
+    msg_open_portrait(75);
+    vm_run(dword_53A7D, 658, 0xA951F, 320, 205, 76, 74, 19, 1);
+    dlg_blit_dato(dword_53A85, dword_53C67, 0);
+    dword_53A51 = (uint8_t *)(uintptr_t)1;
+    kbd_flush();
+    wret = map_window_run();
+    dword_53A51 = 0;
+    map_draw_text_window();
+    msg_close_portrait();
+
+    if (wret == -1 || dword_53C57 != 0)
+        return 0;
+    return 1;
 }

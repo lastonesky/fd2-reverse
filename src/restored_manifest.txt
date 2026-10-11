@@ -740,6 +740,14 @@
 # a shared free-epilogue inside 0x2968D's body).
 0x2B777 sub_2B777 game/party_roster.h
 
+# party-change screen itself (0x2AF28) and its two helpers.  True closure is
+# these three: the machine's callee sub_26152 is a false dependency (the tail
+# `jmp 0x2B434` is 0x2B4FB's shared return inside 0x2AF28), and the stack probe
+# sub_3702F is the Watcom chkstk.  No differential harness.
+0x2AF28 sub_2AF28 game/party_roster.h
+0x2B4FB sub_2B4FB game/party_roster.h
+0x2B67F sub_2B67F game/party_roster.h
+
 # 0x2872B: the place menu's first-option buy screen (driven from the place's
 # stock list).  Its callees are the shop_screen family (shop_items_paint/run),
 # the 0x602AD item table and the already-restored helpers; it ends with the
