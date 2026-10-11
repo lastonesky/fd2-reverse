@@ -150,7 +150,7 @@ int map_attack_resolve(int attacker, int defender)
 
         if (v13 >= 0x44) {
             const uint8_t *v14 =
-                (const uint8_t *)tbl_ptr((void *)&fd2_data2[0xAF9], 10,
+                (const uint8_t *)tbl_ptr((void *)&fd2_data2[0x1AF9], 10,
                                          v13 - 68, 0);
             int v15;
 
