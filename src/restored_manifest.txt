@@ -654,3 +654,9 @@
 0x21A9E sub_21A9E game/map_action.h
 0x21B18 sub_21B18 game/map_action.h
 0x21AD9 sub_21AD9 game/map_action.h
+
+# funcs_1541F entries 14/15/16 (the dispatch table also points slot 24 at
+# 0x22153).  Each tail jumps into 0x21b0b inside 0x21B18 (not a call).
+0x21B99 sub_21B99 game/map_action.h
+0x2211C sub_2211C game/map_action.h
+0x22153 sub_22153 game/map_action.h

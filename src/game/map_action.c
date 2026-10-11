@@ -811,3 +811,34 @@ int map_action_entry13(int a1, int count, const uint8_t *list)
     portrait_reveal_zoom(1, 2);
     return map_action_heal_action_list(a1, 13, count, list);
 }
+
+/* 0x21B99 - funcs_1541F entry 14: play SFX bank-13 sample 11 and zoom-reveal
+ * the portrait (radius 2, step 4), then run the heal-by-action body with index
+ * 14.  The tail jumps into 0x21b0b inside 0x21B18 (not a call). */
+int map_action_entry14(int a1, int count, const uint8_t *list)
+{
+    svc_play_sfx((const void *)(uintptr_t)dword_53B13, 11, 1);
+    portrait_reveal_zoom(2, 4);
+    return map_action_heal_action_list(a1, 14, count, list);
+}
+
+/* 0x2211C - funcs_1541F entry 15: play SFX bank-13 sample 11 and zoom-reveal
+ * the portrait (radius 8, step 4), then run the heal-by-action body with index
+ * 15.  The tail jumps into 0x21b0b inside 0x21B18 (not a call). */
+int map_action_entry15(int a1, int count, const uint8_t *list)
+{
+    svc_play_sfx((const void *)(uintptr_t)dword_53B13, 11, 1);
+    portrait_reveal_zoom(8, 4);
+    return map_action_heal_action_list(a1, 15, count, list);
+}
+
+/* 0x22153 - funcs_1541F entries 16 and 24 (the dispatch table points both slots
+ * at this address): play SFX bank-13 sample 11 and zoom-reveal the portrait
+ * (radius 6, step 6), then run the heal-by-action body with index 16.  The tail
+ * jumps into 0x21b0b inside 0x21B18 (not a call). */
+int map_action_entry16(int a1, int count, const uint8_t *list)
+{
+    svc_play_sfx((const void *)(uintptr_t)dword_53B13, 11, 1);
+    portrait_reveal_zoom(6, 6);
+    return map_action_heal_action_list(a1, 16, count, list);
+}

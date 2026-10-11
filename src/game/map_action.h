@@ -53,6 +53,9 @@
  *                        table amount and queue the recovered number
  *   0x21AD9               entry 13: SFX + portrait zoom-reveal, then the
  *                        heal-by-action body with index 13
+ *   0x21B99 / 0x2211C / 0x22153  entries 14/15/16 (the table also points slot
+ *                        24 at 0x22153): SFX + portrait zoom-reveal, then the
+ *                        heal-by-action body with index 14/15/16
  *
  * ABI = cdecl, arguments decoded from the pushes (the offline disassembly is
  * the authority).  Record fields index the 80-byte table dword_53A45; the
@@ -205,6 +208,14 @@ int map_action_heal_action_list(int a1, int table_idx, int count,
  * the portrait (radius 1, step 2), then run the heal-by-action body with index
  * 13. */
 int map_action_entry13(int a1, int count, const uint8_t *list);
+
+/* 0x21B99 / 0x2211C / 0x22153 - funcs_1541F entries 14/15/16 (the dispatch
+ * table points slot 24 at 0x22153 as well): play SFX bank-13 sample 11 and
+ * zoom-reveal the portrait (radius/step 2/4, 8/4, 6/6), then run the
+ * heal-by-action body with index 14/15/16. */
+int map_action_entry14(int a1, int count, const uint8_t *list);
+int map_action_entry15(int a1, int count, const uint8_t *list);
+int map_action_entry16(int a1, int count, const uint8_t *list);
 
 /* 0x20C6F - the map action router.  Reads the item entry selected by
  * rec_field_byte(actor, slot) through the 0x4E8BC accessor; its byte +13 is

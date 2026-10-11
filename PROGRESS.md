@@ -1431,10 +1431,34 @@ map_units_animate(); ev_script_run(actor,steps,buf)`。
 - **chkstk**：六者皆 `push size; call 0x3702F`（不分配帧），丢弃；`malloc/free` → `guest_malloc/guest_free`。
 - 无对拍器，标“已还原未验证”。下一 `funcs_1541F` 候选：条目 14/15/16/24（`0x21B99`/`0x2211C`/`0x22153`）。
 
+### 55) `funcs_1541F` 条目 14/15/16(+24)（本轮，3 函数）→ `src/game/map_action.c/.h`（追加）
+
+承接 §54 的推荐：这三个**薄包装**（各 55B，u3）共用同一尾部——压 `count/list/table_idx` 后
+`jmp 0x21b0b`（`0x21B18` 体内 `push a1; call 0x21B18` 那一条），即各自调用 §54 已还原的
+`map_action_heal_action_list`。三者真依赖全在册（`svc_play_sfx`(0x25A96 已验证)、
+`portrait_reveal_zoom`(0x21EB1 §7)、`map_action_heal_action_list`(0x21B18 §54)）。
+
+| 原址 | 新名 | 条目 | 要点 |
+|---|---|---|---|
+| `0x21B99` | `map_action_entry14` | 14 | `svc_play_sfx(dword_53B13,11,1)` + `portrait_reveal_zoom(2,4)` → `map_action_heal_action_list(a1,14,count,list)` |
+| `0x2211C` | `map_action_entry15` | 15 | 同上，`portrait_reveal_zoom(8,4)`，索引 15 |
+| `0x22153` | `map_action_entry16` | 16 **与 24** | 同上，`portrait_reveal_zoom(6,6)`，索引 16 |
+
+**陷阱 / 伪代码伪影**：
+- **条目 24 复用 0x22153**：`analysis/dispatch_tables.csv` 的 `funcs_1541F` 槽 16 与槽 24 的 target
+  同为 `0x22153`（同一 C 函数同时服务两槽），故未新增单独符号；注释已标注。
+- **共享体内跳**：三者尾 `jmp 0x21b0b` 落在 `0x21B18` 体内的 `push [esp+0x10]; call 0x21B18` 那一条
+  （`0x21AD9` 亦跳此）；C 侧各写一条语义调用，不模拟跳转。
+- **ABI / 实参序**：`svc_play_sfx` 压 `(dword_53B13, 11, 1)`；`portrait_reveal_zoom` 压 `(radius, step)`
+  （末压者为第一参：`push 4;push 2` ⇒ `(2,4)`）；尾部依次压 `list`(a3)、`count`(a2)、`table_idx` 常量，
+  再由 `0x21b0b` 补压 `a1`——逐指令核对 `21b99..21bcf`、`2211c..2214e`、`22153..22185`。
+- **chkstk**：三者皆 `push 0x14; call 0x3702F`（不分配帧），丢弃。返回值仅供表分派、无调用者读取，C 侧返回 0。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **112 → 106**（本轮 §54 −6），已还原未验证 **211 → 217**（本轮 +6）。
+- `function-map.csv`：待还原 **106 → 103**（本轮 §55 −3），已还原未验证 **217 → 220**（本轮 +3）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1511,6 +1535,10 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 `0x2111A`(u2)/`0x211A4`(u2) 及 u1 小簇 `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2F7B6`(sub_2EBE1) 等。
 本轮 §52 拉出该表余下的两个动态 action 体 `0x2111A`(u2)/`0x211A4`(u2)（`map_action.c` 追加），
 故 `funcs_1541F` 相关低号条目/自由体全部闭合；下一游戏头名回落至 u1 小簇
+`0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2F7B6`(sub_2EBE1) 等。
+本轮 §55 拉出闭包就绪的同表头名 `0x21B99`/`0x2211C`/`0x22153`(u3，条目 14/15/16，槽 24 复用
+`0x22153`)，故 `funcs_1541F` 条目 14/15/16/24 闭合；余 17/18/19/25 已在 §15/§22 还原、23 已在 §36，
+**全表 28 条（0..27）至此全部源码化**；下一游戏头名仍为 u1 小簇
 `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2F7B6`(sub_2EBE1) 等。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
