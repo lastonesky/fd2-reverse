@@ -576,13 +576,16 @@
 0x1E98C sub_1E98C game/map_attack.h
 0x1ECC7 sub_1ECC7 game/map_attack.h
 
-# the attack-result / status-overlay / level-up family driven by the
-# still-pending 0x1548E (0x1E856 = HP-bar drain, 0x1EB05 = overlay flash,
-# 0x1E292 = level-up screen + its 0x1D79C gain-bit marker)
+# the attack-result / status-overlay / level-up family driven by 0x1548E
+# (0x1E856 = HP-bar drain, 0x1EB05 = overlay flash, 0x1E292 = level-up screen
+# + its 0x1D79C gain-bit marker)
 0x1E856 sub_1E856 game/map_attack.h
 0x1EB05 sub_1EB05 game/map_status.h
 0x1E292 sub_1E292 game/map_levelup.h
 0x1D79C sub_1D79C game/map_levelup.h
+
+# the map attack sequence driver (the caller of the family above)
+0x1548E sub_1548E game/map_attack.h
 
 # the funcs_1541F entries 20/21 (0x22A85/0x22BC6) and their shared body
 # 0x22AA8; the wrappers push their constants and jump into 0x22AA8's tail

@@ -2021,14 +2021,36 @@ in-budget 游戏内容项（仅 CRT/库包装与伪函数），故本轮取该�
   `aFiganiDat(0x52495)`、`aBgDat(0x5248E)`。
 - 无对拍器，标“已还原未验证”。
 
+### 79) 地图攻击序列驱动器 `0x1548E` → `map_attack_run`（本轮，1 函数）→ `src/game/map_attack.c/.h`（追加）
+
+§78 记“下批按 §2 取次小传递待还原闭包的游戏内容簇”。闭包就绪列表按 usage 降序，游戏内容头名为
+`0x1548E`(u2，496B)；生成器验得**真闭包＝自身**（closure size=1，全部 callee 已在册）。它是 manifest
+注释所称“attack-result / status-overlay / level-up 家族”的驱动器，与既有 `map_attack` 家族同源，故追加该模块
+（不新建头，伞头已含 `map_attack.h`）。
+
+- 语义：`actor` 滑入肖像并朝标记格（`dword_53C43/53C47`，`mode`）移动（`map_move_toward`），目标
+  `dword_53C4B` 转身；`byte_53AF9!=0` 时出状态帧并用 `map_attack_bar_drain` 抽目标血条，目标存活
+  （剩余 HP≠0）且与 actor 斜向相邻时角色互换做反击（抽 actor 自己的血条），否则退化为 `figure_attack_view`；
+  尾段清肖像 → 取队伍 +49 脚本（`map_collect_scripts`）→ 单位动画 → `ev_script_run` → `map_levelup_run`；返回 1。
+- **陷阱 / 伪代码伪影**：`sub_3702F`＝Watcom chkstk（伪 callee）；Hex-Rays 把 `0x1E856` 的返回值丢成
+  未初始化 `v3`（渲染为 `v3 != 0`），离线反汇编 `155b1: test eax,eax; setne` 说明用的是**返回值**；
+  `0x1548E` 里两处 `0x1F04A` 调用 Hex-Rays 把前两次写反，按离线反汇编 `155d5/155e4` 恢复为
+  `(target,actor)` 再 `(actor,target)`；本地脚本缓冲是机器 `[esp]` 暂存区（IDA 的 24B `v7`，即 8×3 字节
+  脚本条目），原文未初始化、由 `map_collect_scripts` 填充。
+- **对既有模块的唯一修正**：`0x1E856` 机器尾 `mov eax,[esp+8]; jmp 0x1317D`（`0x1317D` 为普通尾声）
+  返回 `map_attack_resolve` 的最后结果（目标剩余 HP），但既有 `map_attack_bar_drain`（`map_attack.c`，
+  状态“已还原未验证”）声明为 `void` 丢掉返回值。为忠实还原 `0x1548E` 的存活判定，将
+  `map_attack_bar_drain` 改为返回 `int`（`map_attack.h/.c`）；其唯一调用点即本函数，无其他 C 调用者。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **51 → 48**（本轮 §78 −3），已还原未验证 **272 → 275**（本轮 +3）。
-- **闭包就绪游戏内容项**：本轮 §78 取走地图攻击视图簇后，闭包就绪待还原仍仅剩 CRT/库包装
+- `function-map.csv`：待还原 **48 → 47**（本轮 §79 −1），已还原未验证 **275 → 276**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §79 取走 `0x1548E` 后，闭包就绪待还原仍仅剩 CRT/库包装
   （`0x3645D`/`0x365DA`/`0x36C56`/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）；
-  下批按 §2 取次小传递待还原闭包的游戏内容簇——存档场景加载链头 `0x1548E`(496B，闭包 4 件 2783B，
-  与 `0x2E2B0` 合流) 或 `0x2DFC8`(744B)/`0x2D80D`(1780B)/`0x2CF30`(2269B) 等已闭包就绪的大驱动器。
+  下批按 §2 取次小传递待还原闭包的游戏内容簇——已闭包就绪的大驱动器 `0x2DFC8`(744B，u1)/
+  `0x2D80D`(1780B，u1)/`0x2CF30`(2269B，u1)（§78 记与 `0x2E2B0` 合流的 `0x1548E` 本轮已取）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 

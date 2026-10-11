@@ -32,8 +32,23 @@ int map_attack_resolve(int attacker, int defender);
  * to the remaining HP returned by map_attack_resolve.  `pos` is the two-int
  * screen block {x, y} of the bar's top-left cell (from map_status_*); the bar
  * is drawn one ui_meter_fixed segment per tick.  Runs once, or twice for a
- * "double" effect (item byte 9 == 3) or a 3% roll. */
-void map_attack_bar_drain(int attacker, int defender, int *pos);
+ * "double" effect (item byte 9 == 3) or a 3% roll.  Returns the defender's
+ * remaining HP (the last map_attack_resolve result); the machine leaves it in
+ * EAX (0x1E856 tail `mov eax,[esp+8]; jmp 0x1317D`). */
+int map_attack_bar_drain(int attacker, int defender, int *pos);
+
+/* 0x1548E - run one map attack against the current target dword_53C4B.
+ *
+ * `actor` glides in toward the marked cell (dword_53C43/dword_53C47, mode
+ * `mode`) and faces the target; then, if the battle overlay is enabled
+ * (byte_53AF9), it publishes the status frame, drains the target's HP bar
+ * (map_attack_bar_drain) and - when the target survives and is
+ * facing-adjacent - runs the counter-attack on the actor's own bar.  With the
+ * overlay off it falls back to figure_attack_view.  Either way it finishes on
+ * the shared tail: clear the portrait, publish the view, animate the units, run
+ * the party's +49 scripts (ev_script_run), then the level-up screen.  Returns
+ * 1. */
+int map_attack_run(int actor, int mode);
 
 /* 0x2F7B6 - the full attack evaluation shared by the figure/combat drivers
  * (caller 0x2EBE1): the same attack/defence roll as map_attack_resolve but it
