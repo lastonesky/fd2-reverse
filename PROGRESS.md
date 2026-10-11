@@ -2510,6 +2510,29 @@ playbook 批选（闭包就绪、usage 降序、剔除 CRT/库包装与伪函数
 - **chkstk**：两者皆 `push size; call 0x3702F`，丢弃。真闭包＝自身（callee 全部已还原）。
 - **归属**：新建 `party_change_seq`（`0x1A30B` 序列的助手；头加进伞含，排在 `party_panel.h` 前）；无对拍器，标“已还原未验证”。
 
+### 99) 队伍变更序列编排者 `0x1A30B` → `party_change_map_seq`（本轮，1 函数，§1 闭包就绪游戏内容头名）→ `src/game/party_change_seq.c/.h`（追加）
+
+本轮取走闭包就绪游戏内容头名 `0x1A30B`(u3，1202B)——§98 两个助手（`party_change_wave_dispatch`/
+`party_change_class_apply`）unblock 的编排者；真闭包＝自身（callee 全部已还原，含 `0x13565`/`0x16F55` 是
+caller 而非 callee）。函数体：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1A30B` | `party_change_map_seq()` | 地图屏“队伍已变更”序列：① `svc_wait_ticks(1)`；② 趟1 对 +6==2、+5&0x81==0、+37/+38==0 且 HP(+0x40)≠max(+0x42) 的记录画 253 号“变更”精灵并置 `flag`，再 `gfx_copy_rows(0xA0504,…)`，有变更则 `svc_play_sfx(dword_53EEC,4,1)`，`svc_wait_ticks(0)`；③ 趟2 同条件者 HP += max/5（截断到 max），画 0 号精灵、`rec_flag_or80(rec)`；④ `gfx_copy_rows`→`svc_wait_ticks(0)`→`map_view_update(0)`→相位1 波/类分派；⑤ `dword_53ECC!=0` 即 `return`（共享尾声）；否则 `reveal_bank_load`→`map_turn_side1`→`reveal_bank_free`；⑥ 队伍音轨变化时 `bgm_play(-1,0)`，`reveal_mosaic_out(82)`→`j___delay(20)`→`reveal_mosaic_in(82)`→`ev5_13536`→`map_view_update(0)`→相位0 分派；⑦ `bgm_play(byte_51E81[idx],0)`→`reveal_bank_load`→`map_turn_side0`→`reveal_bank_free`；⑧ `dword_53BEF++`，再 `reveal_mosaic_out(80)`→`j___delay(150)`→`reveal_mosaic_in(80)`→`dword_51A83=0`→`ev5_13536`→`map_view_update(0)`→`bgm_play(byte_51E63[idx],0)`；⑨ 9 帧 `res_draw_subimage(dword_53A81,0xA0000,320,120,84,k+83)`，k>6 时 `dlg_draw_number(0xA726B,320,dword_53BEF,42,3)`，`j___delay(70)`（k==8 再 500），`dlg_snap_restore`；⑩ `m=2..4,9` 帧 `res_draw_subimage(dword_53A81,dword_53A49+0x8088,456,116,m*m+84,91)`＋`dlg_draw_number(dword_53A49+0x812F+456*m*m,…)`＋`gfx_copy_rows`＋`svc_wait_ticks(1)`＋`dlg_snap_restore`；⑪ 收尾 `map_view_update(0)`→`j___delay(200)`→`dword_53AE9=0`→相位2 分派→`dword_51A83=1`→`dlg_portrait_glide(0)`→`kbd_flush()`。 |
+
+**陷阱 / 伪代码伪影**：
+- **未初始化局部＝伪影**：反编译把第二次 `svc_wait_ticks` 的实参写成 `a1:0`，实为 `push DWORD PTR [esp]`，
+  即函数开头 `mov DWORD PTR [esp],0` 且**此后从未改写**的局部 dword——恒为 0。C 侧直接写 `0`。
+  （同理 `flag` 为 `[esp+4]` 的单字节局部，初值 0，趟1 命中置 1，0x1A3CE 读回。）
+- **循环变量改写**：m 循环机器在 `m==5` 时 `mov esi,9; jmp 循环体`（**跳回体**而非自增），故实际迭代
+  `m=2,3,4,9`；C 的 `for(m=2;m<6;m++){ if(m==5) m=9; … }` 逐行为等价。
+- **共享尾声**：尾 `jmp 0x10B46` 与 5 处 `dword_53ECC!=0` 的 `jne 0x10B46` 都落在 `0x10B46` 的公共尾声
+  （`add esp,8; pop ebp/edi/esi/ebx; ret`，恰配本函数 `push ebx/esi/edi/ebp; sub esp,8` 的帧）＝普通
+  `return`，非依赖。C 侧用早退 `return`。
+- **命名冲突**：`party_change_run` 已被 `party_roster.c` 的 `0x2AF28`（队伍变更**选择屏**）占用，二者不同，
+  故本函数命名 `party_change_map_seq`（地图屏序列），避免伞含头原型冲突。
+- **chkstk**：`push 0x34; call 0x3702F` 丢弃。真闭包＝自身；无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
@@ -2518,6 +2541,11 @@ playbook 批选（闭包就绪、usage 降序、剔除 CRT/库包装与伪函数
 - `function-map.csv`：待还原 **25 → 24**（本轮 §96 −1），已还原未验证 **298 → 299**（本轮 +1）。
 - `function-map.csv`：待还原 **24 → 23**（本轮 §97 −1），已还原未验证 **299 → 300**（本轮 +1）。
 - `function-map.csv`：待还原 **23 → 21**（本轮 §98 −2），已还原未验证 **300 → 302**（本轮 +2）。
+- `function-map.csv`：待还原 **21 → 20**（本轮 §99 −1），已还原未验证 **302 → 303**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §99 取走闭包就绪游戏内容头名 `0x1A30B`（队伍变更序列编排者）后，
+  闭包就绪待还原**已无游戏内容项**——只剩 CRT/库包装（`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，
+  既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）；其余待还原游戏内容项（`0x13565`(u1)/`0x16F55`(u1) 等）
+  仍需先解其自身闭包。
 - **闭包就绪游戏内容项**：本轮 §98 取走 `0x1A813`/`0x1A866`（`0x1A30B` 的最后两个 callee）后，
   游戏内容闭包就绪头名回升为 `0x1A30B`(u3，1202B，队伍变更编排者)；其余仍只剩 CRT/库包装
   （`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB` 等，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）。

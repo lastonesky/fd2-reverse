@@ -1,11 +1,15 @@
-/* party_change_seq.h - the per-record helpers of the party-change map sequence
- * (original 0x1A813, 0x1A866).
+/* party_change_seq.h - the party-change map sequence (original 0x1A30B,
+ * 0x1A813, 0x1A866).
  *
- * The still-pending orchestrator 0x1A30B runs a "party changed" sequence on the
- * map screen: it snaps the frame, runs the two turn sweeps (map_turn_side1 /
- * map_turn_side0), brackets them with the mosaic portrait reveal
- * (reveal_mosaic_out / reveal_mosaic_in) and, between those passes, calls the
- * two helpers here with a phase/class argument (0/1/2):
+ * 0x1A30B  party_change_map_seq()
+ *            run the "party changed" sequence on the map screen: it first snaps
+ * the map frame and animates each changed record's HP toward its maximum (two
+ * passes over the 80-byte records at dword_53A45), then runs the two turn
+ * sweeps (map_turn_side1 / map_turn_side0) bracketed by the mosaic portrait
+ * reveal (reveal_mosaic_out / reveal_mosaic_in) and the shared SFX-bank
+ * load/free helpers, and between those passes calls the two helpers here with
+ * a phase/class argument (0/1/2).  Any sweep can abort the sequence through
+ * the pending-transition flag dword_53ECC, which returns straight away:
  *
  *   0x1A813  party_change_wave_dispatch(phase)
  *            walk the 16 three-byte wave records at dword_53A55 (the table the
@@ -28,17 +32,27 @@
  *                       plays the same portrait/VM frame followed by
  *                       unit_metrics(record).
  *
- * ABI = cdecl, one int argument.  Decoded from the offline disassembly
+ * ABI = cdecl, no arguments for 0x1A30B.  Decoded from the offline disassembly
  * (analysis/cseg01_disasm.txt), the authority for the argument order, the
  * constants and the control flow.  The Watcom stack probe (`push size; call
- * 0x3702F`) is dropped; the tail `jmp 0x190A9` / `jmp 0x190A7` are shared
- * epilogues (plain return) living at the tail of another function, not calls.
- * All real callees are already-restored assets (dlg_portrait_glide, vm_run,
- * msg_open_portrait, kbd_flush, ev5_1E5C0, ev4_196CB, unit_metrics,
- * map_units_animate).  No differential harness yet (unverified).
+ * 0x3702F`) is dropped; the tail `jmp 0x10B46` and the aborts' `jne 0x10B46`
+ * are the shared epilogue (plain return) living at the tail of another
+ * function, not calls.  All real callees are already-restored assets
+ * (dlg_portrait_glide, vm_run, msg_open_portrait, kbd_flush, ev5_1E5C0,
+ * ev4_196CB, unit_metrics, map_units_animate, svc_wait_ticks, svc_play_sfx,
+ * gfx_copy_rows, view_draw_unit_sprite, rec_flag_or80, map_view_update,
+ * bgm_play, reveal_bank_load/free, reveal_mosaic_out/in, map_turn_side1/0,
+ * res_draw_subimage, dlg_snap_restore, dlg_draw_number, ev5_13536,
+ * party_change_wave_dispatch, party_change_class_apply, j___delay).  No
+ * differential harness yet (unverified).
  */
 #ifndef GAME_PARTY_CHANGE_SEQ_H
 #define GAME_PARTY_CHANGE_SEQ_H
+
+/* 0x1A30B - run the whole party-change sequence (the HP catch-up animation,
+ * both turn sweeps and their mosaic reveals).  Returns early whenever a sweep
+ * sets the pending-transition flag dword_53ECC. */
+void party_change_map_seq(void);
 
 /* 0x1A813 - dispatch the scene handlers of the wave/phase records that match
  * the current wave counter dword_53BEF. */

@@ -1,6 +1,6 @@
 /* party_change_seq.c - see party_change_seq.h.
  *
- * Direct translations of the machine code at 0x1A813 and 0x1A866.  The
+ * Direct translations of the machine code at 0x1A30B, 0x1A813 and 0x1A866.  The
  * disassembly is the authority: Hex-Rays spells the frame index of the first
  * pass's compared class as an uninitialised local `v10`, but the instruction
  * at 0x1A8A3/0x1A988 compares the record byte +6 against [esp+0x14], i.e. the
@@ -88,5 +88,134 @@ void party_change_class_apply(int cls)
                 }
             }
         }
+    }
+}
+
+/* 0x1A30B */
+void party_change_map_seq(void)
+{
+    int flag = 0;
+    int i;
+    int k;
+    int m;
+
+    svc_wait_ticks(1);
+
+    /* pass 1: draw the "changed" sprite of every record whose HP is not yet at
+     * its maximum, and remember whether any was drawn. */
+    for (i = 0; i < dword_53BEB; i++) {
+        uint8_t *rec = rec_at(i);
+
+        if (rec[6] == 2 && (rec[5] & 0x81) == 0 && rec[37] == 0 &&
+            rec[38] == 0 && *(uint16_t *)(rec + 0x40) !=
+            *(uint16_t *)(rec + 0x42)) {
+            view_draw_unit_sprite((int)(intptr_t)dword_53A49 + 32904, 456, i,
+                                  2, 253);
+            flag = 1;
+        }
+    }
+    gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + 32904, 456, 0x138,
+                  192);
+    if (flag != 0)
+        svc_play_sfx(dword_53EEC, 4, 1);
+    svc_wait_ticks(0);
+
+    /* pass 2: raise each such record's HP by max/5, clamped at max. */
+    for (i = 0; i < dword_53BEB; i++) {
+        uint8_t *rec = rec_at(i);
+        int hp = *(uint16_t *)(rec + 0x40);
+        int max = *(uint16_t *)(rec + 0x42);
+
+        if (rec[6] == 2 && (rec[5] & 0x81) == 0 && rec[37] == 0 &&
+            rec[38] == 0 && hp != max) {
+            int raised = max / 5 + hp;
+
+            if (raised > max)
+                raised = max;
+            *(uint16_t *)(rec + 0x40) = (uint16_t)raised;
+            view_draw_unit_sprite((int)(intptr_t)dword_53A49 + 32904, 456, i,
+                                  0, 0);
+            rec_flag_or80(i);
+        }
+    }
+    gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + 32904, 456, 0x138,
+                  192);
+    svc_wait_ticks(0);
+    map_view_update(0);
+    party_change_wave_dispatch(1);
+    party_change_class_apply(1);
+
+    if (dword_53ECC != 0)
+        return;                             /* 0x10B46 shared epilogue */
+    reveal_bank_load();
+    map_turn_side1();
+    reveal_bank_free();
+    if (dword_53ECC != 0)
+        return;
+    if (byte_51E63[dword_53C03] != byte_51E81[dword_53C03])
+        bgm_play(-1, 0);
+    reveal_mosaic_out(82);
+    j___delay(20);
+    reveal_mosaic_in(82);
+    ev5_13536();
+    map_view_update(0);
+    party_change_wave_dispatch(0);
+    party_change_class_apply(0);
+    if (dword_53ECC != 0)
+        return;
+    bgm_play((uint8_t)byte_51E81[dword_53C03], 0);
+    reveal_bank_load();
+    map_turn_side0();
+    reveal_bank_free();
+    if (dword_53ECC != 0)
+        return;
+
+    {
+        uint8_t before = byte_51E63[dword_53C03];
+        uint8_t after = byte_51E81[dword_53C03];
+
+        dword_53BEF++;
+        if (before != after)
+            bgm_play(-1, 0);
+        reveal_mosaic_out(80);
+        j___delay(150);
+        reveal_mosaic_in(80);
+        dword_51A83 = 0;
+        ev5_13536();
+        map_view_update(0);
+        bgm_play((uint8_t)byte_51E63[dword_53C03], 0);
+        for (k = 0; k < 9; k++) {
+            void *saved = res_draw_subimage(dword_53A81, (void *)0xA0000, 320,
+                                            120, 84, k + 83);
+
+            if (k > 6)
+                dlg_draw_number((void *)0xA726B, 320, (int)dword_53BEF, 42, 3);
+            j___delay(70);
+            if (k == 8)
+                j___delay(500);
+            dlg_snap_restore(saved, (void *)0xA0000, 320);
+        }
+        for (m = 2; m < 6; m++) {
+            void *saved;
+
+            if (m == 5)
+                m = 9;
+            saved = res_draw_subimage(dword_53A81, dword_53A49 + 32904, 456,
+                                      116, m * m + 84, 91);
+            dlg_draw_number(dword_53A49 + 0x812F + 456 * m * m, 456,
+                            (int)dword_53BEF, 42, 3);
+            gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + 32904, 456,
+                          0x138, 192);
+            svc_wait_ticks(1);
+            dlg_snap_restore(saved, dword_53A49 + 32904, 456);
+        }
+        map_view_update(0);
+        j___delay(200);
+        dword_53AE9 = 0;
+        party_change_wave_dispatch(2);
+        party_change_class_apply(2);
+        dword_51A83 = 1;
+        dlg_portrait_glide(0);
+        kbd_flush();
     }
 }

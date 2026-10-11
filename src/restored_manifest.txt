@@ -1010,3 +1010,14 @@
 # No differential harness.
 0x1A813 sub_1A813 game/party_change_seq.h
 0x1A866 sub_1A866 game/party_change_seq.h
+
+# 0x1A30B - the party-change map-sequence orchestrator, the closure head that
+# the 0x1A813 / 0x1A866 helpers above unblocked.  It first animates every
+# class-2 record's HP toward max (two map-frame passes) and then runs both turn
+# sweeps (map_turn_side1 / map_turn_side0) bracketed by the mosaic portrait
+# reveal and the shared SFX-bank load/free, dispatching the wave/class helpers
+# at phases 0/1/2.  dword_53ECC aborts the sequence (returns).  The tail
+# `jmp 0x10B46` and the abort `jne 0x10B46` are the shared epilogue (plain
+# return), not calls; the uninitialised `[esp]` local pinned as 0 is the always-
+# zero argument svc_wait_ticks reads.  No differential harness.
+0x1A30B sub_1A30B game/party_change_seq.h
