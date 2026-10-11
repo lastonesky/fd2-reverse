@@ -2932,7 +2932,22 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 - 验收：standalone strict 0 error、hybrid 0、`--full` 两 profile `-Werror` rc=0。
 - 剩余绝对地址仅 VGA/低内存（C3）。
 
-### 5.3 待办
+### 5.3 C2 完成：分派表改为真实函数指针数组（本轮）
 
-- **C2**：17 张 `funcs_*` 表改真实函数指针数组；`fd2_relocate` 的 4 字节写删除。
+- 新增 `src/fd2_dispatch.c`（生成器 `tools/gen_dispatch.py`）：7 张游戏分派表
+  `funcs_1197B[30]`/`funcs_1199C[90]`/`funcs_1541F[28]`/`funcs_25E23[30]`/
+  `funcs_25E3A[30]`/`funcs_30469[10]`/`funcs_37012[10]` 由段镜像 4 字节单元改为
+  真实 `void (*)(void)[N]`，初值取自 `analysis/dispatch_tables.csv` 并经
+  `fd2_aliases.h` 解析为已还原 C 符号（全部槽位均命中）。
+- `fd2_native.h` 对 7 张表 `#undef` 宏并 `extern` 声明真实数组；
+  `FD2_GUEST_FIXED` 仍用 loader 重定位的镜像单元。
+- `fd2_relocate.c` 改为 no-op（不再往数据镜像写 4 字节函数指针）；
+  `gen_headers.py` 同步，`analysis/reloc_suspects.csv` 审计仍生成。
+- 修好 `scene_enter.h` 缺失的 `scene_enter_29` 原型（表尾槽 29）。
+- 其余 10 张 `funcs_*` 表在 cseg01（AIL/CRT 库区），游戏 C 代码未引用，
+  按既定策略保留（待引擎层替换 AIL/CRT）。
+- 验收：standalone strict 0 error、hybrid 0、`--full` 两 profile `-Werror` rc=0。
+
+### 5.4 待办
+
 - **C3**：~100 处 `0xA0000/0xA0504` VGA 与 `fd2_lowmem`/`MEMORY` 抽 framebuffer/平台缝。

@@ -139,5 +139,24 @@ extern  uint8_t *dword_5413F[3];
 #endif
 #define dword_54147 dword_5413F[2]
 
+/* --- dispatch tables: real host function-pointer arrays (C2) ------------
+ * fd2_globals.h exposed these as 4-byte cells inside the data mirror; on a
+ * 64-bit host that overlaps/truncates.  src/fd2_dispatch.c defines the arrays
+ * from analysis/dispatch_tables.csv. */
+#undef  funcs_1197B
+extern  void (*funcs_1197B[30])(void);
+#undef  funcs_1199C
+extern  void (*funcs_1199C[90])(void);
+#undef  funcs_1541F
+extern  void (*funcs_1541F[28])(void);
+#undef  funcs_25E23
+extern  void (*funcs_25E23[30])(void);
+#undef  funcs_25E3A
+extern  void (*funcs_25E3A[30])(void);
+#undef  funcs_30469
+extern  void (*funcs_30469[10])(void);
+#undef  funcs_37012
+extern  void (*funcs_37012[10])(void);
+
 #endif /* !FD2_GUEST_FIXED */
 #endif /* FD2_NATIVE_H */

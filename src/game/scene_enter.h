@@ -19,6 +19,7 @@ void scene_enter_22(void);   /* 0x336A0 - funcs_25E3A[22] */
 void scene_enter_26(void);   /* 0x33AF1 - funcs_25E3A[26] */
 void scene_enter_27(void);   /* 0x33C9D - funcs_25E3A[27] */
 void scene_enter_28(void);   /* 0x33DBA - funcs_25E3A[28] */
+void scene_enter_29(void);   /* 0x33E3C - funcs_25E3A[29] */
 
 #define sub_3231B scene_enter_00
 #define sub_32D18 scene_enter_01

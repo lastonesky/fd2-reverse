@@ -21,19 +21,19 @@ TOLERANT="-Wno-int-conversion -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast 
 hr() { printf '%s\n' "------------------------------------------------------------"; }
 
 echo "########## standalone (native): game modules STRICT (no int-conv) ##########"
-$CC $FLAGS $WARN -Wno-sign-compare src/game/*.c src/fd2_native.c 2>&1 | grep -E "error:" | head -40
-echo "errors: $($CC $FLAGS $WARN -Wno-sign-compare src/game/*.c src/fd2_native.c 2>&1 | grep -c 'error:')"
+$CC $FLAGS $WARN -Wno-sign-compare src/game/*.c src/fd2_native.c src/fd2_dispatch.c 2>&1 | grep -E "error:" | head -40
+echo "errors: $($CC $FLAGS $WARN -Wno-sign-compare src/game/*.c src/fd2_native.c src/fd2_dispatch.c 2>&1 | grep -c 'error:')"
 
 hr
 echo "########## hybrid (FD2_GUEST_FIXED): game modules ##########"
-$CC $FLAGS -DFD2_GUEST_FIXED $WARN $TOLERANT src/game/*.c src/fd2_native.c 2>&1 | grep -E "error:" | head -40
-echo "errors: $($CC $FLAGS -DFD2_GUEST_FIXED $TOLERANT src/game/*.c src/fd2_native.c 2>&1 | grep -c 'error:')"
+$CC $FLAGS -DFD2_GUEST_FIXED $WARN $TOLERANT src/game/*.c src/fd2_native.c src/fd2_dispatch.c 2>&1 | grep -E "error:" | head -40
+echo "errors: $($CC $FLAGS -DFD2_GUEST_FIXED $TOLERANT src/game/*.c src/fd2_native.c src/fd2_dispatch.c 2>&1 | grep -c 'error:')"
 
 if [ "${1:-}" = "--full" ]; then
   hr
   echo "########## -Werror: all modules + generated (both profiles) ##########"
   for P in "" "-DFD2_GUEST_FIXED"; do
-    $CC $FLAGS -Werror $TOLERANT $P src/game/*.c src/fd2_native.c src/fd2_image.c src/fd2_relocate.c
+    $CC $FLAGS -Werror $TOLERANT $P src/game/*.c src/fd2_native.c src/fd2_dispatch.c src/fd2_image.c src/fd2_relocate.c
     echo "profile ${P:-standalone} rc=$?"
   done
   echo "########## header self-test ##########"
