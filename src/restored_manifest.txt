@@ -513,6 +513,9 @@
 0x2E9A8 sub_2E9A8 game/figure_view.h
 0x2E95B sub_2E95B game/figure_view.h
 
+# figure effect-demo sibling of figure_party_show (0x2FF01 mode>=32 branch)
+0x2D80D sub_2D80D game/figure_view.h
+
 # map view / zoom / gauge frame-buffer helpers.  The zoom transition driver
 # 0x2000A lives in map_zoom.h (its 0x21548 sibling is map_action_zoom_resolve
 # in map_action.h); the map status overlay family 0x1E611/1E7F6/1E856 pending.

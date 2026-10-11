@@ -2288,15 +2288,40 @@ CRT/库包装 `0x3645D`(read)/`0x365DA`(int386) 后，游戏头名同为 u1 的�
   分帧数 `v35` 均为字节（`inc/dec BYTE`、`movzx`）。
 - 无对拍器，标“已还原未验证”。
 
+### 90) 队伍图形演示姊妹函数 `0x2D80D` → `figure_demo_show`（本轮，1 函数）→ `src/game/figure_view.c/.h`（追加）
+
+按 §89 遗留建议、依 playbook §5 的“超预算单函数”例外拉出闭包就绪头名 `0x2D80D`（1780B，u1）：
+闭包就绪列表已无 in-budget 游戏内容项（仅 CRT/库包装与伪函数条目），本函数的**真闭包＝自身**
+（唯一调用者 `0x2FF01` 效果分发器仍待还原；所有 callee 已在册），已逐指令核对离线反汇编 `2d80d..2df00`。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2D80D` | `figure_demo_show(unit,mode,count,units)` | 效果分发器 `0x2FF01` 的 `mode>=32` 分支（模式 32..35）：释放屏/DATO 缓冲 → `map_cell_info(unit)` 取格字节 6 载 BG/TAI 条 → `rle_decode(bg,0,50,screen,320,-1)` + `ui_status_panel_at` + `pal_fade_out` → 载 FIGANI 组 `3*rec[7]`/`+1` 与 FDOTHER 条目 `mode+33`，再按 `0x5265C` 混合表第 4 列载 FDOTHER 条目入 `dword_54153`（音效库）→ `figure_attack_scroll(unit,1,fig_a,0,work,screen,tai)` + `figure_play(unit,mode,fig_b,fig_b,work,screen,bg,tai)` + `svc_wait_ticks(6)` → 图 A 滑入 8 帧、图 B 9 帧（每帧 `gfx_copy_rows` + `res_blit` + 发屏 + `svc_wait_ticks(1)`）→ 模式 33/34 再盖一次 B → 逐子帧循环（`memmove`+`res_blit`+发屏+`svc_wait_ticks(2)`，按模式在 k=1/2/6 发一次 SFX）→ 11 次 `pal_blend_to(0,255,40-4m,…)` 收束 → 释放 7 个缓冲、`dword_53A49=malloc(0x25680)`、按 `dword_53A55` 首字节载 FDSHAP、`pal_blend_to(0,255,0,…)`+清屏+`map_view_update(1)`+41 次渐入、停音并释放 `dword_54153`、`dword_53EC4=0`+`ev5_1D4CB` → 分发模式动作：32→`map_action_anim_resolve(...,32)`；33→逐 unit `memset(rec+0x25,0,3)` 后 `map_action_heal_list(...,800)`；34→`map_action_grow_x/grow_y/map_action_widen`（间插 `dword_53EC4=0`）；35→`map_action_damage_records(unit,26,...,37)`/`(...,22,...,39)`/`(...,27,...,38)` → 收尾 `menu_stop_and_free_music`。 |
+
+**陷阱 / 伪代码伪影**：
+- **ABI（关键）**：唯一调用点 `0x30012`（`2FF01` 的 `ebp>=0x20` 分支，`2fff7: cmp ebp,0x20; jl 0x3001f`）压 4 个实参，但 `push 0x6c; call 0x3702F` 使 Hex-Rays 只留第 1 参，
+  故其 `void(int,int,int,int)` 原型里实参序号需按机器的 `[esp+0x4c..0x58]` 逐条核；本 C 取 `(unit,mode,count,units)`
+  （`a1`=记录索引、`a2`=模式 32..35、`a3`=count、`a4`=unit 字节表）。
+- **混合表 0x5265C**：机器把 **4 个连续 dword**（0x5265C/60/64/68）拷入栈，再按 `mode-32` 取**四个并列字节列**：
+  `r=0x5265C[row]`、`g=0x52660[row]`、`b=0x52664[row]`、FDOTHER 索引=`0x52668[row]`。Hex-Rays 把该拷贝渲染成
+  `qmemcpy(v21,"?355[]^",8)` 并把索引读成 `v17[mode]`（帧基址错位伪影）；离线反汇编 `2d81e..2d83e`/`2d985`/`2dc2c..2dc57` 为准。
+  字节表实值 = 行0 `{0x3f,0x3f,0x3f,0x5b}`、行1 `{0x33,0x39,0x3f,0x5c}`、行2 `{0x35,0x00,0x00,0x5d}`、行3 `{0x35,0x3a,0x09,0x5e}`。
+- **FIGANI 组**：载 `3*rec[7]` 与 `+1`（与 §89 `figure_party_show` 的 `+2` 不同）。
+- **k 循环尾**：四条分支（模式 34&k==2、35&k==1、33&k==6、32&k==1）发不同 SFX 后**都** `svc_wait_ticks(2)`；
+  模式 34&k==2 与 33&k==6 用 `svc_play_sfx(…,1,1)`，模式 35&k==1 与 32&k==1 用 `svc_play_sfx2(…,2,k)`。
+- **frees**：`v10`（FDOTHER 条目 `mode+33`）在 m 循环后即释放；`dword_54153`（音效库）最后释放。
+- **`dword_53A55`**：机器 `mov ebx,dword_53A55; movzx ebx,[ebx]; add ebx,ebx` ＝ `2*首字节`，用于 FDSHAP 条目索引。
+- **chkstk**：`push 0x6c; call 0x3702F`（不分配帧），丢弃；`sub_4E98D`=rle_decode、`sub_2FACD`=ui_status_panel_at、`sub_2DF01`=pal_blend_to。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **35 → 34**（本轮 §89 −1），已还原未验证 **288 → 289**（本轮 +1）。
-- **闭包就绪游戏内容项**：本轮 §89 取走 `0x2CF30` 后，闭包就绪待还原仍无 in-budget 游戏内容项——
+- `function-map.csv`：待还原 **34 → 33**（本轮 §90 −1），已还原未验证 **289 → 290**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §90 取走 `0x2D80D` 后，闭包就绪待还原仍无 in-budget 游戏内容项——
   只剩 CRT/库包装（`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）、伪函数条目
-  （`0x10000`/`0x36B00`），及超预算单函数 `0x2D80D`(1780B，真闭包＝自身)/`0x31C49`(1511B，真闭包＝自身)/
-  `0x31529`(1718B，闭包＝自身+`0x31C49` 共 3229B)。
-  下批按 §5 优先取 `0x2D80D`（1780B，片头 ANI/DAT 演示，真闭包＝自身），或取 `0x31C49`(1511B) 以解锁 `0x31529`。
+  （`0x10000`/`0x36B00`），及超预算单函数 `0x31C49`(1511B，真闭包＝自身)/`0x31529`(1718B，闭包＝自身+`0x31C49`)。
+  下批按 §5 取 `0x31C49`(1511B)（片头队伍演示收尾，真闭包＝自身；其 caller `0x31529` 亦将转闭包就绪）。
 
 > **台账发现**：`0x1CEED` 的 caller `0x1CFF0`（行动菜单驱动）仍待还原，其真闭包含 `0x1AA1D`/`0x1DB65`
 > 等大件（>8 函数，按 §4 跳过）；另一个 caller `0x1D51D` 已在 §83 还原。

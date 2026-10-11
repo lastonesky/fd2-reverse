@@ -986,3 +986,171 @@ void figure_party_show(int unit, int mode, int count, const uint8_t *units)
     map_view_update(1);
     pal_fade_in();
 }
+
+/* 0x2D80D - the `mode >= 32` sibling of figure_party_show, driven by the effect
+ * driver 0x2FF01 (modes 32..35).  Shows record `unit`'s FIGANI groups over the
+ * BG/TAI strips of the unit's map cell, stamps the FDOTHER plate entry
+ * `mode + 33`, plays the palette blend table at 0x5265C and finally runs the
+ * map action for `mode` over `units[0..count-1]`.
+ *
+ * Faithful details worth noting:
+ *  - the 16-byte blend table at 0x5265C is copied to the stack and read as four
+ *    parallel byte columns: row = mode-32 gives r=0x5265C[row], g=0x52660[row],
+ *    b=0x52664[row] and the FDOTHER entry index 0x52668[row].  Hex-Rays renders
+ *    the copy as `qmemcpy(v21,"?355[]^",...)` and the index read as `v17[mode]`
+ *    (a frame-base artifact); the disassembly (`2d81e..2d83e`, `2d985`,
+ *    `2dc2c..2dc57`) is authoritative.
+ *  - the FIGANI groups loaded are 3*rec[7] and 3*rec[7]+1 (NOT +2 as
+ *    figure_party_show uses).
+ *  - `single res_blit` of the plate over the screen for modes 33/34 only.
+ *  - the k loop's sound effect differs per mode; every path ends with a
+ *    svc_wait_ticks(2).
+ *  - `dword_54153` gets the FDOTHER entry whose index is the blend table's 4th
+ *    column byte; it is the sound bank freed at the end.
+ * ABI = cdecl, four stack arguments (the chkstk probe hides them from
+ * Hex-Rays).  Hand-restored, compile-verified, no differential harness yet. */
+void figure_demo_show(int unit, int mode, int count, const uint8_t *units)
+{
+    uint8_t        cell[8];       /* map_cell_info output (byte 6 = DAT index) */
+    uint8_t        tab[16];       /* 0x5265C blend table                      */
+    const uint8_t *rec;           /* this unit's 80-byte record               */
+    void          *tai;           /* TAI.DAT strip of the unit's cell         */
+    void          *bg;            /* BG.DAT strip of the unit's cell          */
+    void          *fig_a;         /* FIGANI group 3*rec[7]                    */
+    void          *fig_b;         /* FIGANI group 3*rec[7]+1                  */
+    void          *fd_plate;      /* FDOTHER entry mode+33                    */
+    uint8_t       *screen;        /* 320-stride 0xFA00 buffer                 */
+    uint8_t       *work;          /* 640-stride 0x1F400 buffer                */
+    int            i;
+    int            j;
+    int            k;
+    int            m;
+    int            n;
+    uint8_t        row;           /* mode - 32 (blend table row)              */
+
+    memcpy(tab, (const void *)&dword_5265C, sizeof(tab));
+    row = (uint8_t)(mode - 32);
+
+    guest_free(dword_53A49);
+    guest_free(dword_53A5D);
+    dword_53A5D = NULL;
+
+    rec = (const uint8_t *)dword_53A45 + 80 * unit;
+    map_cell_info(rec[0], rec[1], cell);
+
+    tai = res_load(aTaiDat, NULL, cell[6]);
+    bg  = res_load(aBgDat, NULL, cell[6]);
+
+    screen = guest_malloc(SCR_SIZE);
+    work   = guest_malloc(WORK_SIZE);
+    memset(screen, 0, SCR_SIZE);
+    rle_decode(bg, 0, 50, screen, 320, -1);
+    ui_status_panel_at((int)(uintptr_t)screen, unit);
+    pal_fade_out();
+
+    i     = 3 * rec[7];
+    fig_a = res_load(aFiganiDat, NULL, i);
+    fig_b = res_load(aFiganiDat, NULL, i + 1);
+
+    fd_plate = res_load(aFdotherDat, NULL, mode + 33);
+    dword_54153 = 0;
+    dword_54153 =
+        (uint32_t)(uintptr_t)res_load(aFdotherDat, NULL, tab[12 + row]);
+
+    figure_attack_scroll(unit, 1, fig_a, NULL, work, screen, tai);
+    figure_play(unit, mode, fig_b, fig_b, work, screen, bg, tai);
+    svc_wait_ticks(6);
+
+    for (i = 0; i < 8; ++i) {
+        gfx_copy_rows(work, 640, screen, 320, 320, 200);
+        res_blit(fig_a, 0, work + 20 * i, 640, -1);
+        gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, work, 640, 320, 200);
+        svc_wait_ticks(1);
+    }
+    for (j = 8; j >= 0; --j) {
+        gfx_copy_rows(work, 640, screen, 320, 320, 200);
+        res_blit(fd_plate, 0, work + 30 * j, 640, -1);
+        gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, work, 640, 320, 200);
+        svc_wait_ticks(1);
+    }
+    if (mode == 33 || mode == 34)
+        res_blit(fd_plate, 0, screen, 320, -1);
+
+    for (k = 1; k < *(const uint8_t *)fd_plate; ++k) {
+        memmove(work, screen, SCR_SIZE);
+        res_blit(fd_plate, k, work, 320, -1);
+        gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, work, 320, 320, 200);
+        if (mode == 34 && k == 2)
+            svc_play_sfx((const void *)(uintptr_t)dword_54153, 1, 1);
+        else if (mode == 35 && k == 1)
+            svc_play_sfx2((const void *)(uintptr_t)dword_54153, 2, k);
+        else if (mode == 33 && k == 6)
+            svc_play_sfx((const void *)(uintptr_t)dword_54153, 1, 1);
+        else if (mode == 32 && k == 1)
+            svc_play_sfx2((const void *)(uintptr_t)dword_54153, 2, k);
+        svc_wait_ticks(2);
+    }
+
+    for (m = 0; m <= 10; ++m) {
+        if (m % 2 == 0)
+            svc_play_sfx((const void *)(uintptr_t)dword_54153, 1, 1);
+        memmove(work, screen, SCR_SIZE);
+        res_blit(fd_plate, *(const uint8_t *)fd_plate - 2 + (m & 1), work, 320,
+                 -1);
+        gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, work, 320, 320, 200);
+        svc_wait_ticks(2);
+        pal_blend_to(0, 255, 40 - 4 * m, tab[row], tab[4 + row], tab[8 + row]);
+    }
+
+    guest_free(fd_plate);
+    guest_free(bg);
+    guest_free(tai);
+    guest_free(screen);
+    guest_free(work);
+    guest_free(fig_a);
+    guest_free(fig_b);
+
+    dword_53A49 = guest_malloc(0x25680);
+    i = 2 * *(const uint8_t *)(uintptr_t)dword_53A55;
+    dword_53A5D = res_load(aFdshapDat, dword_53A5D, i);
+
+    pal_blend_to(0, 255, 0, tab[row], tab[4 + row], tab[8 + row]);
+    memset((void *)(uintptr_t)VGA_FRAME, 0, SCR_SIZE);
+    map_view_update(1);
+    for (n = 0; n <= 40; ++n) {
+        pal_blend_to(0, 255, n, tab[row], tab[4 + row], tab[8 + row]);
+        j___delay(6);
+    }
+    svc_play_sfx((const void *)(uintptr_t)dword_54153, -1, 1);
+    guest_free((void *)(uintptr_t)dword_54153);
+    dword_53EC4 = 0;
+    ev5_1D4CB();
+
+    switch (mode) {
+    case 32:
+        map_action_anim_resolve(unit, count, units, 32);
+        break;
+    case 33:
+        for (i = 0; i < count; ++i)
+            memset((uint8_t *)dword_53A45 + 80 * units[i] + 0x25, 0, 3);
+        map_action_heal_list(unit, count, units, 800);
+        break;
+    case 34:
+        map_action_grow_x(unit, count, units);
+        dword_53EC4 = 0;
+        map_action_grow_y(unit, count, units);
+        dword_53EC4 = 0;
+        map_action_widen(unit, count, units);
+        break;
+    case 35:
+        map_action_damage_records(unit, 26, count, units, 37);
+        dword_53EC4 = 0;
+        map_action_damage_records(unit, 22, count, units, 39);
+        dword_53EC4 = 0;
+        map_action_damage_records(unit, 27, count, units, 38);
+        break;
+    default:
+        break;
+    }
+    menu_stop_and_free_music();
+}

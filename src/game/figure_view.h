@@ -135,4 +135,14 @@ void figure_party_show(int unit, int mode, int count, const uint8_t *units);
  * ev3_35730 as (0x11, arg). */
 void figure_attack_view(int attacker, int defender);
 
+/* 0x2D80D - the sibling demo of figure_party_show, dispatched by the effect
+ * driver 0x2FF01 for the `mode >= 32` branch (modes 32..35).  It shows record
+ * `unit`'s FIGANI base/next groups over the BG.DAT / TAI.DAT strips of the
+ * unit's map cell, stamps the FDOTHER plate (entry mode+33), plays a palette
+ * blend driven by the 4x4 table at 0x5265C (row mode-32 gives {r,g,b,FDOTHER
+ * index}), then applies the map action for `mode` to the `units[0..count-1]`
+ * record list.  cdecl, four stack arguments (the Watcom probe hides them from
+ * Hex-Rays); see figure_view.c. */
+void figure_demo_show(int unit, int mode, int count, const uint8_t *units);
+
 #endif /* GAME_FIGURE_VIEW_H */
