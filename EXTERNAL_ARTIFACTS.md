@@ -25,8 +25,14 @@
 4. 由数据段生成 `src/fd2_image.c`（只含数据段；死的 cseg01 代码段不再生成）。
 
 `FD2.EXE` 放仓库根目录即可（`.gitignore` 已忽略 `/FD2.EXE`），或用 `--exe PATH` /
-`$FD2_EXE` 指定。`build.ps1`、`tools/check_compile.sh --full`、`host/Makefile engine`
-都会先调用它。
+`$FD2_EXE` 指定。构建入口：
+
+- **Linux / macOS / BSD**：`make`（= `tools/prepare_image.py` + `make -C host engine`）；
+- **Windows**：`pwsh -File build.ps1`（MSVC）；
+- `tools/check_compile.sh --full` 也会先调用它。
+
+`host/Makefile` 按 `uname -s` 选后端与链接库（macOS=Metal+Cocoa/CoreAudio；Linux=GLCORE+X11/ALSA），
+`sokol_impl.c` 也会自动选；`host/platform_posix.c` 对非 Linux（macOS/BSD）有可移植回退。
 
 > **已核对**：从本仓库锚定的 `FD2.EXE` 提取出的 dseg02/dseg03 与 IDA 导出的
 > `analysis/seg_dseg0{2,3}.bin` **逐字节一致**（dseg02 前 0x4000、dseg03 全 0x34D2，

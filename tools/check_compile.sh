@@ -5,7 +5,7 @@
 #   --full : also the generated sources + a header self-test, with -Werror
 set -u
 cd "$(dirname "$0")/.." || exit 1
-CC=${CC:-gcc}
+CC=${CC:-cc}
 FLAGS="-fsyntax-only -std=c99"
 WARN="-Wall -Wextra"
 

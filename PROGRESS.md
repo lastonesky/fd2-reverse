@@ -3291,3 +3291,25 @@ if (!g_loop) g_total += rate;
 记录跳过 11 条。构建全链路实测通过（复用段 / 提取段 / 无 EXE 报错 / 双 profile 编译）。
 
 结果：仓库内**不再有任何原版程序字节**，同时仍可从玩家自备的 FD2.EXE 一键构建。
+
+### 7.12 跨平台构建（Linux / macOS / BSD）+ 非 Windows 入口
+
+之前的非 Windows 入口只有 `host/Makefile`，且写死 Linux 的 `-DSOKOL_GLCORE` +
+X11/GL/ALSA，`platform_posix.c` 也含 Linux 专有调用（`process_vm_readv`、`SYS_gettid`、
+`/proc/self/exe`）。本轮做成真正跨平台：
+
+- **新增仓库根 `Makefile`**：`make` = `tools/prepare_image.py` + `make -C host engine`；
+  `make check` / `make clean`。可用 `FD2_EXE=/path/FD2.EXE make`。
+- **`host/Makefile` 按 `uname -s` 选后端**：`Darwin` → `-DSOKOL_METAL` +
+  `-framework Cocoa/QuartzCore/Metal/MetalKit/AudioToolbox/CoreAudio/Foundation`；
+  其它（Linux/BSD）→ `-DSOKOL_GLCORE` + `-lX11 -lXi -lXcursor -lGL -lasound -ldl`。
+  `check` 目标同时语法自检 host 与 `src/game`。构建前调用 `prepare_image.py`。
+- **`platform_posix.c` 可移植化**：`plat_readable` 的 `process_vm_readv`（仅 Linux）加
+  `#if defined(__linux__)` 回退；`plat_thread_id` 非 Linux 用 `pthread_self()`；
+  `plat_module_path` 在 macOS 用 `_NSGetExecutablePath`；Linux 专有头文件按平台包含。
+  （这几个 API 在本机原生端口里其实都没被调用，只保证能编译。）
+- `tools/check_compile.sh` 默认 `CC` 由 `gcc` 改为 `cc`（macOS 上 clang 亦可）。
+
+**验证（WSL/Linux）**：`make -C host check` host+game 全 `errors=0`；`make engine`
+成功链接 `host/build/fd2engine`（2.4MB）。macOS 路径按 sokol 官方框架与本机无 Linux
+专有符号编译核对（本环境无 macOS 可实机验证）。

@@ -3,9 +3,12 @@
 > 目标：把 `E:\FD2\FD2.EXE`（md5 `a6e341a8decc6ebf7f4872076d9cf161`）逆向还原为 C 语言代码。
 >
 > **构建**：本仓库不含原版程序的任何字节。把你合法持有的 `FD2.EXE`（md5 同上）放到仓库根目录
-> （已被 `.gitignore` 忽略）后构建即可——`build.ps1` / `check_compile.sh --full` /
-> `make -C host engine` 都会先经 `tools/prepare_image.py` 从它生成运行必需的数据段镜像。
-> 详见 `EXTERNAL_ARTIFACTS.md`。
+> （已被 `.gitignore` 忽略）或设 `FD2_EXE=/path/FD2.EXE`，然后：
+> - **Linux / macOS**：`make`（= `tools/prepare_image.py` + `make -C host engine`）；
+> - **Windows**：`pwsh -File build.ps1`（MSVC）。
+>
+> 两者都会先经 `tools/prepare_image.py` 从 `FD2.EXE` 生成运行必需的数据段镜像；
+> 没有 `FD2.EXE` 就明确报错停止。详见 `EXTERNAL_ARTIFACTS.md`。
 > **阶段纪律：只允许静态分析。不运行原程序、不运行调试器、不编译/运行还原出来的 C 代码。**
 > 运行对拍、编译调试属于第二阶段（另行开展）。
 

@@ -53,8 +53,20 @@ port 里与“运行原始机器码”强耦合的部分（LE 加载、repl 热�
 
 ## 4. 构建
 
-见 `host/Makefile`（POSIX 后端对象语法自检）。完整可运行宿主需要 §3 的适配层落地后，
-把 `src/*.c` + `src/game/*.c` + `host/*.c` 一起链接。
+适配层（§3）已落地。跨平台构建（Linux / macOS）：
+
+```
+make                 # tools/prepare_image.py + host/Makefile engine
+make check           # 语法自检（host + 游戏源码）
+make clean
+```
+
+`host/Makefile` 按 `uname -s` 选后端：macOS 用 Metal (`-framework Cocoa/Metal/…`)，
+Linux 用 OpenGL core + X11/ALSA；`sokol_impl.c` 也会自动选（D3D11/Metal/GLCORE）。
+`platform_posix.c` 对非 Linux 有可移植回退。Windows 用仓库根的 `build.ps1`（MSVC）。
+
+构建前 `tools/prepare_image.py` 会从本地的 `FD2.EXE`（仓库根目录，gitignored）生成
+数据段镜像 `src/fd2_image.c`；没有 `FD2.EXE` 会报错停止。
 
 ## 5. 经验直接继承（不用重踩）
 

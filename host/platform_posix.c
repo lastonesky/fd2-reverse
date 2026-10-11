@@ -37,12 +37,17 @@
 #include <strings.h>    /* strcasecmp (plat_stricmp) */
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <sys/syscall.h>
 #include <sys/time.h>
-#include <sys/uio.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#if defined(__linux__)
+#include <sys/syscall.h>    /* SYS_gettid */
+#include <sys/uio.h>        /* process_vm_readv */
+#endif
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>    /* _NSGetExecutablePath */
+#endif
 
 #ifndef MAP_FIXED_NOREPLACE
 /* Linux < 4.17. Callers only reach mmap for addresses plat_query() reported
@@ -241,30 +246,41 @@ void plat_describe(uintptr_t addr, char *buf, size_t n)
 
 int plat_readable(const void *p, size_t n)
 {
+    /* Portable fallback first: only Linux has process_vm_readv.  This
+     * predicate is used by the DOS/guest loader, which the native port does
+     * not run, so "assume readable" is acceptable everywhere else (macOS
+     * could use mach_vm_region, but nothing here needs it). */
+    if (!p)
+        return 0;
+    if (!n)
+        n = 1;
+#if defined(__linux__)
     /* process_vm_readv(self) answers "would this read fault" with EFAULT
      * instead of raising a signal - one syscall, no /proc/self/maps parse
      * (guest_readable runs on *every* intercepted int, so parsing maps per
      * call would be far too slow). Probe the first and the last byte: the
      * VirtualQuery version this replaces checked the region of p and, when
      * the range crossed a boundary, the region of p+n-1 - same coverage. */
-    struct iovec lv, rv;
-    unsigned char b[1];
-    ssize_t r;
+    {
+        struct iovec lv, rv;
+        unsigned char b[1];
+        ssize_t r;
 
-    if (!p)
-        return 0;
-    if (!n)
-        n = 1;
-    lv.iov_base = b;
-    lv.iov_len  = 1;
-    rv.iov_base = (void *)p;
-    rv.iov_len  = 1;
-    r = process_vm_readv(getpid(), &lv, 1, &rv, 1, 0);
-    if (r != 1)
-        return 0;
-    rv.iov_base = (void *)((const char *)p + n - 1);
-    r = process_vm_readv(getpid(), &lv, 1, &rv, 1, 0);
-    return r == 1;
+        lv.iov_base = b;
+        lv.iov_len  = 1;
+        rv.iov_base = (void *)p;
+        rv.iov_len  = 1;
+        r = process_vm_readv(getpid(), &lv, 1, &rv, 1, 0);
+        if (r != 1)
+            return 0;
+        rv.iov_base = (void *)((const char *)p + n - 1);
+        r = process_vm_readv(getpid(), &lv, 1, &rv, 1, 0);
+        return r == 1;
+    }
+#else
+    (void)n;
+    return 1;
+#endif
 }
 
 plat_file plat_console_file(int fd)
@@ -483,7 +499,11 @@ void plat_sleep_ms(unsigned ms)
 
 uint64_t plat_thread_id(void)
 {
+#if defined(__linux__)
     return (uint64_t)syscall(SYS_gettid);
+#else
+    return (uint64_t)(uintptr_t)pthread_self();   /* macOS / BSD */
+#endif
 }
 
 uint64_t plat_now_ms(void)
@@ -509,12 +529,23 @@ int plat_set_cwd(const char *dir)
 
 int plat_module_path(char *buf, size_t n)
 {
+#if defined(__linux__)
     ssize_t got = readlink("/proc/self/exe", buf, n - 1);
 
     if (got < 0 || (size_t)got >= n - 1)
         return -1;
     buf[got] = 0;
     return 0;
+#elif defined(__APPLE__)
+    uint32_t sz = (uint32_t)n;
+
+    if (_NSGetExecutablePath(buf, &sz) != 0)
+        return -1;
+    return 0;
+#else
+    (void)buf; (void)n;
+    return -1;                       /* BSD: add /proc or sysctl as needed */
+#endif
 }
 
 int plat_path_size(const char *path, uint64_t *size)
