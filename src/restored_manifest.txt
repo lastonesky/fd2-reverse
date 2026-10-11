@@ -994,3 +994,19 @@
 # callees in the manifest); the `int(int)` prototype is a chkstk artifact,
 # 0x3702F is the Watcom stack probe.  No differential harness.
 0x1CFF0 sub_1CFF0 game/action_menu.h
+
+# 0x1A813 / 0x1A866 - the two remaining helpers of the party-change map
+# sequence orchestrator 0x1A30B (its closure, so it becomes closure-ready).
+# 0x1A813 dispatches funcs_1199C[entry+1](0) for every three-byte wave record
+# at dword_53A55 whose wave byte (+0) equals dword_53BEF and whose phase byte
+# (+2) equals `phase`.  0x1A866 is a two-pass per-record sweep over the class
+# `cls` records at dword_53A45: pass 1 drops max_hp/10 from the current hp of
+# records with a +37 ailment counter and plays the portrait/VM frame, then
+# map_units_animate + funcs_1197B[dword_53C03](0); pass 2 decrements the six
+# per-effect counters +34..+39 and plays the frame + unit_metrics when one
+# reaches zero.  The `int(int)` prototypes are chkstk artifacts; the tail
+# `jmp 0x190A9`/`0x190A7` are shared epilogues (plain return), not calls.
+# Hex-Rays' `v10` in 0x1A866 is the cdecl argument (chkstk allocates no frame).
+# No differential harness.
+0x1A813 sub_1A813 game/party_change_seq.h
+0x1A866 sub_1A866 game/party_change_seq.h
