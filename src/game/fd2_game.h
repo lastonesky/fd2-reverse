@@ -31,6 +31,7 @@
 #include "kbd.h"
 #include "map.h"
 #include "map_action.h"
+#include "map_action_ui.h"
 #include "map_ai.h"
 #include "map_attack.h"
 #include "map_cursor.h"

@@ -1782,10 +1782,32 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - **chkstk**：`push 0x10; call 0x3702F` 丢弃。
 - 无对拍器，标“已还原未验证”。
 
+### 70) 地图逐记录交互动作驱动器 `0x1BBDC` → `map_action_interact`（本轮，1 函数）→ `src/game/map_action_ui.c/.h`（新建）
+
+闭包就绪游戏头名中，本轮取 caller 唯一、callee 全已还原的 `0x1BBDC`(u1，1058B)——由记录交互驱动器
+`0x18D8C` 调用的“对记录执行动作”菜单（`map_cursor.h` 记的五条 4×4 朝向补丁驱动器之一）：
+先复制两张朝向 tile 表（`0x51F05`/`0x53F32`，dseg02）→ 开补丁选朝向（`map_cursor_patch_expand/`
+`map_cursor_dir_select`/`collapse`）→ 按动作槽 `dword_53C57` 分支：
+- **槽 0**：循环 `box_popup(actor,1)` 弹物品/状态框 → 取持物条目（表 `0x4E8BC` base 0x602AD stride 23）的
+  字段做两次 `map_reveal_reachable` 洪泛 + `map_pick_record` 选目标；kind 23 时额外要求记录 `[8]==24` 且
+  `word[+0x46]>=20`、再确认格，随后交 `map_action_router` 并 `rec_flag_or80(actor)`；命中返回 1，否则 0。
+- **槽 1**：队伍换位——`guest_malloc(0x64)` 暂存选人结果，`dlg_portrait_find` 找肖像，`map_slide_view`
+  滑回 `v20`（循环前锁存的 `qword_53AB1`），再 `rec_slot_claim/remove` 拼接两人的装备槽；置 `dword_53C53=1`。
+- **槽 2**：委派 `box_run(actor)`（**不**调 `unit_metrics`，因机器复用了槽 1 尾声的 `add esp,4` 槽位）。
+- **其他**：仅弹框后 `rec_slot_remove` 掉一格，落到共享尾声 `0x1BFF6`（`unit_metrics; return 0`）。
+
+**陷阱 / 伪代码伪影**：
+- Watcom 栈探针 `push 0x94; call 0x3702F` 丢弃；两个 16 字节局部是 `rep movs` 拷贝（Hex-Rays 记作
+  `v16=unk_51F05`/`v17=unk_53F32`）；`1bc58` 的 `v17.dword1=1` = 首次洪泛无格时置标志。
+- Hex-Rays 把记录字段字节记成 `char`，但机器向 `rec_slot_claim` 压的是 movzx 后的 int（0..255），C 侧按 int。
+- `v20`（`saved`）是循环前锁存的 `qword_53AB1`，仅 `map_slide_view` 用它；两次洪泛仍读实时 `qword_53AB1`
+  （机器每次重新 `mov ds:0x53ab1/ab5`）。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **72 → 71**（本轮 §69 −1），已还原未验证 **251 → 252**（本轮 +1）。
+- `function-map.csv`：待还原 **71 → 70**（本轮 §70 −1），已还原未验证 **252 → 253**（本轮 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1899,6 +1921,9 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 本轮 §69 拉出闭包就绪游戏头名 `0x1F81E`(u3，100B，片头 ANI 序列播放器，追加 `title_screen`，`0x1F894`
 待还原编排者仍会用到)；其后剩余闭包就绪游戏头名仍为 `0x1B1E7`(u1，内层读未初始化 ebp 暂跳，暂跳)/`0x1BBDC`(u1)
 及库包装 `0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`（按既定策略跳过）、`0x2EBE1`(u3，2291B 超预算)。
+本轮 §70 拉出闭包就绪游戏头名 `0x1BBDC`(u1，1058B，`0x18D8C` 调用的逐记录动作驱动器，新建 `map_action_ui`)；
+其后剩余闭包就绪游戏头名仍为 `0x1B1E7`(u1，内层读未初始化 ebp 暂跳)，及库包装 `0x3645D`/`0x2E95B`/`0x365DA`/
+`0x36C56`（按既定策略跳过）、`0x2EBE1`(u3，2291B 超预算)。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交
