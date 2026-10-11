@@ -8,6 +8,7 @@
 #include "../dos.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(DOS_LOWMEM_BASE + (off)))
@@ -154,4 +155,92 @@ void item_menu_figure_play(int rec, int group)
     guest_free(fig_user);
     guest_free(fig_target);
     guest_free(work);
+}
+
+/* 0x2AA00 - the item-use screen driver (the caller of the three helpers above).
+ *
+ * Loop: collect the eligible party members, play the empty script 591 and
+ * return when there are none; otherwise open the portrait, play script 592 and
+ * let the player pick a member with the equipment party list.  On a cancel the
+ * loop returns; on a confirm it re-opens the portrait, plays script 594, waits
+ * inside the map window and -- only when the cursor row is 0 -- applies the
+ * chosen item: remove the used slot, play the figure animation, stamp the
+ * record's item byte +0x20 and unit-type byte +7 from the tbl_615FE(kind) row,
+ * rebuild the FDICON.B24 atlas and re-run item_menu_use.  The machine's return
+ * is its residual EAX and no caller reads it, so this returns 0. */
+int item_menu_run(void)
+{
+    uint8_t kinds[32];
+    uint8_t records[32];
+    const uint8_t *party = (const uint8_t *)(uintptr_t)dword_53BF7;
+    FILE *fp;
+    int count, v2, v5;
+    int v3, cursor_kind;
+    uint8_t *rec;
+    int i;
+
+    for (;;) {
+        count = item_menu_list(records, kinds);
+        if (count == 0) {
+            msg_open_portrait(byte_5238B);
+            vm_run(dword_53A7D, 591, 693452, 320, 205, 76, 74, 19, 1);
+            dlg_blit_dato(dword_53A85, dword_53C67, 0);
+            dlg_wait_key(0);
+            msg_close_portrait();
+            break;
+        }
+
+        msg_open_portrait(byte_5238B);
+        vm_run(dword_53A7D, 592, 693452, 320, 205, 76, 74, 19, 1);
+        dlg_blit_dato(dword_53A85, dword_53C67, 0);
+        dlg_wait_key(1);
+        msg_close_portrait();
+        kbd_flush();
+
+        v2 = shop_party_equip_run(count, records, kinds);
+        msg_close_portrait();
+        if (v2 == -1)
+            break;
+
+        msg_open_portrait(byte_5238B);
+        v3          = records[dword_53C57];
+        cursor_kind = kinds[dword_53C57];
+        rec = (uint8_t *)dword_53A45 + 80u * (uint32_t)v3;
+        dword_53AD9 = (uint32_t)rec[7] + 1u;
+
+        vm_run(dword_53A7D, 594, 693452, 320, 205, 76, 74, 19, 1);
+        kbd_flush();
+        v5 = map_window_run();
+        map_draw_text_window();
+        msg_close_portrait();
+        if (v5 == -1)
+            continue;
+        if (dword_53C57 != 0)
+            continue;
+
+        if (cursor_kind == 52)
+            rec_slot_remove(v3, ev3_2AEDB(v3, 90));
+        else if (cursor_kind >= 50)
+            rec_slot_remove(v3, ev3_2AEDB(v3, byte_523D5[rec[7]]));
+
+        bgm_play(16, 1);
+        item_menu_figure_play(v3, cursor_kind);
+        bgm_play(11, 0);
+
+        rec[0x20] = *(const uint8_t *)tbl_ptr((void *)&fd2_data2[0x15FE], 2,
+                                              cursor_kind, -64);
+        rec[7] = (uint8_t)cursor_kind;
+
+        if (dword_53A61 != NULL)
+            guest_free(dword_53A61);          /* free `buf` */
+        fp = fopen(aFdiconB24_4, aRb_8);      /* "FDICON.B24","rb" */
+        dword_53BDF = 0;
+        for (i = 0; i < (int)dword_53BFB; ++i)
+            unit_entry_data(party[80 * i + 7], fp);
+        fclose(fp);
+
+        item_menu_use(v3);
+        kbd_flush();
+    }
+    return 0;
 }

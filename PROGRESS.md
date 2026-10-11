@@ -1583,10 +1583,32 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - 无对拍器，标“已还原未验证”；另以 `-m32` 临时自测（帧填充 / RLE / 像素 / 填充段 / 复制段 / 调色板块 / 调度）
   全部通过验证行为，自测文件未入库。
 
+### 61) 物品使用屏驱动器（本轮，1 函数）→ `src/game/item_menu.c/.h`（追加，item_menu 家族闭合）
+
+§40 建 `item_menu` 时留下的驱动器 `0x2AA00`(u1, 637B) 是本轮 `function-map.csv` 闭包就绪游戏头名之一，
+其全部 callee 均已在册（`item_menu_list`/`item_menu_use`/`item_menu_figure_play` §40，`shop_party_equip_run` §32，
+`vm_run`/`dlg_blit_dato`/`dlg_wait_key`/`kbd_flush`/`map_window_run`/`map_draw_text_window`/`bgm_play`/
+`ev3_2AEDB`/`rec_slot_remove`/`unit_entry_data`/`unit_metrics` 及 `tbl_ptr(0x615FE,2)`），故按同模块簇拉出，
+`item_menu` 家族自顶闭合。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2AA00` | `item_menu_run()` | 循环：`item_menu_list` 收集可用队员；为空则播空脚本 591 并返回；否则开肖像 + 脚本 592 + `shop_party_equip_run` 选人；取消则返回；确认后再开肖像 + 脚本 594 + `map_window_run`/`map_draw_text_window`，仅当 `dword_53C57==0` 时应用：按 kind（52 / >=50）`rec_slot_remove(rec, ev3_2AEDB(rec,·))` → `bgm_play(16,1)` → `item_menu_figure_play` → `bgm_play(11,0)` → `rec[0x20]=tbl_615FE[kind].byte0`、`rec[7]=kind` → 释放/重建 FDICON.B24 图集（`unit_entry_data` 逐队员）→ `item_menu_use` → `kbd_flush`。 |
+
+**陷阱 / 伪代码伪影**：
+- **反编译器丢实参（chkstk 骗过反编译器）**：`sub_2AE0E(v10,v9)` 被 Hex-Rays 削成单参 `sub_2AE0E(a1:v10)`，
+  `sub_2A857` 削成 `sub_2A857(a1:v0)`——离线反汇编（`2aa11..2aa19`、`2aad5..2aade`）显示压栈序为
+  `(records,kinds)` 与 `(count,members,equip)`，C 侧补回。`v9`（kinds 数组）因此非未初始化读——由
+  `item_menu_list` 写出，两者都是 32 字节栈数组（原机为 `[esp+0]`/`[esp+0x20]`）。
+- **`buf`=0x53A61**：`if (buf) free(buf);` 即 `guest_free(dword_53A61)`；`fopen(aFdiconB24_4,aRb_8)`（0x50283/0x50280）走 libc。
+- **返回值**：机器尾声 eax 为 `fclose`/`kbd_flush` 残留，唯一 caller `0x29F48` 不读，C 侧返回 0（原型 `int(void)`）。
+- **chkstk**：`push 0x7c; call 0x3702F`（不分配帧），丢弃。
+- 无对拍器，标“已还原未验证”；caller `0x29F48`（地点/商店菜单 0..3 选单）仍待还原。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **94 → 82**（本轮 §60 −12），已还原未验证 **229 → 241**（本轮 +12）。
+- `function-map.csv`：待还原 **82 → 81**（本轮 §61 −1），已还原未验证 **241 → 242**（本轮 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1680,6 +1702,7 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 下一游戏头名回落至 u1 小簇 `0x1B1E7`(sub_19DF7，内层读未初始化，暂跳)/`0x1BBDC`/`0x1CFF0`(sub_18D8C)
 及商店族 `0x2872B`(sub_279BC)/`0x2AA00`(sub_29DAA) 等，CRT/库包装 `0x3645D`(u4)/`0x2E95B`(u3)/`0x365DA`(u2) 仍按既定策略跳过。
 本轮 §60 把该列表里改判为游戏内容的 ANI.DAT 解码簇 `0x36E3D..0x36FAC`+`0x36FD3`/`0x36FF4` 整体拉出（新建 `ani`），故闭包就绪游戏头名转为 `0x1B1E7`/`0x1BBDC`/`0x1CFF0`/`0x2000A`/`0x2872B`/`0x2AA00` 等大驱动器与 `0x36C56`(u1) 等库包装。
+本轮 §61 从这批大驱动器中按“同模块”优先拉出 `0x2AA00`(u1，`item_menu` 的驱动器，§40 建模块时留下的唯一待还原项)，`item_menu` 家族自顶闭合；剩余闭包就绪游戏头名仍有 `0x1B1E7`(u1，内层读未初始化 ebp 暂跳)/`0x1BBDC`(u1，地图行动交互驱动)/`0x2000A`(u1，地图缩放视图驱动)/`0x2872B`(u1，商店菜单驱动，`sub_279BC` 的 callee)/`0x2EBE1`(u3，2291B 超预算) 与库包装 `0x3645D`(u4)/`0x2E95B`(u3)/`0x365DA`(u2)/`0x36C56`(u1)（按既定策略跳过）。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交

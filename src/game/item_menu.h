@@ -1,9 +1,11 @@
-/* item_menu.h - the map "use an item on a party member" screen helpers
- * (the three closure-ready callees of the still-pending driver sub_2AA00,
- * 0x2AA00).
+/* item_menu.h - the map "use an item on a party member" screen.
+ *
+ *   0x2AA00  item_menu_run        the driver: loop over the eligible party
+ *                                members, pick one, apply the item and refresh
+ *                                the FDICON.B24 atlas.  Returns 0.
  *
  * The driver draws the item panel and loops over the eligible party records;
- * the helpers live here:
+ * the three helpers it calls live here:
  *
  *   0x2AE0E  item_menu_list        scan the record table and collect every
  *                                  member the current item can target: record
@@ -48,5 +50,9 @@ void item_menu_use(int rec);
 /* 0x2FB2C - play the item-use figure animation for record `rec` against FIGANI
  * group `group` over the scrolling BG.DAT strips. */
 void item_menu_figure_play(int rec, int group);
+
+/* 0x2AA00 - the item-use screen driver (the caller of the three helpers
+ * above).  Returns 0; callers ignore the machine's residual EAX. */
+int item_menu_run(void);
 
 #endif /* GAME_ITEM_MENU_H */
