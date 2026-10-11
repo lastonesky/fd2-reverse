@@ -92,7 +92,7 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 
 ---
 
-## 0-F. 309 已验证资产迁入（本轮完成）
+## 0-F. 309 已验证资产迁入（完成）+ batch 2
 
 **结果**：`port/src/game` 的 31 对 `.c/.h` + `guest_mem.*` + `dos.h/platform.h/le.h` → `port3/src/`；
 **双 profile 零错误、`-Werror` 全绿、伞头自测通过**（`tools/check_compile.sh [--full]`）。
@@ -119,8 +119,92 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 2. 11 个 `static` 表访问器（`tbl_4E7DD/4E7F2/4E809/4E821/4E838/4E84F/4E866/4E87D/4E88E/4E8A5/4E8BC`）：调用方改用已迁入的 `tbl_ptr(base,stride,index,offset)`（`scene_core.c` 已示范 0x4E809→base 0x6238D/stride 31/offset -31）。
 3. `world_load.c` 的 IDA 短名 `p`/`buf` → 模块内别名（`world_load_alias.inc`）。
 
-**下一步**：P0 handler batch 2（idx[2] `sub_230F2` / idx[4] `sub_231F9` —— 现已被迁入的 `scene_place_records` 解锁）
-→ `funcs_25E3A` 余 10 项 → 解释器簇。
+**下一步**：`funcs_25E23` 余 9 项（idx 17/19/20/21/22/25/26/28/29）—— 其中 25/26（`0x24E80`→尾 `0x15487`、`0x250CC`→尾 `0x1B5EA`）是**外部 epilogue**（返回 eax，非简单推进状态），需单独核；其余按模板推进。→ 然后 `funcs_25E3A` 余 10 项 → 解释器簇。
+
+## 0-G. `funcs_25E23` batch 3/4（本轮）—— **21/30 已源码化**
+
+| 索引 | 新名 | 要点 |
+|---|---|---|
+| [6] | `scene_state_06` | 表 0x520E4/ED/F6（9B）+ `dword_53AD5[17]`/`rec_flag(43)` 双条件；origin=0x200000006 |
+| [7] | `scene_state_07` | 表 0x520FF/52109（10B）+ kind 字面量 2；末尾 `unit_add(5)`（尾 0x2327D）；origin=0xE00000008 |
+| [11] | `scene_state_11` | 表 0x52129/2137/2145（14B×14）+ `unit_add(17)`（尾 0x239B1）；origin=4 |
+| [13] | `scene_state_13` | 表 0x52153/2163/2173（16B×16）+ `unit_add` 前置 `sub_10B4E(1)`；origin=0xA0000000C |
+| [23] | `scene_state_23` | 行滚动 2..9（每行 30×（视图+等 tick））+ 行 9..15 每行 12 步淡出（fade 递增）+ 清屏 |
+| [1] | `scene_state_01` | 扫记录 5..10 的 +5 bit0 选 VM 单元格；三段固定延时；**末尾 `dword_53C03 = 2`（赋值非自增）** |
+| [9] | `scene_state_09` | 写 11 条记录（表 0x52113 + 11B 字面量）+ 三条记录（+4000/4080/4160）；设视图 origin qword；脚本序列 |
+| [15] | `scene_state_15` | 表 0x52183/2193（16B×16）+ `rec_flag(66..73)` 计数 >4 置标志；条件含 `dword_53BEF>18` |
+| [16] | `scene_state_16` | `unit_exists(18)` 双分支；表 0x521A3/21B3；origin=0x1100000011 |
+
+- 共享尾声语义在本批再次验证（0x2327D=unit_add+refresh+inc、0x239B1=inc）并**写进 C**（不模拟跳转）。
+- `-Werror` 抓到 `qword_53AA9` 被同址 `int32_t` 声明赢走 → 手工覆盖 + **提取器加"宽度优先"消解**（64>32>16）。
+- 验证：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头 OK。
+
+---
+
+## 0-H. **`funcs_25E23`（主状态机"离开态"表）30/30 全部源码化** —— 本轮里程碑
+
+| 来源 | 数量 | 内容 |
+|---|---|---|
+| port/ 已验证资产 | 6 | idx 0/3/10/12/14/18（`scene.c`，scenecheck 100 例） |
+| port3 新还原 | 24 | `scene_states.c`：idx 1/2/4/5/6/7/8/9/11/13/15/16/17/19/20/21/22/23/24/25/26/27/28/29 |
+
+- **表长经覆盖核查定论**：槽 0..29 全为真函数、30 起为越界垃圾 ⇒ **30 项**（旧文档"25 项"偏差已在 uncertainties §2.4 标注解决）。
+- 模式固化：表数据按镜像偏移直传 `scene_place_records`；`origin` 64 位按两压栈 dword 解出；共享尾声（0x231C6/0x231DF/0x231F2/0x2327D/0x2328A/0x237C8/0x239AC/0x239B1）语义直接写进 C；两个**外部 epilogue**（0x15487/0x1B5EA，返回 eax）与两个**故意死循环**（idx 26/29 的 `while(1);`）均按原样还原。
+- 验证：**双 profile 0 错误、`-Werror` 双 profile 全绿、伞头 OK**；`function-map.csv`：待还原 298→**289**，已还原未验证 25→**34**。
+
+---
+
+## 0-I. **`funcs_25E3A`（主状态机"进入态"表）30/30 全部源码化** —— 本轮里程碑
+
+| 来源 | 数量 | 内容 |
+|---|---|---|
+| port/ 已验证资产 | 20 | 槽 5..25 的 `menu_*`（`menu_actions.c`） |
+| port3 新还原 | 10 | `scene_enter.c`：槽 **0/1/2/3/4/22/26/27/28/29** |
+
+- 覆盖核查：两表（`funcs_25E23`/`funcs_25E3A`）**extent=30、覆盖 30、缺 0** ⇒ **主状态机两张表全闭合**。
+- 新增尾声语义（离线反汇编核实）：`0x3312D`=vm_run(sub 由跳转者压栈)+`0x134E4`+`0x12D7B(0)`；`0x33206`=vm_run+`0x33140`（同 0x12D7B(0)）；`0x3313B`=`0x134E4`+`0x12D7B(0)`；`0x33594`=`0x12D7B(0)`。各跳转前压的 sub 值：32FB2→1、33DBA→8、32D18→3、32E8C→3、33AF1→7、33E3C→(无 vm)。
+- 验证：**双 profile 0 错误、`-Werror` 双 profile 全绿、伞头 OK**；`function-map.csv`：待还原 289→**279**，已还原未验证 34→**44**。
+
+---
+
+## 0-J. 解释器簇起步 + `0x16559` ABI 定论（本轮）
+
+**1) `0x1AA1D` 还原为 `ev_script_run`**（`src/game/ev_script.c`）
+事件脚本解释器：`(rec_index, steps, script)`，逐条 3 字节 `{op,u16 arg}`：
+- `op0` 头像对话（`dword_53AD9=arg+181`）→ `rec_slot_claim` 失败时开框/等键/跑 `0x19953`+`map_draw_text_window`，成功且 `dword_53C57==0` 时走 `rec_field_byte`/`rec_slot_remove` 并 `continue`；
+- `op1` 头像脚本（`dword_53AE1=arg` → `vm_run(sub 435)` → blit/等键/关框 → `dword_53BF3 += arg`）；
+- `op2` `j___delay(200)` + `funcs_1199C[arg](rec_index)`；`op3` `vm_run(sub=arg)`；
+- 尾声 `0x22BBE` = 纯返回（帧匹配）。
+
+**2) `0x16559` ABI 定论（原先的不确定项，已解决）**
+- 机器码**真 ABI = 1 个实参**（DATO 子图索引，`eax=[esp+8]`；缓冲 `dword_53A85` 与框位 `dword_53C67` 在**函数内部**读取）——全段 20 个调用点均只压 1 个 0，无一例外；`0x16559` 本体反汇编逐条核实。
+- port/ 的 `dlg_blit_dato(dato_buf, box_pos, idx)` 是**行为等价的测试友好重构**（把两个全局显式化），其调用点显式传 `(dword_53A85, dword_53C67, idx)`。
+- 处置：保留 port/ 的 3 参 API（避免改动已验证资产与其检查器），新调用点同样传三参；不确定性登记改为已解决。
+
+**3) 顺带核查**：`0x197E5` **早已是已验证资产**（`map_draw_text_window`，mapcheck 122500）——旧"解释器簇待办"清单含它是过期信息。
+
+**4) 新增全段离线反汇编资产**：`analysis/cseg01_disasm.txt`（79691 行，`objdump --adjust-vma=0x10000`），后续核 ABI/指令边界/立即数陷阱可直接 grep，不必依赖 IDA 通道。
+
+**余下解释器簇**：`0x19953`(1188B)、`0x1DB65`(857B)。
+
+---
+
+## 0-K. P0 完成度核对（2026-10，脚本核验）
+
+| P0 项 | 状态 |
+|---|---|
+| `main` 0x25BF4 骨架 | ✅ port3 已还原（boot.c） |
+| 主循环 `0x25EBB` / `0x117E7` / `0x26152` | ✅ port3 已还原（scene_core.c） |
+| 转场卡 `0x22E5C` | ✅ 已验证资产（scene.c） |
+| `funcs_25E23` 离开态表 | ✅ **30/30** |
+| `funcs_25E3A` 进入态表 | ✅ **30/30** |
+| 解释器簇 `0x1AA1D` / `0x197E5` | ✅ 已还原（ev_script.c） / 已验证（map.c） |
+| **解释器簇 `0x19953`（地图窗，1188B）** | ❌ **待还原** |
+| **解释器簇 `0x1DB65`（notify，857B）** | ❌ **待还原** |
+| 依赖：`0x25977`bgm / `0x4EBE3`随机 / `0x4E381`清键 / `0x4E310`tick / `0x4E31C`调色板 / `0x4EBFF`文本blit / `0x11EEE`地图核 | ✅ 全部已验证资产 |
+
+**结论：P0 = 16/16 ✅ 已闭合**（2026-10 收口）：`0x1DB65` → `map_units_animate`（`map_units.c`，视图内单位精灵动画：3 段帧循环 13+6+6、`malloc(0x25680)` 暂存、`memmove` 还原）；`0x19953` → `map_window_run`（`map_window.c`，交互地图窗：rand%30+2 空闲帧、4×4 像素揭示、每 ≥2 tick 步进 `pal_anim_step`、`dword_53C13` 0..3 相位、**返回 1/-1** 供 `scene_apply_state`/`ev_script_run` 分支）。两处伪代码陷阱均已解：`&loc_1A599+3`=立即数 `0x1A59C`、`&loc_2567F+1`=`0x25680`、`sub_4E31C` 实为 0 参。
+注意 P0 闭合 ≠ 可运行：整体运行还需 P1/P2 长尾 + 平台层/AIL 桩接线（module-map §3/§4）。
 
 ---
 

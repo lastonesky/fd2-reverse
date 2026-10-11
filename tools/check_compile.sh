@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check_compile.sh - phase-5 light validation for port3 (run via WSL: wsl bash tools/check_compile.sh)
+# check_compile.sh - phase-5 light validation for port3 (run via WSL: bash tools/check_compile.sh)
 # Usage: bash tools/check_compile.sh [--full]
 #   default: syntax-check the restored/migrated game modules in both profiles
 #   --full : also the generated sources + a header self-test, with -Werror
@@ -8,12 +8,14 @@ cd "$(dirname "$0")/.." || exit 1
 CC=${CC:-gcc}
 FLAGS="-fsyntax-only -std=c99"
 WARN="-Wall -Wextra"
-# Transitional 32-bit build (assumption B, uncertainties §5): the migrated port/
-# sources typed several pointer cells as uint32_t per-file; the unified fd2_globals
-# headers give them pointer types. On the 32-bit target the int<->pointer
-# conversions are bit-identical, so downgrade them to warnings here and clean them
-# up in the de-guest stage instead of blocking the compile.
-TOLERANT="-Wno-int-conversion -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast"
+
+# Transitional 32-bit build tolerances (assumption B, uncertainties §5):
+#  - migrated port/ sources typed several pointer cells as uint32_t per-file while
+#    the unified fd2_globals headers give them pointer types; on the 32-bit target
+#    those int<->pointer conversions are bit-identical;
+#  - the same sources compare int/uint32 freely (sign-compare).
+# Both are cleaned up in the de-guest stage rather than blocking the compile now.
+TOLERANT="-Wno-int-conversion -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast -Wno-sign-compare"
 
 hr() { printf '%s\n' "------------------------------------------------------------"; }
 

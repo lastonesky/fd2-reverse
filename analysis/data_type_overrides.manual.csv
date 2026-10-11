@@ -5,3 +5,5 @@ addr,name,type,mode,reason
 0x53C6C,dword_53C6C,uint8_t,lvalue,"ev4.c: (&dword_53C6C)[i] ⇒ 标量 uint8_t lvalue"
 0x53D34,dword_53D34,uint8_t,lvalue,"ev4.c: (&dword_53D34)[i]"
 0x53DFC,dword_53DFC,uint8_t,lvalue,"ev4.c: (&dword_53DFC)[i]"
+0x53AA9,qword_53AA9,uint64_t,lvalue,"scene.c 用 uint64_t（0x2200000009）；同址 dlg.c 声明 int32_t，按宽度优先取 uint64_t"
+0x53AB1,qword_53AB1,uint64_t,lvalue,"同上"
