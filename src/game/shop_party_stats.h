@@ -17,11 +17,16 @@
  *            sub-images 0x4E/0x52/0x56/0x5A/0x5E come from the dword_53F66
  *            resource.  The row matching `cursor` uses the bright colour 201.
  *
- * Sibling of the shop_rows painters (0x2A0C2 / 0x2A694); its screen driver
- * 0x27F4A is still pending.  Hand-restored from the Hex-Rays decomp and the
- * offline disassembly (analysis/cseg01_disasm.txt); the disassembly is
- * authoritative for the argument order, the stat offsets and the row geometry.
- * No differential harness yet.
+ *   0x27F4A  shop_party_stat_run  the interactive screen driver: snapshot VGA
+ *            into the three 0xFA00 scratch buffers, blit the panel, draw the
+ *            rows, then run a key loop (Down 80 / Up 72, Enter 28 / Space 57
+ *            confirm, Esc 1 cancel; returns 1 / -1).
+ *
+ * Sibling of the shop_rows painters (0x2A0C2 / 0x2A694) and of shop_party_run
+ * (0x2A29D); it shares their VGA-snapshot / band-scroll idiom.  Hand-restored
+ * from the Hex-Rays decomp and the offline disassembly (analysis/
+ * cseg01_disasm.txt); the disassembly is authoritative for the argument order,
+ * the stat offsets and the row geometry.  No differential harness yet.
  */
 #ifndef GAME_SHOP_PARTY_STATS_H
 #define GAME_SHOP_PARTY_STATS_H
@@ -38,5 +43,10 @@ void unit_stat_totals(int rec_index, int item, int out[4]);
  * highlighted entry; `dst` is the row buffer base. */
 void shop_party_stat_rows(int count, const uint8_t *members, int item,
                           int cursor, int dst);
+
+/* 0x27F4A - the preview screen driver.  `count` member indices are read from
+ * `members`, `item` is the prospective item previewed through
+ * unit_stat_totals.  Returns 1 on confirm, -1 on cancel. */
+int shop_party_stat_run(int count, const uint8_t *members, int item);
 
 #endif /* GAME_SHOP_PARTY_STATS_H */

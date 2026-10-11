@@ -674,3 +674,8 @@
 # the last dlg_draw_number leaves in eax and no caller reads it.
 0x28632 sub_28632 game/shop_party_stats.h
 0x2825B sub_2825B game/shop_party_stats.h
+
+# shop/place party stat-preview screen driver.  0x27F4A ends with the
+# conditional `jmp 0x26A73` shared epilogue (mov eax,esi; pop ebp/edi/esi/ebx;
+# ret) matching its own four-register frame, so it returns the 1 / -1 selection.
+0x27F4A sub_27F4A game/shop_party_stats.h

@@ -1,21 +1,27 @@
-/* shop_party_stats.c - the shop/place "party stat preview" row painter and its
- * stat-totals helper.  See shop_party_stats.h for the family, the ABI and the
- * stat offsets.
+/* shop_party_stats.c - the shop/place "party stat preview" screen: the row
+ * painter, its stat-totals helper and the interactive driver.  See
+ * shop_party_stats.h for the family, the ABI and the stat offsets.
  *
- * Direct translations of the machine code at 0x28632 / 0x2825B; the offline
- * disassembly (analysis/cseg01_disasm.txt) is authoritative.
+ * Direct translations of the machine code at 0x28632 / 0x2825B / 0x27F4A; the
+ * offline disassembly (analysis/cseg01_disasm.txt) is authoritative.
  *
  *   - the Watcom stack probe (`push size; call 0x3702F`) is dropped;
  *   - Hex-Rays drops sub_2860A's second argument (0x2860A compares two stack
  *     values: [esp+4] and [esp+8]); the machine pushes (current, preview) so
  *     the C passes both;
  *   - the one-argument table accessor 0x4E8BC becomes tbl_ptr with its
- *     base/stride from tables.h.
+ *     base/stride from tables.h;
+ *   - 0x27F4A ends with `jmp 0x26A73`, the shared epilogue (`mov eax,esi; pop
+ *     ebp; pop edi; pop esi; pop ebx; ret`) matching its own four-register
+ *     frame, i.e. a plain `return` of EAX (the 1 / -1 selection);
+ *   - the three 0xFA00 buffers are taken from the guest heap (guest_malloc),
+ *     never the host heap, because the sibling screens share them.
  */
 #include "fd2_game.h"
 #include "shop_party_stats.h"
 
 #include <stdint.h>
+#include <string.h>
 
 /* item table accessor 0x4E8BC: base 0x602AD, stride 23 (dseg03). */
 static const uint8_t *item_rec(int index)
@@ -137,4 +143,76 @@ void shop_party_stat_rows(int count, const uint8_t *members, int item,
         rle2_blit((void *)(uintptr_t)(v17 + 234), label_sub(94), 320);
         dlg_draw_number((void *)(uintptr_t)(v12 + 242), 320, totals[3], color, 3);
     }
+}
+
+/* 0x27F4A */
+int shop_party_stat_run(int count, const uint8_t *members, int item)
+{
+    int i;
+    int ret = 0;
+
+    dword_53C5B = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    dword_53C5F = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    dword_53C63 = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+
+    memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u,
+            0xFA00u);
+    memmove((void *)(uintptr_t)dword_53C63, (const void *)(uintptr_t)dword_53C5F,
+            0xFA00u);
+
+    dword_53F4E = 0;
+    dword_53C57 = 0;
+
+    /* panel sub-image at dword_53F66 + [dword_53F66+70], blitted at +35845. */
+    rle2_blit((void *)(uintptr_t)(dword_53C63 + 35845u),
+              (const void *)(uintptr_t)
+                  (dword_53F66 +
+                   *(const uint32_t *)(uintptr_t)(dword_53F66 + 70u)),
+              320);
+
+    shop_party_stat_rows(count, members, item, (int)dword_53C57,
+                         (int)dword_53C63);
+
+    for (i = 5; i >= 0; --i)
+        msg_blit_band(13 * i + 112, (void *)(uintptr_t)dword_53C5B,
+                      (void *)(uintptr_t)dword_53C63);
+
+    do {
+        switch (status_screen_run(2)) {
+        case 80:                                  /* down */
+            if ((int32_t)(count - 1) == (int32_t)dword_53C57)
+                break;
+            svc_play_sfx(dword_53EEC, 0, 1);
+            ++dword_53C57;
+            if ((int32_t)(dword_53C57 - dword_53F4E) >= 3) {
+                ++dword_53F4E;
+                screen_band_forward();
+            }
+        repaint:
+            shop_party_stat_rows(count, members, item, (int)dword_53C57,
+                                 0xA0000u);
+            break;
+        case 72:                                  /* up   */
+            if (dword_53C57 == 0)
+                break;
+            svc_play_sfx(dword_53EEC, 0, 1);
+            --dword_53C57;
+            if ((int32_t)dword_53C57 < (int32_t)dword_53F4E) {
+                --dword_53F4E;
+                screen_band_backward();
+            }
+            goto repaint;
+        case 28:                                  /* Enter */
+        case 57:                                  /* Space */
+            ret = 1;
+            break;
+        case 1:                                   /* Esc   */
+            ret = -1;
+            break;
+        default:
+            break;
+        }
+    } while (ret == 0);
+
+    return ret;
 }
