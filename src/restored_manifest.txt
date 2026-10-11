@@ -431,6 +431,7 @@
 
 # opening / continue-screen helpers (0x1F894 orchestrator still pending)
 0x1F73F sub_1F73F game/title_screen.h
+0x1F81E sub_1F81E game/title_screen.h
 0x1FF79 sub_1FF79 game/title_screen.h
 0x2DF01 sub_2DF01 game/title_screen.h
 

@@ -1762,10 +1762,30 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - **chkstk**：`push 0x38; call 0x3702F` 丢弃。
 - 无对拍器，标“已还原未验证”。
 
+### 69) 片头 ANI 动画播放器 `0x1F81E` → `title_ani_play`（本轮，1 函数）→ `src/game/title_screen.c/.h`（追加）
+
+闭包就绪游戏头名中，`0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56` 为 CRT/库包装（既定策略跳过），
+`0x2EBE1`(2291B) 超预算；其后第一个游戏内容项是 §60/§68 建 `ani`/`title_screen` 时暴露的
+片头序列播放器 `0x1F81E`(u3，100B)：`title_ani_play(index, delay_ms, palette_index)` 在
+`palette_index != -1` 时清 `0xA0000`（0xFA00 字节）并把 FDOTHER.DAT 条目 `palette_index` 重载进共享调色板
+（`dword_53A65`），随后 `pal_fade_range(0,255,0)` 复位减色量、`ani_play(index, delay_ms, 0)` 播放动画，
+末尾经共享尾块 `0x1F882`（`pal_fade_out`）淡出。三个调用点（`0x1F73F` 内与 `0x1F894` 待还原编排者内）
+传参 `(0,15,0)`/`(4,90,99)`/`(5,50,0)`/`(6,90,99)`/`(8,90,99)`。
+
+**陷阱 / 伪代码伪影**：
+- **尾部 fallthrough 而非 `call`**：`0x1F81E` 的 extent 恰止于 `0x1F882`（函数体无 `ret`），机器直接落入
+  共享减色块 `0x1F51E`（入口 `xor ebx,ebx; jmp 0x1F51E`，即 `ebx=0..63` 递增减色）；C 侧按语义写
+  `pal_fade_out()`（已验证资产 `0x1F882`），不模拟跳转。`0x1F51E`/`0x1F503` 本身是未登记函数的共享代码块。
+- **Hex-Rays 参数错标**：伪代码把 `memset` 首参写成常量 655360 并误列 `a1/a2/a3` 次序；离线反汇编核实为
+  `memset(0xA0000, 0, 0xFA00)`、`res_load(FDOTHER.DAT, dword_53A65, a3)`、`pal_fade_range(0,255,0)`、
+  `ani_play(a1, a2, 0)`（`ani_play` 的 wait_key 恒 0）。
+- **chkstk**：`push 0x10; call 0x3702F` 丢弃。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **73 → 72**（本轮 §68 −1），已还原未验证 **250 → 251**（本轮 +1）。
+- `function-map.csv`：待还原 **72 → 71**（本轮 §69 −1），已还原未验证 **251 → 252**（本轮 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1875,6 +1895,9 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 及库包装 `0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`（按既定策略跳过）、`0x2EBE1`(u3，2291B 超预算)。
 本轮 §68 拉出 `0x190AC` 留下的闭包就绪游戏头名 `0x20421`(u5，403B，§60 建 `ani` 时留下的 ANI.DAT
 容器播放器，追加 `ani`)；其后剩余闭包就绪游戏头名仍为 `0x1B1E7`(u1，内层读未初始化 ebp 暂跳)/`0x1BBDC`(u1)
+及库包装 `0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`（按既定策略跳过）、`0x2EBE1`(u3，2291B 超预算)。
+本轮 §69 拉出闭包就绪游戏头名 `0x1F81E`(u3，100B，片头 ANI 序列播放器，追加 `title_screen`，`0x1F894`
+待还原编排者仍会用到)；其后剩余闭包就绪游戏头名仍为 `0x1B1E7`(u1，内层读未初始化 ebp 暂跳，暂跳)/`0x1BBDC`(u1)
 及库包装 `0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`（按既定策略跳过）、`0x2EBE1`(u3，2291B 超预算)。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是

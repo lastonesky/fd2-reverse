@@ -1,5 +1,5 @@
 /* title_screen.h - opening / continue-screen helpers (original 0x2DF01,
- * 0x1FF79, 0x1F73F).
+ * 0x1FF79, 0x1F73F, 0x1F81E).
  *
  * These three are the already-restorable callees of the opening screen 0x1F894
  * (it loads FDOTHER.DAT, scrolls the logo, and asks "continue?" against
@@ -39,5 +39,13 @@ void title_options_draw(void *image, int selected, int count);
  * the palette entry `palette_index`. */
 void title_frame_show(int image_index, int palette_index, const void *strip,
                       int row);
+
+/* 0x1F81E - play one ANI.DAT animation `index` for `delay_ms` per frame, then
+ * fade the palette out.  When `palette_index` is not -1 the frame buffer is
+ * cleared and FDOTHER.DAT entry `palette_index` is (re)loaded into the shared
+ * palette copy (dword_53A65) first; the palette subtraction is reset to 0 so
+ * the animation starts at full brightness.  The trailing fade is the shared
+ * 0x1F882 block (pal_fade_out) that this function tail-falls into. */
+void title_ani_play(int index, int delay_ms, int palette_index);
 
 #endif /* GAME_TITLE_SCREEN_H */
