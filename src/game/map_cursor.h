@@ -7,6 +7,9 @@
  *
  *   0x1741C  paint the patch opening   (called before the key loop 0x177FC)
  *   0x176B4  paint the patch closing   (called after it, then kbd_flush)
+ *   0x177FC  map_cursor_dir_select     the busy-wait key loop + arrow handling
+ *   0x17898  map_cursor_dir_run        one loop iteration set (runs inside it)
+ *   0x179D5  map_cursor_dir_draw       the four direction sprites per frame
  *
  * Both painters use the same three primitives:
  *
@@ -53,5 +56,25 @@ void map_cursor_patch_expand(const int *a_tiles, const int *b_tiles);
 
 /* 0x176B4 - four closing frames, then a final restore and kbd_flush. */
 void map_cursor_patch_collapse(const int *a_tiles, const int *b_tiles);
+
+/* 0x179D5 - draw the four direction-cursor sprites of one animation frame:
+ * sprite j is dword_53A89[dword_53A89 + 4*(3*frame_a[j] + 2*frame_b[j])]
+ * (the selected direction dword_53C57 adds the dword_53C13 phase), stamped at
+ * the map-view origin plus the fixed offset table {-9120,888,936,10944}, then
+ * redraw the found record portrait. `frame_a`/`frame_b` are 4-int arrays. */
+void map_cursor_dir_draw(const int *frame_a, const int *frame_b);
+
+/* 0x17898 - the key loop: while no key is pending, step the palette/frame
+ * animations, render the 13x8 map view, redraw the portraits and cursor, draw
+ * the four direction sprites and publish the 312x192 window to the VGA spare
+ * page.  Returns the INT 16h scan code (E0/52 -> 1C, 53 -> 01). */
+int map_cursor_dir_run(const int *frame_a, const int *frame_b);
+
+/* 0x177FC - interpret one key from map_cursor_dir_run: Esc(01) -> -1,
+ * Enter(1C/39) -> 1; arrow keys 48/50/4B/4D move dword_53C57 to 0/3/1/2 when
+ * the matching entry of `frame_b` is 0, then return 0.  Hex-Rays loses the
+ * second argument (the machine loads ebx = [esp+0xc]); the call sites push two
+ * 4-int arrays, so the signature is (frame_a, frame_b). */
+int map_cursor_dir_select(const int *frame_a, const int *frame_b);
 
 #endif /* GAME_MAP_CURSOR_H */

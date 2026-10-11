@@ -660,3 +660,11 @@
 0x21B99 sub_21B99 game/map_action.h
 0x2211C sub_2211C game/map_action.h
 0x22153 sub_22153 game/map_action.h
+
+# map direction-cursor key loop + per-frame sprite painter (the two arrays are
+# the drivers' 4-int frame tables).  0x177FC's second argument is dropped by
+# Hex-Rays (machine loads ebx=[esp+0xc]); 0x179D5 tails into the 0x13FCC
+# shared epilogue inside sub_13E9C (false callee).
+0x179D5 sub_179D5 game/map_cursor.h
+0x17898 sub_17898 game/map_cursor.h
+0x177FC sub_177FC game/map_cursor.h

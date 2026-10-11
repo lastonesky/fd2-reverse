@@ -1455,10 +1455,38 @@ map_units_animate(); ev_script_run(actor,steps,buf)`。
 - **chkstk**：三者皆 `push 0x14; call 0x3702F`（不分配帧），丢弃。返回值仅供表分派、无调用者读取，C 侧返回 0。
 - 无对拍器，标“已还原未验证”。
 
+### 56) 地图方向选择光标键环 + 逐帧精灵绘制（本轮，3 函数）→ `src/game/map_cursor.c/.h`（追加）
+
+§20 `map_cursor` 家族剩下的三个闭包就绪项（§20 引言里点名的“key loop 0x177FC”）：五条驱动器
+`0x16F55/0x1728C/0x18D8C/0x19DF7/0x1BBDC` 用 `dword_53C57` 选方向时，先 `0x1741C` 开补片，再进
+`0x177FC` 键环，最后 `0x176B4` 收补片。本轮补上中间这环及其两个 callee（真依赖全在册：
+`kbd_pending`(0x10620)/`pal_anim_step`(0x4E31C)/`anim_frame_step`(0x1297D)/`map_render_view`(0x11EEE)/
+`dlg_portraits_refresh`(0x127A9)/`map_draw_cursor`(0x1ACF3)/`gfx_copy_rows`(0x11EB0)/
+`dlg_portrait_find`(0x12C0D)/`dlg_portrait_draw`(0x127E0)/`gfx_blit_transparent`(0x4ED34)、BIOS tick、
+INT 16h `int386`），合计 685 B。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x177FC` | `map_cursor_dir_select` | 键环包装：Esc(01)→−1、Enter(1C/39)→1；方向键 48/50/4B/4D 仅在 `frame_b[0/3/1/2]==0` 时把 `dword_53C57` 置 0/3/1/2，否则返回 0 |
+| `0x17898` | `map_cursor_dir_run` | 忙等键环：`while(!kbd_pending())` → `pal_anim_step` → BIOS tick 步进 `dword_53C13` 相位（`diff>3 || diff<0`）→ `anim_frame_step` → `map_render_view(13×8)` → `dlg_portraits_refresh` → `map_draw_cursor` → 0x179D5 → `gfx_copy_rows` 发 312×192 到 `0xA0504`；出环读 INT 16h 扫描码（E0/52→1C、53→01） |
+| `0x179D5` | `map_cursor_dir_draw` | 逐帧画 4 个方向光标精灵：索引 `3*frame_a[j]+2*frame_b[j]`（选中项 `j==dword_53C57` 加 `dword_53C13`），tile=`dword_53A89[dword_53A89+4*idx]`，贴在视图原点 + `{-9120,888,936,10944}`；再 `dlg_portrait_draw(found)` |
+
+**陷阱 / 伪代码伪影**：
+- **ABI（Hex-Rays 丢第二实参）**：`0x177FC` 的 prototype 被 IDA 记为 `int(int)`，但机器 `mov ebx,[esp+0xc]`
+  即第二实参（`ebx` 后又用作 `frame_b` 数组指针）；5 个调用点（`0x16FA9/0x17334/0x18EEA/0x19EC6/0x1BC89`）
+  均连压两个 4-int 数组指针，证实签名 `(frame_a, frame_b)`（同 §20 的“ABI 由调用点定案”）。
+- **伪 callee（共享尾声）**：`0x179D5` 尾 `jmp 0x13FCC` 落在 `sub_13E9C`（`map_move_to_nearest`）体内
+  （`add esp,0x18; pop×4; ret`）⇒ 普通 `return`；`function-map` 不因此传递依赖。
+- **BIOS tick 读数**：机器 `mov ax,[0x46c]; cwde`（先 16 位再符号扩展），`diff = tick - dword_53C17`，
+  `cmp 3; jg`＋`test; jge` 等价于 `diff>3 || diff<0`；出环时再 `movsx` 一次写回 `dword_53C17`——C 侧同（`anim.c` 既有 `BDA_W` 模式）。
+- **REGS 单元**：键码经 `byte_53A8E`（`word_53A8D` 的高字节/AH）读取，与 `boot.c`/`map_interact.c` 一致；
+  `int386(0x16,&word_53A8D,&word_53A8D)`。
+- **chkstk**：三者皆 `push size; call 0x3702F`，丢弃。无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **106 → 103**（本轮 §55 −3），已还原未验证 **217 → 220**（本轮 +3）。
+- `function-map.csv`：待还原 **103 → 100**（本轮 §56 −3），已还原未验证 **220 → 223**（本轮 +3）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1540,6 +1568,9 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 `0x22153`)，故 `funcs_1541F` 条目 14/15/16/24 闭合；余 17/18/19/25 已在 §15/§22 还原、23 已在 §36，
 **全表 28 条（0..27）至此全部源码化**；下一游戏头名仍为 u1 小簇
 `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2F7B6`(sub_2EBE1) 等。
+本轮 §56 拉出 `map_cursor` 家族余下的 key loop 三元组 `0x177FC`/`0x17898`/`0x179D5`（同 caller 族，
+§20 已点名的 key loop），故 §20 五条方向光标驱动器只剩其自身与 `0x16F55`（其余均已闭包就绪）；
+下一游戏头名仍为 u1 小簇 `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x28632`(sub_2825B)/`0x2F7B6`(sub_2EBE1) 等。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交
