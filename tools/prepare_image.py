@@ -267,8 +267,10 @@ def write_image(seg2, seg3, quiet=False):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--exe", default=os.environ.get("FD2_EXE",
-                    os.path.join(ROOT, "FD2.EXE")),
+    # An empty FD2_EXE (e.g. `export FD2_EXE` in the top-level Makefile with
+    # no value) must fall back to the default path, not become "".
+    env_exe = os.environ.get("FD2_EXE") or None
+    ap.add_argument("--exe", default=env_exe or os.path.join(ROOT, "FD2.EXE"),
                     help="path to the original FD2.EXE (default: <repo>/FD2.EXE)")
     ap.add_argument("--force", action="store_true",
                     help="re-extract the segments even if they already exist")

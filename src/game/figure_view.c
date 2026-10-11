@@ -838,8 +838,8 @@ void figure_party_show(int unit, int mode, int count, const uint8_t *units)
     int            dmg;           /* v24  clamped unit_damage result          */
     uint8_t        posture_n;     /* v35  8 for mode 28 else 1                */
     uint8_t        posture_i;     /* v34  postures drained so far             */
-    uint8_t        step;          /* v33  shake index (5 on a posture)        */
-    int            blit_mode;     /* v32  res_blit mode (33 on a posture)     */
+    uint8_t        step    = 0;   /* v33  shake index (5 on a posture)        */
+    int            blit_mode = -1;/* v32  res_blit mode (33 on a posture)     */
 
     memcpy(shake, &unk_52656, sizeof(shake));
 

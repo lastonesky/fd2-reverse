@@ -77,7 +77,10 @@ int map_attack_resolve(int attacker, int defender)
     int v7, v24;
     int v26, v27, v28, v22, v21, v20, v19, v29, v25;
     uint8_t v30;
-    int v1, v23;
+    /* v1 = damage dealt.  Only set inside the hit roll below, but read when
+     * booking experience even when the roll fails; the original reads the
+     * same uninitialised stack slot there, so default to "no damage". */
+    int v1 = 0, v23;
 
     byte_53C6B = 1;
     v26 = *(const uint16_t *)(const void *)(v2 + 0x48);

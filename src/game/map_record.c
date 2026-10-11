@@ -47,7 +47,13 @@ int map_record_interact(int rec, int *dir_tiles, int reopen)
     uint8_t *rp;                     /* dword_53A45 + 80*rec */
     uint64_t saved;                  /* qword_53AB1 latched before the pick */
     int      v3, v8, v13, v17, v18, steps;
-    int      p4, p5;
+    /* it[11] / it[12] = the chosen item's radius / range.  They are only
+     * assigned when rec_slot_find() succeeds, but the qword_53C57==0 path
+     * below reads them regardless; the original machine code reads the same
+     * uninitialised stack slots there (verified at 0x18f4f/0x18f56), which is
+     * UB.  Zero the fallback so the "no item" case is deterministic (range 0
+     * -> only the current cell). */
+    int      p4 = 0, p5 = 0;
 
     memcpy(a_tiles, &fd2_data1[0x1ED5], sizeof a_tiles);
 
