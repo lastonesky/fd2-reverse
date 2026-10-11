@@ -869,3 +869,21 @@
 # callees in the manifest); 0x3702F is the Watcom stack probe, dropped.  No
 # differential harness.
 0x29620 sub_29620 game/place_screen.h
+
+# 0x279BC - the place menu driver: stage the place's FDOTHER sub-image, draw the
+# money readouts, and loop menu_choice4 over the four options dispatching to
+# shop_place_buy_run (0x2872B) / shop_sell_run (0x28CBD) / shop_box_run (0x28EFE)
+# / shop_give_run (0x28F65); on cancel play the 11-step place_zoom_blit zoom-out
+# and free the buffer.  True closure = itself + 0x28F65 (all other callees in the
+# manifest); the tail `jmp 0x27071` and 0x3702F are a shared epilogue / the
+# Watcom stack probe, dropped.  No differential harness.
+0x279BC sub_279BC game/shop_screen.h
+
+# 0x28F65 - the place menu's fourth option: pick a member, run the item list of
+# that member's occupied slots, pick a receiving member and (unless the receiver
+# already has all eight slots occupied) move the item across with
+# rec_field_byte/rec_slot_remove/rec_slot_claim + unit_metrics.  True closure =
+# itself (all callees in the manifest); `je 0x29619` lands on 0x29300's shared
+# epilogue (plain return), 0x3702F is the Watcom stack probe, both dropped.  No
+# differential harness.
+0x28F65 sub_28F65 game/shop_screen.h
