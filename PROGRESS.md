@@ -1991,15 +1991,44 @@ figure 播放器（`0x2FB2C`=item_menu_figure_play 的姊妹），故追加至�
 - **字符串**：`fopen(aFdiconB24_5(0x50291), aRb_9(0x5028E))`＝`"FDICON.B24","rb"`。
 - 无对拍器，标“已还原未验证”。
 
+### 78) 地图攻击视图簇 `0x2E2B0`/`0x2E9A8`/`0x2E95B`（本轮，3 函数）→ `src/game/figure_view.c/.h`（追加）
+
+§77 记“下批按 §2 取最小传递待还原闭包的游戏内容簇——地图攻击视图簇”。闭包就绪列表已无
+in-budget 游戏内容项（仅 CRT/库包装与伪函数），故本轮取该簇：最小传递待还原闭包＝
+`0x2E2B0`↔`0x2E9A8`（互依）＋`0x2E95B`（`0x2E2B0` 的唯一库包装 callee），合计 2287B
+（1707+503+77，略超 §1 的 ~1500B 指引，属 §2 的“整闭包拉出”）。三者与既有 `figure_view`
+（0x2EBE1 攻击动画驱动器为 `0x2E2B0` 的 callee、已在本模块）同族，故追加该模块。
+逐指令核过离线反汇编 `2e2b0..2eb9e`（调用点参数逐一按 `[esp+..]` 反推）。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2E2B0` | `figure_attack_view(attacker,defender)` | 依 `dword_54133` 反查/快照记录（`rec1=s[attacker]`、`rec2=s[defender]`，`rec1[6]!=0` 时交换 `rec2`）→ `map_cell_info` 取 TAI/BG 子图索引（`byte_52470[dword_53C03]`，`v6[32]==0x13‖v6[31]∈{4,5}` 且索引非 0 且 `v6[7]!=0x1c` 时保留）→ `res_load` TAI/FIGANI 四片（`3*row`/`3*row+1`）→ `pal_fade_out` → `res_load` BG → 状态面板 → `figure_attack_scroll` → 两次 `figure_attack_play`（主攻/反击）→ 未确认时再叠一层 → `guest_free` 全清 → 非 demo 时重载 `FD2.TMP`/`FD2SHAP.DAT`、`svc_wait_ticks(6)`、`pal_fade_out`、清 VGA、`map_view_update(1)`、停音效、`pal_fade_in` |
+| `0x2E9A8` | `figure_attack_scroll(unit,flag,plate_a,plate_b,work,screen,portrait)` | `rec[6]==0`：`portrait` 先落 `screen`，i=8..0 每步 `gfx_copy_rows(work+320→screen)`、`plate_a` 自 `work+320-10*i` 滑入、`flag==0` 时 `plate_b` 定于 `work+320`、拷 VGA、`pal_fade_range(0,255,6*i)`；否则反角色（`plate_b` 定于 `work`、`plate_a` 自 `work+10*i` 滑出、`portrait` 落 `work+10*i`），末步再补一次 `portrait`→`screen` |
+| `0x2E95B` | `figure_tmp_load()` | `fopen("FD2.TMP","rb")` → `guest_malloc(0x32A00)` 写全局 `dword_53A61` → 整文件 `fread` → `fclose`（返回 `fclose` 结果，调用者忽略） |
+
+**陷阱 / 伪代码伪影**：
+- **伪 callee / 共享尾声**：`sub_3702F`＝Watcom chkstk（`push 0x64/0x2C/0x18; call`，不分配帧）；`0x2E9A8` 的机器尾
+  `jl 0x2E956` 落在 `0x2E2B0` 体内（共享尾声：`pop ebp/edi/esi/ebx; ret`），非调用，C 侧即普通 `return`；
+  `0x2E2B0` 的 `rec2` 交换后 `v3[7]`（`def_row`）仍取交换前值（机器用寄存器暂存），C 侧先取 `att_row/def_row`。
+- **decompiler 形参错列**：Hex-Rays 给 `0x2E9A8` 的 `a5` 在两分支中语义相反（`rec[6]==0` 时是 `work+320`
+  固定侧、否则是 `work` 基准），逐一按 `[esp+..]` 复原；`0x2E2B0` 的 `v8/v14/v18` 三个索引（TAI、BG 板、
+  BG 主图）在 `dword_54133!=0` 时被覆写为 `dword_54133`（`att_row∈{0x1a,0x36}‖def_row==0x37` 时 TAI 取 3）。
+- **未初始化/全局契约**：`dword_54133` 非 0 分支（demo）会跳过 `ev5_314DE` 与状态面板；`figure_attack_play`
+  的 `dword_54133!=0` 早退依赖它先被置 1。
+- **堆缝/资源**：`malloc/free`（`0x3706E/0x3776E`）→ `guest_malloc/guest_free`；`dword_53A5D` 的旧缓冲指针直接
+  作为 `res_load` 的 `old_buffer` 传入；`dword_5414B/5414F`（`ev5_314DE` 的结果）按 uint32_t 指针语义调用/释放。
+- **字符串**：`aFd2Tmp_1(0x502BD)="FD2.TMP"`、`aRb_15(0x502BA)="rb"`；`aFdshapDat(0x51A65)`、`aTaiDat(0x524A0)`、
+  `aFiganiDat(0x52495)`、`aBgDat(0x5248E)`。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **54 → 51**（本轮 §77 −3），已还原未验证 **269 → 272**（本轮 +3）。
-- **闭包就绪游戏内容项**：本轮 §77 取走换人屏三角后，闭包就绪待还原仅剩 CRT/库包装
-  （`0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`/`0x365AB`，既定策略跳过）与伪函数条目
-  （`0x10000`/`0x36B00`）；下批按 §2 取“最小传递待还原闭包”的游戏内容簇——地图攻击视图
-  簇 `0x2E2B0`(1707B)/`0x2E9A8`(503B)（合计 2210B，另含库包装 `0x2E95B`）或存档场景加载链
-  头 `0x1548E`(496B，闭包 4 件 2783B)。
+- `function-map.csv`：待还原 **51 → 48**（本轮 §78 −3），已还原未验证 **272 → 275**（本轮 +3）。
+- **闭包就绪游戏内容项**：本轮 §78 取走地图攻击视图簇后，闭包就绪待还原仍仅剩 CRT/库包装
+  （`0x3645D`/`0x365DA`/`0x36C56`/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）；
+  下批按 §2 取次小传递待还原闭包的游戏内容簇——存档场景加载链头 `0x1548E`(496B，闭包 4 件 2783B，
+  与 `0x2E2B0` 合流) 或 `0x2DFC8`(744B)/`0x2D80D`(1780B)/`0x2CF30`(2269B) 等已闭包就绪的大驱动器。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 

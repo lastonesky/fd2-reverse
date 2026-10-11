@@ -3,13 +3,13 @@
  *
  * The still-pending driver sub_2CF30 (0x2CF30) shows a party member's animated
  * figure (FIGANI.DAT) over a scrolling background (BG.DAT) with an alternating
- * portrait strip (TAI.DAT).  Its three closure-ready helpers live here; the
- * fourth callee, sub_2E95B (0x2E95B), only re-reads FD2.TMP through the CRT
- * fread wrapper sub_373CA and is therefore left out of this batch (library
- * zone, see module-map.md).  Two sibling helpers of the same family, used by
- * the drivers sub_2EBE1 (0x2EBE1) and sub_2FB2C (0x2FB2C), are restored here
- * too; the attack driver sub_2EBE1 itself is now restored here as well (its
- * caller 0x2E2B0 is still pending).
+ * portrait strip (TAI.DAT).  Its closure-ready helpers live here; its fourth
+ * callee, sub_2E95B (0x2E95B), only re-reads FD2.TMP and is restored here too.
+ * Two sibling helpers of the same family, used by the drivers sub_2EBE1
+ * (0x2EBE1) and sub_2FB2C (0x2FB2C), are restored here as well; the attack
+ * driver sub_2EBE1 and its caller, the map attack view driver sub_2E2B0
+ * (0x2E2B0) with its scroll helper sub_2E9A8 (0x2E9A8), are now restored here
+ * too.
  *
  *   0x30E25  figure_bg_pick    pick the BG.DAT sub-image index for the shown
  *                              unit: start from byte_52470[dword_53C03] and,
@@ -90,5 +90,27 @@ void figure_frame_run(const void *figure, void *work, int frames);
 int figure_attack_play(int attacker, int defender, const uint8_t *figure,
                        const uint8_t *base, uint8_t *work, uint8_t *screen,
                        const void *portrait, int snd);
+
+/* 0x2E95B - reload FD2.TMP into the global DATO buffer dword_53A61 (the whole
+ * 0x32A00-byte file).  Called by figure_attack_view; returns the fclose
+ * result. */
+int figure_tmp_load(void);
+
+/* 0x2E9A8 - slide `plate_a` across the 640-stride `work` buffer (toward
+ * work+320 when record[6]==0, otherwise away from work as work+10*i) and stamp
+ * the fixed `plate_b`, flatten `work` into the 320-stride `screen`, publish it
+ * to VGA and fade the DAC by 6*i each step.  `portrait` is a TAI.DAT strip
+ * decoded at (164,157); `flag` suppresses the fixed plate stamp. */
+void figure_attack_scroll(int unit, int flag, const void *plate_a,
+                          const void *plate_b, uint8_t *work, uint8_t *screen,
+                          const void *portrait);
+
+/* 0x2E2B0 - the map attack view driver between records `attacker` and
+ * `defender`: load their FIGANI/TAI/BG strips, stamp the two plates, play the
+ * attack animation (figure_attack_play) and, when the defender is cleared,
+ * the counter animation; then reload FD2.TMP / FD2SHAP.DAT and restore the
+ * map.  The demo flag dword_54133 selects the two-strip branch.  Called by
+ * ev3_35730 as (0x11, arg). */
+void figure_attack_view(int attacker, int defender);
 
 #endif /* GAME_FIGURE_VIEW_H */

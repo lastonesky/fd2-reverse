@@ -487,9 +487,14 @@
 0x2F631 sub_2F631 game/figure_view.h
 0x2FE14 sub_2FE14 game/figure_view.h
 
-# the attack-animation driver itself (called by the still-pending map attack
-# view 0x2E2B0; true closure = itself, its helpers are already in figure_view)
+# the attack-animation driver itself (called by the map attack view 0x2E2B0)
 0x2EBE1 sub_2EBE1 game/figure_view.h
+
+# map attack view cluster: the outer driver, its plate-scroll helper and the
+# FD2.TMP reloader (closure of 0x2E2B0 = these three plus restored assets)
+0x2E2B0 sub_2E2B0 game/figure_view.h
+0x2E9A8 sub_2E9A8 game/figure_view.h
+0x2E95B sub_2E95B game/figure_view.h
 
 # map view / zoom / gauge frame-buffer helpers.  The zoom transition driver
 # 0x2000A lives in map_zoom.h (its 0x21548 sibling is map_action_zoom_resolve

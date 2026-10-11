@@ -18,6 +18,7 @@
 #include "figure_view.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #define VGA_FRAME 0xA0000u /* the visible 320x200 frame                      */
@@ -482,4 +483,234 @@ int figure_attack_play(int attacker, int defender, const uint8_t *figure,
         }
     }
     return v30;
+}
+
+/* 0x2E95B - reload FD2.TMP into the global DATO buffer dword_53A61.  The whole
+ * 0x32A00-byte file is read into a fresh block (the previous one is dropped by
+ * the caller); the only caller is the attack-view driver 0x2E2B0.  Returns the
+ * fclose result, which the caller ignores. */
+int figure_tmp_load(void)
+{
+    FILE *fp = fopen(aFd2Tmp_1, aRb_15); /* "FD2.TMP", "rb" */
+
+    dword_53A61 = guest_malloc(0x32A00);
+    fread(dword_53A61, 1, 0x32A00, fp);
+    return fclose(fp);
+}
+
+/* 0x2E9A8 - slide the two FIGANI plates apart over the figure work buffer and
+ * flash the DAC, one strip at a time.  With record[6]==0 the plate `plate_a`
+ * walks in from work+320 while `plate_b` stays fixed; with record[6]!=0 the
+ * roles swap (plate_b fixed at work, plate_a walking) and the portrait strip is
+ * decoded at work+10*i each step.  In both branches the 640-stride `work`
+ * window is flattened into `screen` and published to VGA, and the DAC range is
+ * faded by 6*i.  `flag` (the caller's defender-clear indicator) suppresses the
+ * fixed-plate stamp and the first portrait decode.  `portrait` is a TAI.DAT
+ * strip.  Argument order and branch conditions decoded from the disassembly;
+ * the machine's final `jl 0x2E956` is the shared epilogue of 0x2E2B0, i.e. a
+ * plain return. */
+void figure_attack_scroll(int unit, int flag, const void *plate_a,
+                          const void *plate_b, uint8_t *work, uint8_t *screen,
+                          const void *portrait)
+{
+    const uint8_t *rec = (const uint8_t *)dword_53A45 + 80 * unit;
+    int            i;
+
+    if (rec[6] == 0) {
+        if (flag == 0)
+            rle_decode(portrait, 164, 157, screen, 320, -1);
+        for (i = 8; i >= 0; --i) {
+            gfx_copy_rows(work + 320, 640, screen, 320, 320, 200);
+            res_blit((void *)(uintptr_t)plate_a, 0, work + 320 - 10 * i, 640,
+                     -1);
+            if (flag == 0)
+                res_blit((void *)(uintptr_t)plate_b, 0, work + 320, 640, -1);
+            gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, work + 320, 640,
+                          320, 200);
+            pal_fade_range(0, 255, 6 * i);
+        }
+        return;
+    }
+
+    for (i = 8; i >= 0; --i) {
+        gfx_copy_rows(work, 640, screen, 320, 320, 200);
+        if (flag == 0)
+            res_blit((void *)(uintptr_t)plate_b, 0, work, 640, -1);
+        rle_decode(portrait, 164, 157, work + 10 * i, 640, -1);
+        res_blit((void *)(uintptr_t)plate_a, 0, work + 10 * i, 640, -1);
+        gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, work, 640, 320, 200);
+        pal_fade_range(0, 255, 6 * i);
+    }
+    rle_decode(portrait, 164, 157, screen, 320, -1);
+}
+
+/* 0x2E2B0 - the map attack view driver: shows `attacker`'s and `defender`'s
+ * FIGANI figures over the BG.DAT scroll, with the TAI.DAT portraits, then plays
+ * the attack animation (0x2EBE1) and, when the defender is cleared
+ * (ev5_1F0DC(attacker,defender)==1), the counter animation, before reloading
+ * FD2.TMP / FD2SHAP.DAT and restoring the map.  The demo flag
+ * dword_54133 selects the two-plate branch (dword_54137/dword_5413F strips and
+ * the second plate at 3*row+1).  Called by ev3_35730 as (0x11, arg).  The
+ * machine's 0x64-byte stack probe (sub_3702F) is a chkstk and not a callee. */
+void figure_attack_view(int attacker, int defender)
+{
+    const uint8_t *rec1    = (const uint8_t *)dword_53A45 + 80 * attacker;
+    uint8_t       *rec2    = (uint8_t *)dword_53A45 + 80 * defender;
+    const uint8_t *rec0;          /* the record whose byte 6 is clear */
+    uint8_t        cell[8];       /* map_cell_info output (byte 6 = DAT index)*/
+    uint8_t       *screen  = guest_malloc(0xFA00);  /* 320-stride buffer  (v4) */
+    uint8_t       *work    = guest_malloc(0x1F400); /* 640-stride buffer  (v5) */
+    void          *tai     = NULL; /* TAI.DAT strip            (v23) */
+    void          *fig_def = NULL; /* defender FIGANI plate    (p)   */
+    void          *fig_att = NULL; /* attacker FIGANI plate    (v22) */
+    void          *fig_att_next = NULL; /* attacker plate 3*att+1 (v19) */
+    void          *fig_def_next = NULL; /* defender plate 3*def+1 (v20) */
+    int            att_row = rec1[7];  /* v15 */
+    int            def_row = rec2[7];  /* v16 (before any swap) */
+    int            bg_att;             /* v18 */
+    int            bg_def;             /* v14 */
+    int            bg_tai;             /* v8  */
+    int            next_flag;          /* v17 */
+
+    dword_5413B = NULL;
+    memset(screen, 0, 0xFA00);
+
+    if (rec1[6] != 0) {
+        rec0 = rec2;
+        rec2 = (uint8_t *)rec1;
+    } else {
+        rec0 = rec1;
+    }
+
+    bg_att = byte_52470[dword_53C03];
+    if (!((rec0[32] == 0x13 || rec0[31] == 4 || rec0[31] == 5) &&
+          bg_att != 0 && rec0[7] != 0x1c)) {
+        map_cell_info(rec0[0], rec0[1], cell);
+        bg_att = cell[6];
+    }
+    map_cell_info(rec2[0], rec2[1], cell);
+
+    bg_tai = byte_52470[dword_53C03];
+    bg_def = bg_tai;
+    if ((rec2[32] == 0x13 || rec2[31] == 4 || rec2[31] == 5) &&
+        rec2[7] != 0x1c) {
+        if (bg_def == 0)
+            bg_def = cell[6];
+    } else {
+        bg_tai = cell[6];
+        bg_def = cell[6];
+    }
+
+    if (dword_54133 != 0) {
+        bg_tai = dword_54133;
+        bg_att = dword_54133;
+        if (att_row == 0x1a || att_row == 0x36 || def_row == 0x37)
+            bg_tai = 3;
+    }
+
+    tai = res_load(aTaiDat, tai, bg_tai);
+    fig_def = res_load(aFiganiDat, fig_def, 3 * def_row);
+    fig_att = res_load(aFiganiDat, fig_att, 3 * att_row);
+    fig_att_next = res_load(aFiganiDat, fig_att_next, 3 * att_row + 1);
+    next_flag = *((const uint8_t *)fig_att_next + 1);
+
+    pal_fade_out();
+    dword_5413B = (uint32_t)(uintptr_t)res_load(
+        aBgDat, (void *)(uintptr_t)dword_5413B, bg_att);
+    if (dword_54133 == 0)
+        ui_status_panel_at((int)(uintptr_t)screen, attacker);
+    if (ev5_1F0DC(attacker, defender) == 1 || dword_54133 != 0)
+        fig_def_next = res_load(aFiganiDat, fig_def_next, 3 * def_row + 1);
+
+    if (next_flag != 0) {
+        dword_54137 = NULL;
+        dword_5413F[0] = 0;
+        dword_54143 = NULL;
+        dword_54147 = NULL;
+        dword_54137 = (uint32_t)(uintptr_t)res_load(aBgDat, NULL, bg_def);
+        dword_5413F[0] =
+            (uint32_t)(uintptr_t)res_load(aBgDat,
+                                          (void *)(uintptr_t)dword_5413F[0], 0);
+        dword_54143 =
+            (uint32_t)(uintptr_t)res_load(aBgDat,
+                                          (void *)(uintptr_t)dword_54143, 1);
+        dword_54147 =
+            (uint32_t)(uintptr_t)res_load(aBgDat,
+                                          (void *)(uintptr_t)dword_54147, 2);
+        if (rec1[6] == 0) {
+            uint32_t tmp = dword_5413B;
+
+            dword_5413B = dword_54137;
+            dword_54137 = tmp;
+        }
+        rle_decode((const void *)(uintptr_t)dword_54137, 0, 50, screen, 320,
+                   -1);
+    } else {
+        rle_decode((const void *)(uintptr_t)dword_5413B, 0, 50, screen, 320,
+                   -1);
+        if (dword_54133 == 0)
+            ui_status_panel_at((int)(uintptr_t)screen, defender);
+    }
+
+    if (dword_54133 == 0) {
+        dword_5414B = (uint32_t)(uintptr_t)ev5_314DE(fig_att_next);
+        dword_5414F = (uint32_t)(uintptr_t)ev5_314DE(fig_def_next);
+    }
+
+    figure_attack_scroll(attacker, next_flag, fig_att, fig_def, work, screen,
+                         tai);
+
+    if (figure_attack_play(attacker, defender, fig_att_next, fig_def, work,
+                           screen, tai, dword_5414B) != 0 &&
+        ev5_1F0DC(attacker, defender) == 1 && dword_54133 == 0) {
+        figure_attack_play(defender, attacker, fig_def_next, fig_att, work,
+                           screen, tai, dword_5414F);
+    }
+    if (dword_54133 != 0) {
+        dword_54133 = 1;
+        figure_attack_play(defender, attacker, fig_def_next, fig_att, work,
+                           screen, tai, dword_5414F);
+    }
+
+    if (next_flag == 0 && dword_54133 == 0) {
+        gfx_copy_rows(work, 640, screen, 320, 320, 200);
+        rle_decode(tai, 164, 157, work, 640, -1);
+        res_blit((void *)(uintptr_t)fig_def, 0, work, 640, -1);
+        res_blit((void *)(uintptr_t)fig_att, 0, work, 640, -1);
+        gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, work, 640, 320, 200);
+    }
+
+    guest_free(screen);
+    guest_free(work);
+    guest_free(fig_def);
+    guest_free(fig_att);
+    guest_free(fig_att_next);
+    guest_free((void *)(uintptr_t)dword_5413B);
+    guest_free(tai);
+    if (next_flag != 0) {
+        guest_free((void *)(uintptr_t)dword_54137);
+        guest_free((void *)(uintptr_t)dword_5413F[0]);
+        guest_free((void *)(uintptr_t)dword_54143);
+        guest_free((void *)(uintptr_t)dword_54147);
+    } else {
+        guest_free(fig_def_next);
+    }
+
+    if (dword_54133 == 0) {
+        dword_53A49 = guest_malloc(0x25680);
+        dword_53A5D = res_load(
+            aFdshapDat, dword_53A5D,
+            2 * *(const uint8_t *)(uintptr_t)dword_53A55);
+        figure_tmp_load();
+        svc_wait_ticks(6);
+        pal_fade_out();
+        memset((void *)(uintptr_t)0xA0000, 0, 0xFA00);
+        map_view_update(1);
+        svc_play_sfx((const void *)(uintptr_t)dword_5414B, -1, 1);
+        if (dword_5414B != 0)
+            guest_free((void *)(uintptr_t)dword_5414B);
+        if (dword_5414F != 0)
+            guest_free((void *)(uintptr_t)dword_5414F);
+        pal_fade_in();
+    }
 }
