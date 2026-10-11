@@ -1,8 +1,15 @@
-/* action_menu.h - map command/action list panel (original 0x1CEED).
+/* action_menu.h - map command/action list panel (original 0x17AED/0x1CEED/
+ * 0x1D51D).
  *
+ *   0x17AED  action_menu_open   open the record's box (box_open_anim) and,
+ *            when the record has any action bits, reveal the action list with
+ *            a 7-step band wipe around action_menu_draw, then slide the box
+ *            out and free the three scratch buffers.
  *   0x1CEED  action_menu_draw   draw the available action rows of record
  *            `rec` into the absolute framebuffer address `base`, highlighting
  *            row `sel`.
+ *   0x1D51D  action_menu_select one key step: draw the list, navigate with
+ *            up/down/page/left/right, and confirm/cancel (returns 1/0/-1).
  *
  * The panel is drawn on top of the box frame opened by box_open_init (0x17EEF).
  * It collects the indices of the set bits of record bytes +26..+30
@@ -16,15 +23,23 @@
  * The action table is the 7-byte entry table at 0x619FD (accessed through
  * tbl_ptr, base &fd2_data2[0x19FD]).
  *
- * ABI = cdecl, three int arguments (record index, highlighted row, absolute
- * framebuffer address).  Called by the action select loop 0x1D51D, the menu
- * driver 0x1CFF0 (both still pending) and the box open animation 0x17AED.
+ * ABI = cdecl.  action_menu_draw takes (record index, highlighted row,
+ * absolute framebuffer address); action_menu_open takes the record index;
+ * action_menu_select takes the record index and returns 1 (confirm), 0
+ * (still running) or -1 (ESC).  The menu driver 0x1CFF0 (still pending) calls
+ * action_menu_select.
  * Hand-restored, compile-verified, no differential harness yet.
  */
 #ifndef GAME_ACTION_MENU_H
 #define GAME_ACTION_MENU_H
 
+/* 0x17AED */
+void action_menu_open(int rec);
+
 /* 0x1CEED */
 void action_menu_draw(int rec, int sel, int base);
+
+/* 0x1D51D */
+int action_menu_select(int rec);
 
 #endif /* GAME_ACTION_MENU_H */

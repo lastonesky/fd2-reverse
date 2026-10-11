@@ -839,3 +839,17 @@
 # the box open animation 0x17AED.  True closure = itself (all callees in the
 # manifest); 0x3702F is the Watcom stack probe, dropped.  No differential harness.
 0x1CEED sub_1CEED game/action_menu.h
+
+# 0x17AED - open a record's command box and animate its action list: box_open_anim
+# (0x17E0B) plus, when rec_collect_slot_bits != 0, a 7-step fb_slide_band_a/b/c
+# band wipe around action_menu_draw, then the 12-step slide-out; frees the three
+# 0xFA00 scratch buffers.  True closure = itself (all callees in the manifest);
+# 0x3702F is the Watcom stack probe, dropped.  No differential harness.
+0x17AED sub_17AED game/action_menu.h
+
+# 0x1D51D - one key step of the action menu: draw the list with the current
+# highlight (dword_53C57), then up/down/page/left/right navigation and confirm;
+# returns 1 (confirm accepted), 0 (still running) or -1 (ESC).  True closure =
+# itself (all callees in the manifest); 0x16E24 is a false callee from the shared
+# epilogue, 0x3702F is the Watcom stack probe, both dropped.  No differential harness.
+0x1D51D sub_1D51D game/action_menu.h

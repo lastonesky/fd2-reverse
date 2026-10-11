@@ -2122,17 +2122,46 @@ CRT/库包装 `0x3645D`(read)/`0x365DA`(int386) 后，游戏头名同为 u1 的�
 - **返回值**：调用方均忽略（`0x1D51D`/`0x1CFF0`/`0x17AED`），C 侧取 `void`。
 - 对既有模块的唯一改动：伞头 `fd2_game.h` 追加 `#include "action_menu.h"`；未改任何已验证/已还原函数。无对拍器，标“已还原未验证”。
 
+### 83) 行动菜单族：开箱动画与选择环 `0x17AED`/`0x1D51D`（本轮，2 函数）→ `src/game/action_menu.c/.h`（追加）
+
+按 §1 闭包就绪列表（usage 降序）：§82 拉出 `0x1CEED` 后其两个 caller 转为闭包就绪，其中
+`0x17AED`(u3，642B) 为当前 usage 最高的在预算游戏内容项（跳过 CRT 包装 `0x3645D`(u4，read)），
+`0x1D51D`(u1，427B) 同属行动菜单族（与 `0x17AED` 共享 `0x1CEED`/`0x1C269`/`0x25A96`/`0x4E866`），
+二者合计 1069B（≤ §1 的 ~1500B 指引），故作为一簇追加至既有 `action_menu`。
+生成器验得每函数**真闭包＝自身**（callee 全在册）；逐指令核过离线反汇编 `17aed..17d6a`、`1d51d..1d6c7`。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x17AED` | `action_menu_open(rec)` | `box_open_anim(rec)`（分配三个 0xFA00 暂存缓冲并开箱）→ `dlg_wait_key(0)`；若 `rec_collect_slot_bits(rec,NULL)!=0`：`svc_play_sfx(dword_53EEC,6,1)`，`i=0..6` 每步 `memmove(53C5B←53C5F,0xFA00)`+`fb_slide_band_a(5)`+`band_b(7)`+`band_c(16*i+94)`+`memmove(VGA←53C5B)`；再补一次 a/b 并把 `53C63+30085` 的 `rle2_blit(dword_53A81+*(u32*)(dword_53A81+90),320)` 贴回→`action_menu_draw(rec,-1,53C63)`+`svc_play_sfx(...,5,1)`→`j=6..0` 逆向收拢→`dlg_wait_key(0)`；随后 `i=0..11`（`i==0||i==7` 播音效）`fb_slide_step(i,53C5B,53C63,53C5F)`→`memmove(VGA←53C5F)`→`guest_free` 三个缓冲 |
+| `0x1D51D` | `action_menu_select(rec)` | `action_menu_draw(rec,dword_53C57,0xA0000)`→`count=rec_collect_slot_bits(rec,NULL)`、`last=count-1`→`dlg_wait_key(0)`，`key=byte_53A8E`；0x48 上（`53C57!=0?--53C57:53C57=last`）、0x50 下（`last==53C57?53C57=0:++53C57`）、0x4b 左（`53C57>=4` 则 `-=4`）、0x4d 右（`count-4>53C57` 则 `+=4`），四者确认前均 `svc_play_sfx(dword_53EEC,0,1)` 且返回 0；0x1c/0x39 确认：`rec_collect_slot_bits(rec,list)`＋`*(u16*)(rec+68) < action_entry(list[53C57])[5]` 时返回 0，否则 1；0x01（ESC）返回 −1；其余返回 0 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声（伪 callee）**：`0x17AED` 机器尾 `push ds:0x53C63; jmp 0x15E94`＝`guest_free(dword_53C63)` +
+  `pop ebx; ret`（0x15E94 本体 `call 0x3776e; add esp,4; pop ebx; ret`）；`0x1D51D` 的 `jmp 0x16F04` 是
+  公共尾声 `add esp,0Ch; pop ebx/esi/edi; ret`，均即普通 `return`。
+- **`0x1D51D` 的伪 callee `sub_16E24`**：它在 `0x16C57`（dlg_wait_key，461B）之后紧邻，被函数图误记为 callee；
+  离线反汇编区间内无 `call 0x16E24`，真依赖不含它（同 §82 的边界假阳性）。
+- **`dlg_wait_key` 返回扫描码**：机器 `0x16C57` 尾声 `movzx eax,byte_53A8E; jmp 0x15d9a`（返回 eax），
+  但 C 原型为 `void`；按既有 `box_input` 先例取 `byte_53A8E`（等价）。
+- **`0x17AED` 返回值丢弃**：尾部 `free` 后 eax 残留，三个调用点（`11926`/`11a17`/`29656`）均忽略 → C 侧 `void`。
+- **`0x1D51D` 的 `v2=v1`**：Hex-Rays 把一次杂散 eax 存进 v2 并用作 `count-1`；真值来自 `rec_collect_slot_bits` 的返回值。
+- **局部缓冲**：`0x1D51D` 机器帧仅 0x0C 字节，而 `rec_collect_slot_bits` 最多写 40 项；沿用既有 `action_menu_draw`
+  的 `list[32]` 约定（游戏实测动作数远小于上限）。
+- **常数**：`0xFA00`＝320×200 帧；`30085`(0x7585)、`0x5A`(90) 为子图偏移；`655360`(0xA0000)＝VGA 帧基址。
+- **对既有模块的唯一改动**：追加两函数与头声明、`action_menu.c` 增 `<string.h>`（`memmove`），
+  并订正头注释中两处 caller 的“pending”描述；未改任何已验证/已还原函数。无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **45 → 44**（本轮 §82 −1），已还原未验证 **278 → 279**（本轮 +1）。
-- **闭包就绪游戏内容项**：本轮 §82 取走 `0x1CEED` 后，闭包就绪待还原为 CRT/库包装
+- `function-map.csv`：待还原 **44 → 42**（本轮 §83 −2），已还原未验证 **279 → 281**（本轮 +2）。
+- **闭包就绪游戏内容项**：本轮 §83 取走 `0x17AED`/`0x1D51D` 后，闭包就绪待还原为 CRT/库包装
   （`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`），
-  加上仍在册的游戏内容项 `0x31C49`(1511B，u1)、`0x15DF3`(126B，u1)、`0x2CF30`(2269B，u1)、`0x2D80D`(1780B，u1)。
+  加上仍在册的游戏内容项 `0x15DF3`(126B，u1)、`0x31C49`(1511B，u1)、`0x2CF30`(2269B，u1)、`0x2D80D`(1780B，u1)。
   下批按 §1 取 usage 最高的在预算游戏项 `0x15DF3`(u1，126B，真闭包＝自身) 或 `0x31C49`(u1，1511B，属 §2 整闭包可拉)。
 
-> **台账发现**：`0x1CEED` 的 callers `0x1D51D`/`0x1CFF0`（同为 sub_1CFF0 行动菜单族）仍待还原，
-> 故下批若走该族需注意其真闭包含 `0x1AA1D`/`0x1DB65` 等大件（>8 函数，按 §4 跳过）。
+> **台账发现**：`0x1CEED` 的 caller `0x1CFF0`（行动菜单驱动）仍待还原，其真闭包含 `0x1AA1D`/`0x1DB65`
+> 等大件（>8 函数，按 §4 跳过）；另一个 caller `0x1D51D` 已在 §83 还原。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
