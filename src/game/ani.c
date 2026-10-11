@@ -12,10 +12,15 @@
  * `call [ebx+0x5276A]` does.  The opcode space of the format is 0..9.
  */
 #include "ani.h"
+#include "guest_mem.h"
+#include "kbd.h"
+#include "res.h"
+#include "svc.h"
 
-#include "../include/fd2_globals.h"
+#include "fd2_game.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 /* ---- ESI-as-cursor byte/word readers (the original lodsb/lodsw) ---- */
@@ -202,4 +207,52 @@ void ani_target_set(uint16_t size, void *screen, void *palette)
     word_52760  = size;
     dword_52762 = (uint32_t)(uintptr_t)screen;
     dword_52766 = (uint32_t)(uintptr_t)palette;
+}
+
+/* 0x20421 - play the ANI.DAT container.  See ani.h for the format. */
+int ani_play(int index, int delay_ms, int wait_key)
+{
+    void    *sfx;                             /* FDOTHER.DAT sample bank */
+    void    *palette;                         /* 768-byte RGB palette */
+    void    *scratch;                         /* frame/header scratch */
+    uint8_t  hdr[8];                          /* per-frame 8-byte header */
+    FILE    *fp;
+    int      count;
+    int      i;
+
+    sfx = NULL;
+    kbd_flush();
+    if (index == 1)
+        sfx = res_load(aFdotherDat, NULL, 78);
+    palette = guest_malloc(0x300);
+    scratch = guest_malloc(0xFA00);
+    ani_target_set(0xFA00, (void *)(uintptr_t)0xA0000, palette);
+    fp = fopen(aAniDat, aRb_13);              /* ANI.DAT, rb */
+    fseek(fp, 4L * index + 6, SEEK_SET);
+    fread(scratch, 1, 8, fp);                 /* directory entry */
+    fseek(fp, (long)*(uint32_t *)scratch, SEEK_SET);
+    fread(scratch, 1, 0xAD, fp);              /* container header */
+    count = *(const int16_t *)((const uint8_t *)scratch + 0xA5);
+    for (i = 0; i < count; ++i) {
+        uint16_t n;
+
+        fread(hdr, 1, 8, fp);                 /* {data size, cmd count} */
+        n = *(const uint16_t *)hdr;
+        fread(scratch, 1, n, fp);
+        ani_run_frame(*(const int16_t *)(hdr + 2), scratch);
+        if (index == 1 && i == 0)
+            svc_play_sfx(sfx, 0, 1);
+        j___delay(delay_ms);
+        if (wait_key != 0 && kbd_pending())
+            break;
+        kbd_flush();
+    }
+    guest_free(palette);
+    guest_free(scratch);
+    if (sfx != NULL) {
+        svc_play_sfx(sfx, -1, 1);             /* stop the sample */
+        guest_free(sfx);
+    }
+    fclose(fp);
+    return 0;
 }

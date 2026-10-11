@@ -709,6 +709,14 @@
 0x36FD3 sub_36FD3 game/ani.h
 0x36FF4 sub_36FF4 game/ani.h
 
+# 0x20421 - ANI.DAT container player: seeks to the container's directory entry
+# (4*index+6), reads the 0xAD-byte header, then for each frame reads an 8-byte
+# {size, command count} header, reads `size` bytes and runs the funcs_37012
+# command stream onto 0xA0000.  Index 1 plays FDOTHER.DAT sample 78 on the
+# first frame.  The frame count is the signed word at header+0xA5 (Hex-Rays
+# split it into a false HIWORD/LOWORD pair around the fread result).
+0x20421 sub_20421 game/ani.h
+
 # four-slot save/scenario selector (new module). 0x29AB2 draws the four rows
 # from the 22987-byte FD2.SAV image; 0x29BCB is the selection loop. Both end
 # in shared epilogues (0x28B3C / 0x26A73) that are plain returns.

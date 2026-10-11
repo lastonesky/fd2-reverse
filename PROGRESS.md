@@ -1742,10 +1742,30 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - 返回值：各路径 eax 残留调用结果，唯一 caller `0x18D8C` 不读，C 侧一律返回 0。
 - 无对拍器，标“已还原未验证”。
 
+### 68) ANI.DAT 容器播放器 `0x20421` → `ani_play`（本轮，1 函数）→ `src/game/ani.c/.h`（追加）
+
+闭包就绪游戏头名（`0x3645D`(u4)/`0x2E95B`(u3)/`0x2EBE1`(u3，2291B 超预算)/`0x365DA`(u2)
+均为 CRT/库包装，按既定策略跳过）中，第一个游戏内容项是 §60 建 `ani` 时留下的 ANI.DAT 装载器
+`0x20421`(u5，403B)：`ani_play(index, delay_ms, wait_key)` 打开 ANI.DAT，定位第 `index` 个容器
+（目录项位于 `4*index+6`），读 8 字节目录项取数据偏移，再读 0xAD 字节容器头，帧数 = 头 `+0xA5` 处的
+带符号字；逐帧读 8 字节 `{数据长度, 命令数}` 头、读 `数据长度` 字节后 `ani_run_frame(命令数, 数据)`
+解码到 `0xA0000`；`index==1` 且首帧时从 FDOTHER.DAT 载入采样 78 并 `svc_play_sfx`（片头音）；
+每帧 `j___delay(delay_ms)`，`wait_key` 非零时按键（`kbd_pending`）提前结束；每帧头/尾 `kbd_flush`。
+调色板 0x300 与暂存 0xFA00 走 game 堆（`guest_malloc/guest_free`），函数结束释放（含提前 break 路径）。
+
+**陷阱 / 伪代码伪影**：
+- **`HIWORD/LOWORD` 伪影**：Hex-Rays 把帧数读成 `HIWORD(v5)=fread(...)>>16; LOWORD(v5)=*(WORD*)(v3+165)`，
+  机器实为 `mov ax,[esi+0xa5]; mov [esp+0x10],eax`（后续 `movsx`）——C 侧直接 `*(int16_t*)(scratch+0xA5)`。
+- **`kbd_flush` 先于分配**：机器先 `kbd_flush` 再 malloc 两缓冲区；C 侧把分配放在 flush/资源载入之后以保顺序。
+- **`a3 != 0 && kbd_pending()` 才 break**：`wait_key==0` 时永不因键中断（`kbd_pending`=0x10620、`kbd_flush`=0x4E381）。
+- **末尾 `jmp 0x19518`**：共享尾声，即 plain return；caller 不读返回值，C 返回 0。
+- **chkstk**：`push 0x38; call 0x3702F` 丢弃。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **74 → 73**（本轮 §67 −1），已还原未验证 **249 → 250**（本轮 +1）。
+- `function-map.csv`：待还原 **73 → 72**（本轮 §68 −1），已还原未验证 **250 → 251**（本轮 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1852,6 +1872,9 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 下一闭包就绪游戏头名仍为 `0x1B1E7`(u1)/`0x1BBDC`(u1)/`0x2000A`(u1)/`0x2872B`(u1) 等大驱动器。
 本轮 §67 拉出 `0x190AC`(u1，记录交互驱动器 `0x18D8C` 的 `else` 动作处理器，新建 `map_event`)；
 其后闭包就绪游戏头名余 `0x1B1E7`(u1，party_panel 编排者，仍因内层读未初始化 ebp 暂跳)/`0x1BBDC`(u1，地图行动交互驱动)
+及库包装 `0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`（按既定策略跳过）、`0x2EBE1`(u3，2291B 超预算)。
+本轮 §68 拉出 `0x190AC` 留下的闭包就绪游戏头名 `0x20421`(u5，403B，§60 建 `ani` 时留下的 ANI.DAT
+容器播放器，追加 `ani`)；其后剩余闭包就绪游戏头名仍为 `0x1B1E7`(u1，内层读未初始化 ebp 暂跳)/`0x1BBDC`(u1)
 及库包装 `0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`（按既定策略跳过）、`0x2EBE1`(u3，2291B 超预算)。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是

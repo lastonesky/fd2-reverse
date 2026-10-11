@@ -1,7 +1,9 @@
-/* ani.h - ANI.DAT animation-frame command decoder (original 0x36FD3 .. 0x36FF4).
+/* ani.h - ANI.DAT animation-frame command decoder + container player
+ * (original 0x36FD3 .. 0x36FF4, 0x20421).
  *
- * 0x20421 plays the ANI.DAT container: for every frame it mallocs a 768-byte
- * palette, binds the two output buffers and runs a short command stream.
+ * 0x20421 plays the ANI.DAT container (see ani_play below): for every frame
+ * it mallocs a 768-byte palette, binds the two output buffers and runs a
+ * short command stream.
  * The decoder itself is a ten-entry dispatch table (funcs_37012, the dword
  * table at 0x5276A whose entries are the 0x36E3D..0x36FAC family):
  *
@@ -40,6 +42,14 @@ void ani_target_set(uint16_t size, void *screen, void *palette);
 
 /* 0x36FF4 - run `count` commands from `cmds` through the funcs_37012 table. */
 void ani_run_frame(short count, const unsigned char *cmds);
+
+/* 0x20421 - play animation `index` of ANI.DAT on the VGA frame buffer
+ * (0xA0000).  Each frame is `delay_ms` apart; when `wait_key` is set the
+ * loop also stops on a keypress ("skip animation").  Index 1 additionally
+ * plays FDOTHER.DAT sample 78 on the first frame (an intro sting).  Allocates
+ * its palette (0x300) and frame scratch (0xFA00) from the game heap and
+ * releases them before returning. */
+int ani_play(int index, int delay_ms, int wait_key);
 
 /* funcs_37012 handlers; each reads its operands from *sp and advances *sp. */
 void ani_pal_fill(const unsigned char **sp);      /* 0x36E3D */
