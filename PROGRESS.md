@@ -28,6 +28,70 @@
   `analysis/reloc_suspects.csv`，详见 uncertainties §3.7）。
 - 工具链事实：本机 bash 无 gcc，**WSL gcc 14.2** 可用；IDA MCP 断连待重建。
 
+## 0-D. P0 主状态机链：**核心三件已还原（本轮完结）**
+
+**已还原（`src/game/scene_core.c/.h`）**
+
+| 原址 | 新名 | 内容 | 验证 |
+|---|---|---|---|
+| `0x25EBB` | `scenario_menu` | 新游戏/读档/存档三分支；FD2.SAV 22987B → `util_deobfuscate` → 槽位循环（2600B 步长→队伍表 0xA00 + 9 字节头部）→ `scene_apply_state` | 双 profile `-Werror` 通过；**未动态验证** |
+| `0x117E7` | `scene_event_tick` | 内层每 tick：行动者轮换 / 四方向步进 / 确认→记录选择→`funcs_1197B[state]`+`funcs_1199C[0x51A8F]` | 同上 |
+| `0x26152` | `scene_apply_state` | 释放 5 个场景缓冲（含 IDA 短名 `p`/`buf`=0x53A55/0x53A61，已模块内别名化）→ 按队伍重载 FDICON → 分支 A（`byte_523E7[state]!=0`：地图流程）／分支 B（3 字节表 `{0x0B,0x3D,0x3E}` 选背景 + INT 16h AH=10h 扫描码交互循环 + tick 帧动画 + 热键表 `sub_4E809(state)[1]/[2]`） | 同上，**含离线反汇编逐条核对** |
+
+- 新增**离线反汇编链路**（IDA 通道断连期间的关键手段）：`analysis/seg_cseg01.bin` +
+  `objdump -D -b binary -mi386 -Mintel --adjust-vma=0x26152` → 解决了伪代码 4 处歧义
+  （局部 3 字节表源自 0x52405、old-buffer 恒 0、`__PAIR64__`=两次字节比较、返回值 `dword_53F4A != 2`）。
+- 新增**原型覆盖机制**（`analysis/prototype_overrides.csv`）：`sub_1F894`/`sub_11AA8`→`int(void)`。
+- 生成器修复：字符串标签判据统一（影响 `aRb_0`/`aFd2Sav_4` 等）。
+- 回归：boot/res/scene_core + 生成源，**双 profile `-Werror` 全绿**；表覆盖已按“首个非法槽即表尾”重算。
+- `function-map.csv`：待还原 316→**313**，已还原未验证 7→**10**。
+
+**表覆盖（真实表长）**
+
+| 表 | 表长 | 去重 | 已验证 | 待还原 |
+|---|---|---|---|---|
+| `funcs_1197B` | 30 | 18 | 18 | 0 |
+| `funcs_1199C` | 90 | 90 | 90 | 0 |
+| `funcs_25E3A` | 30 | 28 | 18 | **10** |
+| `funcs_25E23` | 30* | ~25 | 6 | **24** |
+| `funcs_1541F` | 28 | 27 | 0 | **27** |
+| `funcs_30469` | 11 | 10 | 9 | **2** |
+| `funcs_37012` | 10 | 10 | 0 | **10** |
+
+\* 首个非法槽规则给 30；RE_MAP 记 25 项 ⇒ 尾部几槽疑为邻接数据（待核）。
+
+**下一批**：`funcs_25E23` 余 24 项（scene_state_* 模板批量）→ `funcs_25E3A` 余 10 项（`0x3231B/32D18/32E8C/32FB2/33049/336A0/33AF1/33C9D/33DBA/33E3C`）→ 启动 309 资产迁入。
+
+## 0-E. `funcs_25E23` handler 批量还原：batch 1（本轮）
+
+**已还原**（`src/game/scene_states.c/.h`，每一条都逐指令核对了离线反汇编）：
+
+| 索引 | 原址 | 新名 | 行为 |
+|---|---|---|---|
+| [5] | `0x23296` | `scene_state_05` | `unit_add(13); 0x10B4E(3); 0x135DD(5,14); 0x1366A(27); vm(6); refresh; ++state` |
+| [8] | `0x235BC` | `scene_state_08` | `rec[11].+5=0; 0x135DD(6,1); 0x10B4E(4); 0x1366A(36); vm(4); refresh; ++state` |
+| [24] | `0x24DF2` | `scene_state_24` | `vm(6); 0x135DD(4,16); 0x10B4E(2); 0x1366A(75); vm(7); unit_add(26); refresh; unit_add(29); ++state` |
+| [27] | `0x25464` | `scene_state_27` | 空体：`vm(7); refresh; ++state` |
+
+**共享尾声解码表（离线反汇编，全部已解）**
+
+| 尾声地址 | 语义 | 归属 |
+|---|---|---|
+| `0x231C6` / `0x231DF` | `vm_run(stream, sub, 0xA0000,320,205,76,74,19,1) + unit_refresh + ++state`（sub 由跳转者压栈；0x231DD 的 `push 4` 属 sub_231BC 自身） | sub_231BC 体内 |
+| `0x231F2` | `++state; retn` | sub_231BC 体内 |
+| `0x2327D` / `0x2328A` | `unit_add(arg)+refresh+++state` / `++state`（**是 sub_230F2 自己的尾声**） | sub_230F2 体内 |
+| `0x237C8` | `unit_add(arg)+++state` | sub_23790 体内 |
+| `0x239AC` / `0x239B1` | `refresh+++state` / `++state` | sub_239BD 体内 |
+| `0x15487` / `0x1B5EA` | 其他模块的纯 epilogue（`return <eax>`） | 外部函数 |
+
+**已备好但待写**（需 `scene_place_records`（0x233C6，已验证资产）先迁入）：
+idx [2] `sub_230F2`（三张 7 字节表 0x520BA/C1/C8 = xs{8,7,9,6,10,8,8}/ys{3,3,3,2,2,4,1}/kind{2,2,2,3,1,2,0}；`rec_flag(6)` 分支→vm6 或 place_records(...,0,6,0,0,0,0,2)+vm7）、
+idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}；place_records(...,0,6,41,12,8,0,origin=0x400000006)+vm9+unit_add(10)+refresh+ ++state）。
+
+**余量**：`funcs_25E23` 待还原 24→**20**；`function-map.csv` 已更新。
+
+---
+
 ## 0-C. 下一步（按 module-map P0 执行）
 
 1. **P0 主状态机链**：`sub_25EBB`/`sub_117E7`/`sub_26152`/`sub_22E5C` + `funcs_25E23` 剩余 ~19 项

@@ -1,0 +1,3 @@
+addr,name,signature,reason
+0x1F894,sub_1F894,"int (void)","唯一调用点 sub_25EBB(0x25EC8) 无压栈且无 add esp ⇒ 真实实参 0；函数体内对 [esp+4] 的读取疑为 IDA 误判（还原 sub_1F894 本体时须复核）"
+0x11AA8,sub_11AA8,"int (void)","唯一调用点 sub_117E7 无压栈 ⇒ 真实实参 0（伪代码 a1 为栈槽伪像）"

@@ -9,3 +9,13 @@
 0x3aa72 AIL_install_MDI_INI lib/ail.h
 0x392d0 AIL_allocate_sample_handle lib/ail.h
 0x3aca3 AIL_allocate_sequence_handle lib/ail.h
+
+# P0 scene core
+0x25EBB sub_25EBB game/scene_core.h
+0x117E7 sub_117E7 game/scene_core.h
+0x26152 sub_26152 game/scene_core.h
+# funcs_25E23 handlers, batch 1
+0x23296 sub_23296 game/scene_states.h
+0x235BC sub_235BC game/scene_states.h
+0x24DF2 sub_24DF2 game/scene_states.h
+0x25464 sub_25464 game/scene_states.h
