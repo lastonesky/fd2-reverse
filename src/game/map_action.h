@@ -38,6 +38,22 @@
  *   0x22BE1 / 0x22CBF / 0x22E41  entries 22/26/27: charge index 22/26/27 and
  *                        damage effect byte 39/37/38 respectively
  *
+ *   0x214AD               entry 9: charge cost 9, then resolve action 9 on the
+ *                        first listed record only and queue the dealt number
+ *
+ *   0x21548               shared body of the entries 10/11/12: decode the
+ *                        shape library, play the three-frame map zoom, cycle
+ *                        the four scratch frames for 60 ticks, then damage
+ *                        the listed records
+ *   0x21527 / 0x2185F / 0x21A9E  entries 10/11/12: run the map-zoom damage
+ *                        body with index 10/11/12 (11/12 first play a SFX and
+ *                        reveal a cell portrait)
+ *   0x21B18               shared body of the entries 13/14/15/16/24: charge
+ *                        the cost, then heal each listed record by the action
+ *                        table amount and queue the recovered number
+ *   0x21AD9               entry 13: SFX + portrait zoom-reveal, then the
+ *                        heal-by-action body with index 13
+ *
  * ABI = cdecl, arguments decoded from the pushes (the offline disassembly is
  * the authority).  Record fields index the 80-byte table dword_53A45; the
  * shared epilogues `jmp 0x1317D` / `jmp 0x22BBE` are plain returns here.  Hand
@@ -158,6 +174,37 @@ int map_action_anim_resolve(int a1, int count, const uint8_t *list, int bank);
  * party-icon passes with the fixed bank 13, then heal each listed record by
  * `amount` and queue the recovered number with glyph base 105. */
 int map_action_heal_list(int a1, int count, const uint8_t *list, int amount);
+
+/* 0x21548 - decode the current shape library, build the 64x64 source-base
+ * table over it, play the three-frame map zoom while redrawing the unflagged
+ * portraits, cycle the four scratch frames into 0xA0504 for 60 ticks (SFX
+ * bank-13 sample 2 every 6th tick for the first 43), then resolve action
+ * `table_idx` on each listed record and pop the queued numbers.  Shared body
+ * of the funcs_1541F entries 10/11/12 (see map_action_entry10/11/12). */
+int map_action_zoom_resolve(int a1, int table_idx, int count,
+                            const uint8_t *list);
+
+/* 0x21527 - funcs_1541F entry 10: run the map-zoom damage body with index 10. */
+int map_action_entry10(int a1, int count, const uint8_t *list);
+
+/* 0x2185F / 0x21A9E - funcs_1541F entries 11/12: play SFX bank-13 sample 2 and
+ * reveal the cell portrait (radius 15/30, step 10/16), then run the map-zoom
+ * damage body with index 11/12. */
+int map_action_entry11(int a1, int count, const uint8_t *list);
+int map_action_entry12(int a1, int count, const uint8_t *list);
+
+/* 0x21B18 - clear the status-queue flag, draw both party-icon passes with
+ * shape bank `table_idx`, charge cost `table_idx` via rec_sub_table5, then
+ * heal each listed record by the amount read from the action's tbl_619FD
+ * entry and queue the recovered number with glyph base 105.  Shared body of
+ * the funcs_1541F entries 13/14/15/16/24. */
+int map_action_heal_action_list(int a1, int table_idx, int count,
+                                const uint8_t *list);
+
+/* 0x21AD9 - funcs_1541F entry 13: play SFX bank-13 sample 11 and zoom-reveal
+ * the portrait (radius 1, step 2), then run the heal-by-action body with index
+ * 13. */
+int map_action_entry13(int a1, int count, const uint8_t *list);
 
 /* 0x20C6F - the map action router.  Reads the item entry selected by
  * rec_field_byte(actor, slot) through the 0x4E8BC accessor; its byte +13 is

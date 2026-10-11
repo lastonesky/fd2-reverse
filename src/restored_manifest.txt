@@ -642,3 +642,15 @@
 # the map action router itself (dispatches 0x21082..0x22E41 by action code; its
 # tail collects the party +49 scripts and runs the 0x1AA1D interpreter).
 0x20C6F sub_20C6F game/map_action.h
+
+# funcs_1541F entries 10/11/12/13 + their shared bodies.  0x21548 is the body
+# of entries 10/11/12; 0x21B18 of entries 13/14/15/16/24.  The 0x2185F/0x21A9E
+# tails jump into 0x2153b inside 0x21527 and 0x21B99/0x2211C/0x22153 would jump
+# into 0x21b0b inside 0x21B18 (not calls).  0x21B18 ends on the shared 0x21190
+# epilogue inside 0x2111A (false callee).
+0x21548 sub_21548 game/map_action.h
+0x21527 sub_21527 game/map_action.h
+0x2185F sub_2185F game/map_action.h
+0x21A9E sub_21A9E game/map_action.h
+0x21B18 sub_21B18 game/map_action.h
+0x21AD9 sub_21AD9 game/map_action.h

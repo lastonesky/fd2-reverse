@@ -27,6 +27,10 @@
 #include "fd2_game.h"
 #include "map_action.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #define REC_STRIDE 80
 
 /* 0x21082 - add `value` to a record field, show it and drop a cost slot. */
@@ -637,4 +641,173 @@ tail:
     map_units_animate();
     ev_script_run(actor, steps, (int)(intptr_t)scripts);
     return 0;
+}
+
+/* 0x21548 - shared body of the funcs_1541F entries 10/11/12.  Decode the
+ * current shape library into a raw 24x24 bitmap library, build the 64x64
+ * source-base table over it, then play the three-frame map zoom (fixed-point
+ * centre and zoom taken from the 0x52096 / 0x520A2 / 0x520AE dword tables)
+ * while re-drawing the unflagged record portraits, cycle the four scratch
+ * frames into 0xA0504 for 60 ticks (playing SFX bank-13 sample 2 whenever
+ * n < 43 and n % 6 == 0), and finally resolve action `table_idx` on every
+ * listed record (queueing the dealt number, or the idle cursor sprite on a
+ * miss), refresh the view and pop the status numbers.  `table_idx` is 10/11/12
+ * for the three entries.  The Watcom stack probe (`push 0x6C; call 0x3702F`)
+ * is dropped; the OOM path is `printf(aOutOfMemoryAtE); exit`). */
+int map_action_zoom_resolve(int a1, int table_idx, int count,
+                            const uint8_t *list)
+{
+    uint32_t xbase[3];
+    uint32_t ybase[3];
+    uint32_t zoom[3];
+    uint8_t *saved_shape;
+    uint8_t *frame;
+    uint8_t *scratch0;
+    uint8_t *scratch1;
+    uint8_t *scratch2;
+    uint8_t *pool[4];
+    uint32_t *cells;
+    int      i, j, k, m, n;
+
+    /* 0x52096/0x520A2/0x520AE: the x base, y base and zoom of the three key
+     * frames (each three dwords, copied before the library is rebuilt). */
+    memcpy(xbase, &fd2_data1[0x2096], sizeof xbase);
+    memcpy(ybase, &fd2_data1[0x20A2], sizeof ybase);
+    memcpy(zoom,  &fd2_data1[0x20AE], sizeof zoom);
+
+    saved_shape = dword_53A5D;
+    dword_53A5D  = map_shape_lib_decode();
+    dword_53EC4  = 0;
+    rec_sub_table5(a1, table_idx);
+
+    scratch0 = (uint8_t *)guest_malloc(0xFA00);
+    scratch1 = (uint8_t *)guest_malloc(0x25680);
+    scratch2 = (uint8_t *)guest_malloc(0x25680);
+    if (scratch0 == NULL || scratch1 == NULL || scratch2 == NULL) {
+        /* 0x215e7: push aOutOfMemoryAtE; call printf; push 0; jmp exit. */
+        printf("%s", aOutOfMemoryAtE);
+        exit(0);
+    }
+
+    frame    = dword_53A49;
+    pool[0]  = frame;
+    pool[1]  = scratch1;
+    pool[2]  = scratch2;
+    pool[3]  = scratch1;   /* the machine's 4th slot aliases the 2nd buffer */
+
+    /* 64x64 table of 24x24 source bases over the decoded shape library. */
+    cells = (uint32_t *)guest_malloc(0x4000);
+    for (i = 0; i < (int)dword_53AC5; ++i) {
+        for (j = 0; j < (int)dword_53AC1; ++j) {
+            uint8_t cell[8];
+
+            map_cell_info(j, i, cell);
+            cells[64 * i + j] =
+                (uint32_t)(uintptr_t)(dword_53A5D + 6 +
+                                      576u * *(uint16_t *)(void *)cell);
+        }
+    }
+
+    for (k = 0; k < 3; ++k) {
+        dword_53A49 = scratch0;
+        map_zoom_draw((int)(xbase[k] + 3072u * (uint32_t)dword_53AA9
+                            + 1536u * (uint32_t)dword_51A87),
+                      (int)(ybase[k] + 3072u * (uint32_t)dword_53AAD
+                            + 1536u * (uint32_t)dword_51A8B),
+                      (int)zoom[k], cells);
+        gfx_copy_rows(pool[k] + 0x8088, 456, scratch0 + 0x504, 320, 312, 192);
+        dword_53A49 = pool[k];
+        for (m = 0; m < dword_53BEB; ++m)
+            if ((((uint8_t *)dword_53A45)[REC_STRIDE * m + 5] & 1) == 0)
+                dlg_portrait_draw(m);
+    }
+
+    for (n = 0; n < 60; ++n) {
+        if (n < 43 && n % 6 == 0)
+            svc_play_sfx((const void *)(uintptr_t)dword_53B13, 13, 1);
+        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, pool[n % 4] + 0x8088,
+                      456, 312, 192);
+        j___delay(10);
+    }
+
+    guest_free(scratch0);
+    guest_free(scratch1);
+    guest_free(scratch2);
+    dword_53A49 = frame;
+    guest_free(dword_53A5D);
+    dword_53A5D = saved_shape;
+    map_view_update(0);
+
+    for (i = 0; i < count; ++i) {
+        int dmg = unit_action_damage(list[i], table_idx);
+
+        if (dmg != 0)
+            map_enqueue_status(dmg, 94, list[i]);
+        else
+            ev4_1E1DC(list[i]);
+    }
+
+    map_view_update(0);
+    map_draw_status_popups();
+    return 0;
+}
+
+/* 0x21527 - funcs_1541F entry 10: run the map-zoom damage body with index 10. */
+int map_action_entry10(int a1, int count, const uint8_t *list)
+{
+    return map_action_zoom_resolve(a1, 10, count, list);
+}
+
+/* 0x2185F - funcs_1541F entry 11: play SFX bank-13 sample 2 and reveal the
+ * cell portrait at radius 15, step 10, then run the map-zoom damage body with
+ * index 11.  The tail jumps into 0x2153b inside 0x21527 (not a call). */
+int map_action_entry11(int a1, int count, const uint8_t *list)
+{
+    svc_play_sfx((const void *)(uintptr_t)dword_53B13, 2, 1);
+    portrait_reveal_cell(a1, 15, 10);
+    return map_action_zoom_resolve(a1, 11, count, list);
+}
+
+/* 0x21A9E - funcs_1541F entry 12: as entry 11 but radius 30, step 16, index 12. */
+int map_action_entry12(int a1, int count, const uint8_t *list)
+{
+    svc_play_sfx((const void *)(uintptr_t)dword_53B13, 2, 1);
+    portrait_reveal_cell(a1, 30, 16);
+    return map_action_zoom_resolve(a1, 12, count, list);
+}
+
+/* 0x21B18 - shared body of the funcs_1541F entries 13/14/15/16/24.  Clear the
+ * status-queue flag, draw both party-icon passes with shape bank `table_idx`,
+ * charge cost `table_idx` via rec_sub_table5, then heal each listed record by
+ * the amount read from the action's tbl_619FD entry (unit_heal_by_action) and
+ * queue the recovered number with glyph base 105.  Ends on the shared 0x21190
+ * epilogue (map_view_update(0) + map_draw_status_popups) inside 0x2111A,
+ * which IDA records as a false callee. */
+int map_action_heal_action_list(int a1, int table_idx, int count,
+                                const uint8_t *list)
+{
+    int i;
+
+    dword_53EC4 = 0;
+    map_draw_party_icons_anim(a1, table_idx, count, list);
+    map_draw_party_icons(a1, table_idx, count, list);
+    rec_sub_table5(a1, table_idx);
+
+    for (i = 0; i < count; ++i)
+        map_enqueue_status(unit_heal_by_action(list[i], table_idx), 105,
+                           list[i]);
+
+    map_view_update(0);
+    map_draw_status_popups();
+    return 0;
+}
+
+/* 0x21AD9 - funcs_1541F entry 13: play SFX bank-13 sample 11 and zoom-reveal
+ * the portrait (radius 1, step 2), then run the heal-by-action body with index
+ * 13.  The tail jumps into 0x21b0b inside 0x21B18 (not a call). */
+int map_action_entry13(int a1, int count, const uint8_t *list)
+{
+    svc_play_sfx((const void *)(uintptr_t)dword_53B13, 11, 1);
+    portrait_reveal_zoom(1, 2);
+    return map_action_heal_action_list(a1, 13, count, list);
 }

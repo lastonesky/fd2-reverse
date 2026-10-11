@@ -1389,10 +1389,52 @@ map_units_animate(); ev_script_run(actor,steps,buf)`。
 - ABI cdecl `(actor, slot, count, list)`（调用点 0x152F0/0x1BE45 依次压 `ebp, dword_53Cx, count, &buf`）。
 - 无对拍器，标“已还原未验证”。
 
+### 54) `funcs_1541F` 条目 10/11/12/13 + 共享体（本轮，6 函数）→ `src/game/map_action.c/.h`（追加）
+
+拉出闭包就绪的同表头名 `0x21527`(u3)/`0x21AD9`(u3) 及其两个共享体 `0x21548`/`0x21B18`，
+连同两个相邻条目包装 `0x2185F`/`0x21A9E`（同 caller `sub_15311`/`sub_1CFF0`，且 `0x2185F/0x21A9E`
+的尾跳就落在 `0x21527` 体内）。本批后 `funcs_1541F` 条目 10..13 闭合（余 11→12 已含、
+14/15/16/24 待 `0x21B99/0x2211C/0x22153`，均已因 `0x21B18` 就绪而闭包就绪）。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x21548` | `map_action_zoom_resolve` | 条目 10/11/12 共享体：`map_shape_lib_decode()` 重建 `dword_53A5D` → 建 64×64 源基址表
+  （`cells[64*i+j]=dword_53A5D+6+576*cell[0]`）→ 3 帧 `map_zoom_draw`（x/y/zoom 表 `0x52096/0x520A2/0x520AE`，
+  x 基 `+3072*dword_53AA9+1536*dword_51A87`、y 基 `+3072*dword_53AAD+1536*dword_51A8B`）逐帧把
+  `scratch0+0x504` 拷进 `pool[k]+0x8088` 并重画未标记记录肖像 → 60 tick 把 `pool[n%4]+0x8088` 发到
+  `0xA0504`（`n<43 && n%6==0` 时 `svc_play_sfx(dword_53B13,13,1)`）→ 释放暂存、还原 `dword_53A5D` →
+  `map_view_update(0)` → 逐记录 `unit_action_damage(list[i],table_idx)` 命中 `map_enqueue_status(dmg,94,·)`
+  否则 `ev4_1E1DC` → 尾部 `map_view_update(0)`+`map_draw_status_popups()` |
+| `0x21527` | `map_action_entry10` | 条目 10：`map_action_zoom_resolve(a1,10,count,list)` |
+| `0x2185F` | `map_action_entry11` | 条目 11：`svc_play_sfx(dword_53B13,2,1)` + `portrait_reveal_cell(a1,15,10)` → `map_action_zoom_resolve(a1,11,…)` |
+| `0x21A9E` | `map_action_entry12` | 条目 12：同上半径 30/步 16，索引 12 |
+| `0x21B18` | `map_action_heal_action_list` | 条目 13/14/15/16/24 共享体：`dword_53EC4=0` → `map_draw_party_icons_anim/_icons(a1,table_idx,count,list)` →
+  `rec_sub_table5(a1,table_idx)` → 逐记录 `map_enqueue_status(unit_heal_by_action(list[i],table_idx),105,list[i])` →
+  落在 `0x2111A` 体内的共享尾声 `0x21190`（`map_view_update(0)`+`map_draw_status_popups()`） |
+| `0x21AD9` | `map_action_entry13` | 条目 13：`svc_play_sfx(dword_53B13,11,1)` + `portrait_reveal_zoom(1,2)` → `map_action_heal_action_list(a1,13,…)` |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声 / 共享体内跳（伪 callee）**：`0x2185F/0x21A9E` 尾 `jmp 0x2153b`（`0x21527` 体内
+  “`push 0xa; push a1; call 0x21548`”那一条）⇒ 各自调用共享体；`0x21527` 只是薄包装。`0x21AD9` 尾
+  `jmp 0x21b0b` 属自身线程（对应 `0x21B18` 的 `push a1; call`）；`0x21B18` 尾 `jmp 0x21190` 落在
+  `0x2111A` 体内共享尾声 ⇒ 普通 `return`。`function-map` 把 `0x21527`/`0x21AD9` 记为 `0x2185F` 等的
+  callee，实为共享代码段（非调用）。
+- **OOM 尾不同形**：`0x21548` 的失败路径是 `printf(aOutOfMemoryAtE); exit`（`push 0`，无文本模式切换），
+  与 `scenario_load`/`map_shape` 的 `exit(1)` 不同，C 侧照机器写 `exit(0)`。
+- **4 槽暂存池的第 4 项别名**：`0x21548` 机器栈槽 `[esp]/[esp+4]/[esp+8]/[esp+0xc]` = `{frame, scratch_p,
+  scratch_v18, scratch_p}`（第 3 项与第 1 项同指针），故 `pool[n%4]` 第 3 槽复用 `scratch1`；C 侧照此写。
+- **未对齐 dword 表**：`0x52096/0x520A2/0x520AE` 处 9 个 dword（地址非 4 对齐）用 `memcpy` 取，避免
+  未对齐指针解引用。
+- **ABI（chkstk 骗过反编译器）**：`0x21548` 的 Hex-Rays 局部 `v4..v24` 是真实实参/暂存；实参由
+  `mov ds:0x53a49` 与压栈序核定为 `(a1, table_idx, count, list)`；`0x21B18` 同理。
+- **返回值**：两共享体尾声 eax 为 `map_draw_status_popups` 残留，dispatch 经函数指针调用不读，C 侧返回 0。
+- **chkstk**：六者皆 `push size; call 0x3702F`（不分配帧），丢弃；`malloc/free` → `guest_malloc/guest_free`。
+- 无对拍器，标“已还原未验证”。下一 `funcs_1541F` 候选：条目 14/15/16/24（`0x21B99`/`0x2211C`/`0x22153`）。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **113 → 112**（本轮 §53 −1），已还原未验证 **210 → 211**（本轮 +1）。
+- `function-map.csv`：待还原 **112 → 106**（本轮 §54 −6），已还原未验证 **211 → 217**（本轮 +6）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
