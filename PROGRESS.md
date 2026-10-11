@@ -2547,9 +2547,36 @@ callee 已解（真闭包＝自身；`0x3702F` 是 chkstk 探针）。函数体�
 - **记录地址**：`mov edx,[idx]; shl eax,2; lea ebx,[edx+eax] = idx*5; shl ebx,4 = idx*80`，即 `REC_STRIDE` 步长；`+38`＝偏移 `0x26`，机器用 `movzx`+`test` 判零，C 侧同为 `== 0`。
 - **归属**：追加进既有 `party_change_seq`（不新增头、无需改伞含——本模块头已在伞含；调用者 `0x117E7` 仍以 IDA 名 `sub_13565` 引用，按既有约定不在新头加 `#define` 别名）；无对拍器，标“已还原未验证”。
 
+### 101) 记录交互动画驱动器 + 帧泵 `0x18890`/`0x18B84` → `map_record_engage`/`map_wait_anim`（本轮，2 函数，§2 最小闭包）→ `src/game/map_record_engage.c/.h`（新建）
+
+本轮闭包就绪游戏内容项已空——§100 取走 `0x13565` 后待还原只剩 CRT/库包装（`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，
+既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）。故按 §2 取“最小传递待还原闭包”者：`0x18890`(u1，756B) 的闭包＝
+`{0x18890, 0x18B84}`(共 989B ≤ §1 预算)，`0x18B84` 是 `0x18890` 的唯一待还原 callee。函数体：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x18890` | `map_record_engage(rec)` | 地图屏“确认选中记录”驱动器（唯一调用者＝事件 tick `0x117E7`）。① `dword_53C53=0`/`dword_51A8F=255`，复制 `0x53F12` 的 4-dword 补丁数组 → `dirbuf`；`size=rec[59]`、`profile=rec[32]`（`rec_skip`→19，`rec[7]==28`→16）。② `cost_row=0x4E8A5(profile)`（表 `0x61646` 步长 20）→ `guest_malloc(size)` → `unit_mark_nearby(1)` → `path_mark(cost_row,MAP_X,MAP_Y,size,dword_53A51,dword_53A69)` → `map_exclude_record_cells(rec,1)`。③ `map_wait_anim(rec)`（现帧泵）→ `map_pick_record(4,0,0)` → `util_fix_records`；`==-1` 则 `map_slide_view(MAP_X,MAP_Y)`＋`free`＋返回 1。④ 否则 `unit_mark_nearby(1)` → `path_find(cost_row,low,high,size,p,MAP_X,MAP_Y,0,…)` → `dword_51A83=0`/`map_slide_view`/`=1`：`n==0` 走 `map_record_interact(rec,dirbuf,0)` 环、`n==255` 直接返回 1，`n` 其余 `map_scroll_path(rec,p,n)`＋`dlg_portrait_clear()`＋（`rec[7]`∉{18,19,34} 置 `dirbuf[1]=1`）＋`map_record_interact(rec,dirbuf,1)` 环；成功即 `map_scroll_cell_tag(rec[0],rec[1],1)`＋`free`＋返回。`dword_53C53!=0`（中止）落公共尾 `rec_flag_or80(rec)`＋`map_scroll_cell_tag`＋返回 `dword_53C53`。 |
+| `0x18B84` | `map_wait_anim(rec)` | `0x18890` 取记录前的共享帧泵：`while(!kbd_pending())` 每轮 `pal_anim_step()`，BIOS tick 变化时再 `pal_anim_step()`→`anim_frame_step()`→`map_render_view(dword_53A49+0x8088,456,13,8,qword_53AA9)`→`map_reveal_cursor()`→`dlg_portraits_refresh()`→`ui_status_panel(dword_53A49+0x8088+width,456,rec)`→`map_draw_cursor`→`gfx_copy_rows(0xA0504,320,dword_53A49+0x8088,456,0x138,192)`；`width= dword_53AB9>=7 ? 2285 : 2436`。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声＝伪 callee**：`0x18B84` 尾 `jmp 0x18B7F` 落在 `0x18890` 函数体内的公共尾声（`pop ebp/edi/esi/ebx; ret`，两函数的帧共 4 个 `push`），
+  是普通 `return`，故 map 把 `0x18890` 列为 `0x18B84` 的 callee 属伪依赖；也正因此 `0x18B84` 实为 `void`（Hex-Rays 的 `int`＋`JUMPOUT(0x18B7F)` 是伪影），真闭包＝`{0x18890,0x18B84}`。
+- **未初始化寄存器 tick 基线**：`0x18B84` 首次比较的 `esi` 从未写入（首轮与 `[0x46C]` 比较后才在体尾 `movsx esi,WORD[0x46C]`），
+  按 §6 先例建模为 `0`（首轮即重绘），C 侧 `int baseline = 0` 并注释。
+- **255 路径泄漏**：`path_find` 返回 255（无路）时 `0x18890` 直接 `return 1` 而不 `free` 缓冲区——原版即泄漏，C 侧逐字节复现并注释。
+- **状态字节**：`0x13A44`(`map_scroll_cell_tag`) 三调用点的返回值均不读；`rec[0]`/`rec[1]` 为 `movzx` 后的字节，`n==0` 分支回写 `v9[0]=low`/`v9[1]=high` 亦按字节。
+- **chkstk**：`push 0x68; call 0x3702F`（`0x18890`）与 `push 0x2C; call 0x3702F`（`0x18B84`）均不分配帧，丢弃。
+- **BIOS tick 读**：`movsx eax,WORD[0x46C]` 经低存镜像（`dos_lowmem_base`，与 `ev5.c` 一致），C 侧 `BDA_W(0x46C)`。
+- **归属**：新建 `map_record_engage`（`0x18890` 记录交互动画驱动器＋其帧泵）；头加进伞含（排在 `map_record.h` 与 `map_records.h` 之间）；
+  调用者 `0x117E7` 仍以 IDA 名 `sub_18890` 引用，按既有约定不在新头加 `#define` 别名。无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
+- `function-map.csv`：本轮 §101 取走 `0x18890`/`0x18B84`（§2 最小传递待还原闭包），待还原 **19 → 17**（−2），已还原未验证 **304 → 306**（+2）。
+- **闭包就绪游戏内容项**：本轮取走 `0x18890`/`0x18B84` 后，闭包就绪待还原**已无游戏内容项**——只剩 CRT/库包装
+  （`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）；
+  其余待还原游戏内容项均需先解自身闭包：音频簇 `0x16F55`/`0x1728C`/`0x19DF7`(u1，共 2470B，§5 超预算)。
 - `function-map.csv`：待还原 **30 → 28**（本轮 §94 −2），已还原未验证 **293 → 295**（本轮 +2）。
 - `function-map.csv`：待还原 **28 → 25**（本轮 §95 −3），已还原未验证 **295 → 298**（本轮 +3）。
 - `function-map.csv`：待还原 **25 → 24**（本轮 §96 −1），已还原未验证 **298 → 299**（本轮 +1）。

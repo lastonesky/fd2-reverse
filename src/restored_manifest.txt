@@ -1029,3 +1029,16 @@
 # event tick 0x117E7.  The Watcom stack probe (`push 8; call 0x3702F`) is
 # dropped; no differential harness.
 0x13565 sub_13565 game/party_change_seq.h
+
+# 0x18890/0x18B84 - the event tick's "act on the selected map record" driver
+# and the shared animation frame pump it calls before the pick.  0x18890 builds
+# the reachable region around the cursor target, pumps one frame, lets the
+# player pick a record, then traces a path from the picked cell to the latched
+# cursor target, marches the actor (map_scroll_path) and runs the on-map record
+# interaction (map_record_interact) until it settles, returning 0 while the
+# caller's `while (map_record_engage(rec) == 0)` loop keeps pumping.  0x18B84
+# ends by jumping into the shared epilogue at 0x18B7F (inside 0x18890's body) -
+# a plain return, hence the map's false `sub_18890` callee and the `void`
+# signature.  Watcom stack probes dropped; no differential harness.
+0x18890 sub_18890 game/map_record_engage.h
+0x18B84 sub_18B84 game/map_record_engage.h

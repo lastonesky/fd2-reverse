@@ -43,6 +43,7 @@
 #include "map_levelup.h"
 #include "map_move.h"
 #include "map_record.h"
+#include "map_record_engage.h"
 #include "map_records.h"
 #include "map_scroll.h"
 #include "map_shape.h"
