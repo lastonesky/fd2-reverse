@@ -2334,14 +2334,34 @@ CRT/库包装 `0x3645D`(read)/`0x365DA`(int386) 后，游戏头名同为 u1 的�
 - **伪 callee**：仅误挂 `sub_3702F`(chkstk)；真依赖全部已还原（res/rle/rle2/gfx/fade/svc/vm/dlg/bgm/world_load/kbd/util/anim/figure_attack_scroll）。
 - 无对拍器，标“已还原未验证”。
 
+### 92) 收尾演示驱动 `0x31529` → `ending_demo_run`（本轮，1 函数，§5 大单函数条款）→ `src/game/ending_demo.c/.h`（新建）
+
+按 §91 遗留建议、依 playbook §5 的“超预算单函数”例外拉出闭包就绪头名 `0x31529`（1718B，u2）。
+它是 `scene_state_26`(0x250CC) 与 `scene_state_29`(0x25757)（两个“结束/战后”离开态）**无参调用一次后即死循环挂起**
+的收尾演示；真闭包＝自身（其全部 callee 已在册，逐指令核对了离线反汇编 `31529..31bde`）。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x31529` | `ending_demo_run(void)` | 收尾演示：`guest_malloc(0x1F400)` work + `guest_malloc(0xFA00)` screen（screen 机器从不释放）；`res_load(FDOTHER,0,54)`→`res_blit(...,0,screen,320,-1)`→`pal_fade_out`→发屏→`pal_fade_in`→`delay(1000)`→`ani_play(2,100,0)`→`pal_fade_add(0,255,63)`→发屏→`res_blit(...,9,VGA,320,-1)`→64 步 `pal_fade_add(0,255,i)`+`delay(4)`→`delay(2000)`→文本页 `dword_53C03==26 ? msg_show_lines(4,17) : (37,2)/(21,3)/(26,4)/(105,5)/(32,6)`→3 轮淡出→`res_blit(...,12..108,VGA,...)`20ms 步进→发屏→文本页 `==26 ? (21,18)/(24,19)/(26,20) : (45,7)`→`delay(2000)`→40 帧循环（`gfx_copy_rows(work+160,640,screen,…)`+两张带 `res_blit(...,n%4+1/5,work+v21/v20,640,-1)`，`v20+=2`/`v21-=2`/`n<25` 再减 2+回写 VGA）→`memmove(work,screen)`+`res_blit(...,1/5,work,320,-1)`+回写→文本页 `==26 ? (32,21)/(36,22)/(32,23) : (32,8)/(36,9)`→200 帧循环（`memmove(work,screen,0xFA00)`+`res_blit(...,ii%4+1/5,work,320,-1)`+`delay(20)`+回写+`pal_fade_range(0,255,v7)`，`ii>135` 起 `++v7`）→`guest_free(work)`+清 VGA+`figure_showcase_run()`+清 VGA→`bgm_play(-1,1)`+`svc_wait_ticks(50)`→`plate=res_load(FDOTHER,0,60)`+`rle_decode`+`pal_fade_in`+`bgm_play(18,0)`+`svc_wait_ticks(80)`+`pal_fade_out`+清 VGA→`pair0_buf=res_load(...,plate,58)`、`pair1_buf=res_load(...,NULL,57)`→20 次循环：`dword_53A65` 临时设为 `pair1_buf`，按表 0x526E9/0x526FD 覆写记录 0 的 `+6/+7` 与记录 1 的 `+86/+87`（`>=0x4C→0 否则 2`；`+7/+87` 取表字节）、`dword_54133=表0x52711[jj]`，`figure_attack_view(0,1)`+`pal_fade_range(0,255,0)`+`svc_wait_ticks(20)`+`res_blit(pair0_buf,jj,VGA,320,-1)`+`svc_wait_ticks(78)`+`pal_fade_out`+清 VGA→还原 `dword_53A65`→`guest_free(pair1_buf)`+`svc_wait_ticks(50)`→`plate=res_load(...,pair0_buf,59)`+`rle_decode`+`pal_fade_in`+`guest_free(plate)`。 |
+
+**陷阱 / 伪代码伪影**：
+- **ABI/返回**：`int __cdecl()` 系 chkstk 伪影；函数无栈参，出口 eax＝`free()` 返回值（无调用者使用），故 C 取 `void ending_demo_run(void)`。
+- **malloc/memset 立即数伪影**：`malloc(size:&loc_1F400)`＝`0x1F400`；`memset(...,64000)`＝`0xFA00`（320×200 页）。
+- **未释放缓冲**：机器只释放 work(0x1F400)、FDOTHER 57、FDOTHER 59；screen(0xFA00) 与 FDOTHER 60/58 从不释放，C 照原样。
+- **`dword_53A65` 临时指向**：20 循环内先设回原值（机器 `ebp` 保存）、`figure_attack_view` 前设为 FDOTHER 57 缓冲、之后还原。
+- **`dword_53A45` 字段**：循环写记录 0 的 `+6`(kind 0/2)/`+7`(id) 与记录 1 的 `+86`/`+87`（即记录 1 的 +6/+7），阈值 `0x4C`。
+- **三张 20 字节只读表**：0x526E9/0x526FD/0x52711（dseg02，`fd2_data1[0x26E9..]`）；第一张机器另在 200 循环写第 6 个 dword（`v16[5]=ii%4`，死写），C 用 24 字节 `pair0_id[6]` 复现。
+- **伪 callee**：仅误挂 `sub_3702F`(chkstk)；真依赖全部已还原。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **33 → 32**（本轮 §91 −1），已还原未验证 **290 → 291**（本轮 +1）。
-- **闭包就绪游戏内容项**：本轮 §91 取走 `0x31C49` 后，闭包就绪待还原仍无 in-budget 游戏内容项——
+- `function-map.csv`：待还原 **32 → 31**（本轮 §92 −1），已还原未验证 **291 → 292**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §92 取走 `0x31529` 后，闭包就绪待还原已无 in-budget 游戏内容项——
   只剩 CRT/库包装（`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）、伪函数条目
-  （`0x10000`/`0x36B00`），及超预算单函数 `0x31529`(1718B，本轮后真闭包＝自身，其唯一 callee `0x31C49` 已还原)。
-  下批按 §5 取 `0x31529`(1718B)（片头/标题演示驱动，真闭包＝自身；其所有 callee 已在册）。
+  （`0x10000`/`0x36B00`），及超预算单函数 `0x2FF01`(3876B，u2，真闭包含 `0x1C75E`/`0x14EF0` 等大件，>8 函数，按 §4 跳过)。
+  **本区游戏内容待还原项实际已尽**；余下 31 项须待超预算闭包或 CRT/库包装决策。
 
 > **台账发现**：`0x1CEED` 的 caller `0x1CFF0`（行动菜单驱动）仍待还原，其真闭包含 `0x1AA1D`/`0x1DB65`
 > 等大件（>8 函数，按 §4 跳过）；另一个 caller `0x1D51D` 已在 §83 还原。

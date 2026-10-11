@@ -14,6 +14,7 @@
 #include "boot.h"
 #include "box_popup.h"
 #include "dlg.h"
+#include "ending_demo.h"
 #include "ev.h"
 #include "ev2.h"
 #include "ev3.h"

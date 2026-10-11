@@ -931,3 +931,17 @@
 # chkstk artifact and the `jmp 0x2E2A8` exit is a shared epilogue (plain return),
 # both dropped.  No differential harness.
 0x31C49 sub_31C49 game/figure_showcase.h
+
+# 0x31529 - the closing end-of-demo presentation driver, called argument-less
+# by the end-of-demo state handlers scene_state_26 (0x250CC) and scene_state_29
+# (0x25757), which then hang forever.  Decodes FDOTHER.DAT plates 54/60/59 and
+# the FDOTHER 58/57 pair, drives the palette fades, plays ANI.DAT animation 2,
+# the 40- and 200-frame FDOTHER sprite loops, page-steps the ending text via
+# msg_show_lines (dword_53C03 == 26 picks a different page set), runs the party
+# figure showcase and finally walks the two 20-entry portrait tables at
+# 0x526E9/0x526FD, overriding records 0/1's +6/+7 fields and dword_54133 before
+# each figure_attack_view(0, 1).  True closure = itself (all callees already in
+# the manifest); the `int(void)` prototype is a chkstk artifact, 0x3702F is the
+# Watcom stack probe and the returned eax is the free() result, none used.  No
+# differential harness.
+0x31529 sub_31529 game/ending_demo.h
