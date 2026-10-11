@@ -395,6 +395,10 @@ def gen_funcs(protos, restored):
     for addr, name, size, sig in protos:
         if name in CRT_SKIP or name in AIL_BOUNDARY_SKIP or name in CRT_BOUNDARY_SKIP or name in restored:
             continue  # standard header or restored module provides it
+        # Watcom CRT/library internals keep their own header or are mapped to libc;
+        # declaring them here collides with the platform CRT (MSVC _fsopen/unlink/...).
+        if not re.match(r'^(sub_|nullsub_|j_|jpt_|funcs_|unk_|tbl_|str_|asc_|off_|dword_|word_|byte_|AIL_|fd2_)', name):
+            continue
         if '@' in name:
             out.append('/* %s @ %s : %s  <- MANUAL (non-C identifier) */' % (name, addr, sig))
             manual.append(name); continue

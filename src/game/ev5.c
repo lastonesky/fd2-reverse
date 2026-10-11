@@ -235,10 +235,10 @@ void ev5_203BD(int r, int g, int b)
 {
     int i;
     for (i = 0; i < 256; i++) {
-        outp(0x3C8, i);
-        outp(0x3C9, r);
-        outp(0x3C9, g);
-        outp(0x3C9, b);
+        fd2_outp(0x3C8, i);
+        fd2_outp(0x3C9, r);
+        fd2_outp(0x3C9, g);
+        fd2_outp(0x3C9, b);
     }
 }
 

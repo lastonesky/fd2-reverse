@@ -27,6 +27,10 @@ void fd2_engine_frame(void);
  * bit).  Called from the entry layer's key events. */
 void fd2_engine_key(uint8_t scan, uint8_t ascii);
 
+/* Patch the ASCII byte of the most recently pushed make code (sokol delivers
+ * the character in a CHAR event after KEY_DOWN). */
+void fd2_engine_key_set_ascii(uint8_t ascii);
+
 /* Stop everything (game usually already returned). */
 void fd2_engine_shutdown(void);
 

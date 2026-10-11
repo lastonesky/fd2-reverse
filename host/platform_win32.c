@@ -117,10 +117,13 @@ void plat_error_text(unsigned e, char *buf, size_t n)
 
 unsigned plat_data_selector(void)
 {
+#if defined(_M_X64) || defined(__x86_64__)
+    return 0;                 /* 64-bit flat: no real-mode selector needed */
+#else
     unsigned short sel = 0;
-
     __asm { mov sel, ds }
     return sel;
+#endif
 }
 
 void *plat_image_base(void)

@@ -31,7 +31,7 @@ void delay(unsigned ms)
 static int g_dac_index;
 static int g_dac_component;
 
-unsigned char outp(unsigned port, int value)
+unsigned char fd2_outp(unsigned port, int value)
 {
     switch (port & 0xFFFF) {
     case 0x03C8:

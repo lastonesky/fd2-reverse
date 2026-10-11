@@ -39,6 +39,8 @@ static uint8_t *lowmem(void)
 static uint16_t bda16(int off)          { return *(volatile uint16_t *)(lowmem() + off); }
 static void     bda16_set(int off, uint16_t v) { *(volatile uint16_t *)(lowmem() + off) = v; }
 
+static int g_last_off = -1;
+
 void fd2_kbd_push(uint8_t scan, uint8_t ascii)
 {
     uint16_t tail = bda16(KB_TAIL);
@@ -50,6 +52,7 @@ void fd2_kbd_push(uint8_t scan, uint8_t ascii)
         return;                          /* full: drop, like hardware       */
     lowmem()[0x400 + tail]     = scan;
     lowmem()[0x400 + tail + 1] = ascii;
+    g_last_off = tail;
     bda16_set(KB_TAIL, next);
 }
 
@@ -127,6 +130,12 @@ void fd2_engine_frame(void)
 void fd2_engine_key(uint8_t scan, uint8_t ascii)
 {
     fd2_kbd_push(scan, ascii);
+}
+
+void fd2_engine_key_set_ascii(uint8_t ascii)
+{
+    if (g_last_off >= 0)
+        lowmem()[0x400 + g_last_off + 1] = ascii;
 }
 
 void fd2_engine_shutdown(void)

@@ -15,7 +15,7 @@
 void delay(unsigned ms);
 
 /* Watcom outp(port, value): write a byte to an I/O port. */
-unsigned char outp(unsigned port, int value);
+unsigned char fd2_outp(unsigned port, int value);
 
 /* Watcom int386(intno, in_regs, out_regs): software interrupt with the REGS
  * frame.  INT 16h keyboard reads and INT 10h mode sets go through here. */

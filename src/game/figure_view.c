@@ -146,15 +146,15 @@ void figure_play(int unit, int mode, const void *figure, const void *base,
             gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, work, 320, 320,
                           200);
             if (flash != 0) {
-                outp(0x3C8, 0);
-                outp(0x3C9, byte_51AAD[mode]);
-                outp(0x3C9, byte_51AD1[mode]);
-                outp(0x3C9, byte_51AF5[mode]);
+                fd2_outp(0x3C8, 0);
+                fd2_outp(0x3C9, byte_51AAD[mode]);
+                fd2_outp(0x3C9, byte_51AD1[mode]);
+                fd2_outp(0x3C9, byte_51AF5[mode]);
                 j___delay(30);
-                outp(0x3C8, 0);
-                outp(0x3C9, 0);
-                outp(0x3C9, 0);
-                outp(0x3C9, 0);
+                fd2_outp(0x3C8, 0);
+                fd2_outp(0x3C9, 0);
+                fd2_outp(0x3C9, 0);
+                fd2_outp(0x3C9, 0);
                 --flash;
             }
             if (++counter ==
@@ -435,26 +435,26 @@ int figure_attack_play(int attacker, int defender, const uint8_t *figure,
 
                 if (s[4] == 1 && v33 == v32) {
                     if (out[2] != 0) {
-                        outp(0x3C8, 0);
-                        outp(0x3C9, 1);
-                        outp(0x3C9, 0x20);
-                        outp(0x3C9, 0);
+                        fd2_outp(0x3C8, 0);
+                        fd2_outp(0x3C9, 1);
+                        fd2_outp(0x3C9, 0x20);
+                        fd2_outp(0x3C9, 0);
                         j___delay(20);
-                        outp(0x3C8, 0);
-                        outp(0x3C9, 0);
-                        outp(0x3C9, 0);
-                        outp(0x3C9, 0);
+                        fd2_outp(0x3C8, 0);
+                        fd2_outp(0x3C9, 0);
+                        fd2_outp(0x3C9, 0);
+                        fd2_outp(0x3C9, 0);
                     }
                     if (out[1] != 0) {
-                        outp(0x3C8, 0);
-                        outp(0x3C9, 0x3F);
-                        outp(0x3C9, 0x3F);
-                        outp(0x3C9, 0x3F);
+                        fd2_outp(0x3C8, 0);
+                        fd2_outp(0x3C9, 0x3F);
+                        fd2_outp(0x3C9, 0x3F);
+                        fd2_outp(0x3C9, 0x3F);
                         j___delay(20);
-                        outp(0x3C8, 0);
-                        outp(0x3C9, 0);
-                        outp(0x3C9, 0);
-                        outp(0x3C9, 0);
+                        fd2_outp(0x3C8, 0);
+                        fd2_outp(0x3C9, 0);
+                        fd2_outp(0x3C9, 0);
+                        fd2_outp(0x3C9, 0);
                         j___delay(40);
                     }
                 }

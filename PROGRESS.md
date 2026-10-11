@@ -3019,3 +3019,17 @@ port3 已去 guest）。
   host 后端 + sokol，`-lX11 -lXi -lXcursor -lGL -lasound -ldl -lm -lpthread`）。
 - 未决：链接有少量 `-Wpointer-to-int-cast`/`-Wmaybe-uninitialized` 警告（原生 64 位下
   确需清理）；本环境无显示，运行验证留待桌面端。
+
+### 7.1 Windows x64 exe（本轮）
+
+- `build.ps1`（VS18 Enterprise `vcvars64` + `cl`）产出 **`build\fd2engine.exe`**（x64，
+  sokol/D3D11 + WASAPI + sokol_app Win32 输入）。
+- 入口 `main_sokol.c` 改为**双平台**（直接复用 port 的 `sapp_to_vk/push_vk` Win32 键路径）；
+  `fd2_kernel.c` 增加 `fd2_engine_key_set_ascii`（sokol 的 CHAR 事件回填）。
+- MSVC/x64 适配：
+  - `fd2_funcs.h` 不再声明 Watcom CRT 内部名（`_fsopen/unlink/_set_errno/...` 与 MSVC CRT
+    冲突）；`gen_headers.py` 加“只声明 IDA 前缀符号”规则。
+  - `outp` 是 MSVC 内建，不能定义 → 全量改名 `fd2_outp`（`crt.h` + 调用点 + 实现）。
+  - `platform_win32.c` 的 `plat_data_selector` x64 无内联汇编 → 返回 0。
+- 回归：`make -C host check` 仍全 0 error；Linux `fd2engine` 仍可链接。
+- 运行需在含 FD2 资源文件的目录（如 `E:\FD2`）；音色库 `gm.dls` 路径待命令行参数化。
