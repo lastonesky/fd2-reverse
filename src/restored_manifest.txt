@@ -762,3 +762,12 @@
 # then frames 69..100), freeing its buffers before the shared tail 0x22BB7
 # (map_view_update(0)).
 0x24336 sub_24336 game/scene_cutscene.h
+
+# 0x1B1E7 - the world-map party-status pop-up orchestrator driven by the record
+# interaction driver 0x19DF7.  Snapshots the live map window, paints the panel
+# row block (0x1B41D) into scratch and slides it in (bands b/c/d/e), then holds
+# with tick-driven map/panel redraws until a key, slides it back out (bands
+# a/c/d/e) and frees the two 0xFA00 scratch buffers.  Reads an uninitialised
+# ebp tick baseline (modelled as 0); `jmp 0x10C49` is a shared epilogue, not a
+# call to 0x10B4E.
+0x1B1E7 sub_1B1E7 game/party_panel.h

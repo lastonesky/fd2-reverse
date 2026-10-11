@@ -1825,10 +1825,35 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - `function-map.csv` 的 callee 列含一个伪 callee `sub_22AF6`（机器码中无此调用），以离线反汇编为准，不入本批。
 - 无对拍器，标“已还原未验证”。
 
+### 72) 地图队伍状态弹出面板编排者 `0x1B1E7` → `party_panel_run`（本轮，1 函数）→ `src/game/party_panel.c/.h`（追加，party_panel 家族自顶闭合）
+
+§12 建 `party_panel` 时留下的编排者 `0x1B1E7`(u1，566B) 是本轮闭包就绪游戏头名——`0x19DF7`
+（记录交互驱动器）调用的地图队伍面板。此前因“内层读未初始化 `ebp`”暂跳；本轮据 playbook
+第 6 条“未初始化 tick 基线寄存器”先例（`map_wait_key` 0x12DAC / `map_zoom_run` 0x2000A）
+把基线建模为 0 并注释，逐指令核后拉出。真闭包＝自身（callee 全在册）。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1B1E7` | `party_panel_run()` | `guest_malloc` 两块 0xFA00（backdrop/scratch）→ `memset(backdrop,0,0xFA00)` → `map_render_view(dword_53A49+0x8088,456,13,8,ox,oy)` → `dlg_portraits_refresh` → `gfx_copy_rows(backdrop+0x504,320,视图,456,312,192)` → `party_panel_draw(scratch,320)` → 滑入 12 步（每步 `memmove(dword_53A49,backdrop)` + `party_panel_band_b/c/d/e(scratch,i)` + `memmove(0xA0000,dword_53A49)`）→ 循环：`key=kbd_pending()`；tick ≠ 基线时 `anim_frame_step()`+`pal_anim_step()`+重绘地图视图+`dlg_portraits_refresh()`+`party_panel_draw(dword_53A49+0x7964,456)`+`gfx_copy_rows(0xA0504,320,视图,456,312,192)`；`key!=0` 时 `kbd_flush` → 滑出 12 步（`band_a/c/d/e`，步序 j=11..0）→ `memmove(0xA0000,backdrop)` → `guest_free`×2 → `kbd_flush` → 返回。 |
+
+**陷阱 / 伪代码伪影**：
+- **未初始化 `ebp`（关键，按 playbook 第 6 条定性）**：`0x1B2FE` 的 `cmp eax,ebp`（eax=`movsx word[0x46C]` BIOS tick）
+  读的 `ebp` 全函数未写入、未保存，且**从不回写**基线——即原机每趟都重绘（无节流）。C 侧 `baseline=0` 并注释。
+- **伪 callee（共享尾声）**：尾 `jmp 0x10C49` 落在 `unit_sprites_build`(0x10B4E) 体内的共享尾声
+  （`add esp,4; pop edi; pop esi; pop ebx; ret`，与本函数前言 `push ebx/esi/edi; sub esp,4` 同帧）
+  ⇒ 普通 `return`；`function-map` 因此误列 `sub_10B4E`，本批不入依赖。
+- **`sub_4E31C` 实为 0 参**：Hex-Rays 把 `anim_frame_step()` 的 eax 残值当 `pal_anim_step` 的实参
+  `sub_4E31C(a1: v4)`；机器 `call 0x1297d; call 0x4e31c` 两次均无 `push`，故按 0 参调用（§0-K 已记）。
+- **Hex-Rays 别名**：key 字节（机器 `[esp]`）被渲染成 `retaddr`/`[esp+10h]` 并加 `LOBYTE()`/`(_BYTE)`；
+  实为独立局部 `key`（机器 `mov [esp],al` 后 `movzx eax,[esp]`）。
+- **chkstk**：`push 0x2c; call 0x3702F` 不分配帧，丢弃；`malloc/free`(0x3706E/0x3776E) 走 `guest_malloc/guest_free`。
+- **归属**：追加至既有 `party_panel`（§12）；新增函数用语义名调用各 band/draw，无需别名；
+  唯一 caller `0x19DF7` 仍待还原。无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **70 → 69**（本轮 §71 −1），已还原未验证 **253 → 254**（本轮 +1）。
+- `function-map.csv`：待还原 **69 → 68**（本轮 §72 −1），已还原未验证 **254 → 255**（本轮 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
