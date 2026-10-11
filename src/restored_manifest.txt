@@ -796,6 +796,14 @@
 # table expansion, not real direct calls.
 0x190AC sub_190AC game/map_event.h
 
+# 0x18D8C - the on-map per-record interaction driver.  Opens the 4x4 direction
+# patch over the cursor, then dispatches on the selected slot dword_53C57
+# (0 = pick a record and run its attack view + event script, 1 = action menu,
+# 2 = map_action_interact, other = item_use + map_cell_event).  Its second
+# argument is the caller's 4-int patch tile array, and it returns the no-slot /
+# blocked / no-free-slot status bits at [0]/[1]/[2].
+0x18D8C sub_18D8C game/map_record.h
+
 # 0x1BBDC - the interactive per-record map action driver, called by the
 # record-interaction driver 0x18D8C.  Opens the 4x4 direction patch, then
 # dispatches on the action slot dword_53C57 (0 = item/record action loop via

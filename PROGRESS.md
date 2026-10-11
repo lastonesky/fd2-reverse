@@ -2468,12 +2468,36 @@ playbook 批选（闭包就绪、usage 降序、剔除 CRT/库包装与伪函数
 - **chkstk**：`push 0x108; call 0x3702F`（不分配帧），丢弃；无伪 callee。
 - **归属**：追加进既有 `action_menu`（§82/§83 面板族），头已被伞含，无需改列；无对拍器，标“已还原未验证”。
 
+### 97) 记录交互驱动器 `0x18D8C` → `map_record_interact`（本轮，1 函数，§1 闭包就绪游戏头名）→ `src/game/map_record.c/.h`（新建）
+
+本轮闭包就绪游戏内容头名 `0x18D8C`(u2，800B，记录交互驱动器，§96 取走 `0x1CFF0` 后其
+`dword_53C57==1` 分支已解)；真闭包＝自身（callee 全部在册），按 §1 取单函数：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x18D8C` | `map_record_interact(rec, dir_tiles, reopen)` | 复制 0x51ED5 的 4-dword 补丁索引表 → `dir_tiles[0]=0`、`dword_53EC8=0` → `rec_slot_find(rec,0)`（无槽置 `dir_tiles[0]=1`），否则 `rec_field_byte`→`tbl_ptr(&fd2_data2[0x2AD],23)` 取字节 [11]/[12] 作 `map_reveal_reachable(MAP_X,MAP_Y,NULL,p4,p5,0)` 的范围并 `util_fix_records` → `ev5_173E7`+`map_cursor_patch_expand` → `rec_slot_free==0`/`rec_collect_slot_bits==0`/`rp[39]!=0` 置 `dir_tiles[1]/[2]` → `ev5_173E7` → `do { map_cursor_dir_select } while(==0)` → `map_cursor_patch_collapse`+`map_view_update(0)`；`==-1` 返回 -1。随后按 `dword_53C57`：0 → `guest_malloc(0x64)`+`map_reveal_reachable`+`map_pick_record`+`util_fix_records`+`guest_free`，`!=-1` 则肖像族（`dlg_portrait_find`/`ev5_1F04A`/`figure_attack_view`/`dlg_portrait_clear`）+`map_collect_scripts`+`map_units_animate`+`ev_script_run`，末 `rec_flag_or80`+`kbd_flush`，返回 1（取消则 `map_slide_view` 返回 0）；1 → `action_menu_run` 环，成功 `rec_flag_or80` 后 `dword_53EC8 /= (rp[32]>8 ? rp[33]+30 : rp[33])`；2 → `map_action_interact` 环并清 `dword_53EC8`；其他 → `reopen==0` 时 `item_use` + `map_cell_event` + `rec_flag_or80`。 |
+
+**陷阱 / 伪代码伪影**：
+- **第二参是调用者的 4-int 补丁数组**：Hex-Rays 视作 `int*`，既是 `map_cursor_patch_*`/
+  `map_cursor_dir_select` 的 `b_tiles`，也承载输出状态位（[0] 无槽 / [1] 受阻 / [2] 无空格）。
+  调用点（`0x18a82`/`0x18b33`，均在 `0x18890` 内）压 `(rec, &local16, 0|1)`。
+- **签名除法**：`dword_53EC8 /= v18` 机器为 `cdq; idiv ebx`（有符号），而 `dword_53EC8` 在
+  `fd2_globals.h` 是 `uint32_t`，故 C 侧显式写 `(uint32_t)((int32_t)dword_53EC8 / v18)`。
+- **`rp[32] > 8` 比较**：Hex-Rays 渲染成无符号 `> 8u`，机器为 `jle`（有符号）；字节经 `movzx`，两者等价。
+- **chkstk**：`push 0xB0; call 0x3702F`（不分配帧），丢弃；无伪 callee（真闭包＝自身）。
+- **归属**：新建 `map_record`（单函数驱动器）；头加进伞含（`map_record.h` 排在 `map_records.h` 前）。
+  无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
 - `function-map.csv`：待还原 **30 → 28**（本轮 §94 −2），已还原未验证 **293 → 295**（本轮 +2）。
 - `function-map.csv`：待还原 **28 → 25**（本轮 §95 −3），已还原未验证 **295 → 298**（本轮 +3）。
 - `function-map.csv`：待还原 **25 → 24**（本轮 §96 −1），已还原未验证 **298 → 299**（本轮 +1）。
+- `function-map.csv`：待还原 **24 → 23**（本轮 §97 −1），已还原未验证 **299 → 300**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §97 取走记录交互驱动器 `0x18D8C`（u2，末个闭包就绪游戏头名）后，
+  闭包就绪待还原**已无游戏内容项**——只剩 CRT/库包装（`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）
+  与伪函数条目（`0x10000`/`0x36B00`）；其 caller `0x18890`(u1，闭包 `18890/18B84/18D8C` 共 1789B 略超 §1 预算)/`0x1A813`/`0x1A866` 待还原。
 - **闭包就绪游戏内容项**：本轮 §96 取走闭包就绪游戏头名 `0x1CFF0`（行动菜单驱动）后，
   闭包就绪待还原已无游戏内容项（`0x18D8C` 的 `dword_53C57==1` 分支依赖已解，但它自身仍被 `0x18890`/`0x1A813`/`0x1A866` 等阻挡）；
   其余只剩 CRT/库包装（`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）。
