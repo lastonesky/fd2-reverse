@@ -64,6 +64,7 @@
 #include "scene_enter.h"
 #include "scene_states.h"
 #include "screen_fx.h"
+#include "shop_party_stats.h"
 #include "shop_rows.h"
 #include "shop_screen.h"
 #include "sprite24.h"

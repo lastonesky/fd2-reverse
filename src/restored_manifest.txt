@@ -668,3 +668,9 @@
 0x179D5 sub_179D5 game/map_cursor.h
 0x17898 sub_17898 game/map_cursor.h
 0x177FC sub_177FC game/map_cursor.h
+
+# shop/place party stat-preview rows and the effective-stat helper (the
+# 0x2825B sibling of the shop_rows painters).  0x2825B's return is whatever
+# the last dlg_draw_number leaves in eax and no caller reads it.
+0x28632 sub_28632 game/shop_party_stats.h
+0x2825B sub_2825B game/shop_party_stats.h
