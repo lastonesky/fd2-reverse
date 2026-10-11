@@ -14,7 +14,7 @@ CPPFLAGS ?= -I. -I../src -Ivendor/sokol
 # POSIX backend (Win32-only files render_gdi.c / keys_win32.c /
 # platform_win32.c are excluded here).
 BACKEND := dls.c synth.c audio_sokol.c xmidi.c keys.c platform_posix.c \
-           render_sokol.c sokol_impl.c fd2_audio.c
+           render_sokol.c sokol_impl.c fd2_audio.c fd2_video.c fd2_platform.c
 
 .PHONY: all check objs clean
 all: check
