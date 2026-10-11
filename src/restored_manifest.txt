@@ -687,3 +687,21 @@
 0x1D6C8 sub_1D6C8 game/fade.h
 0x24BDE sub_24BDE game/party_roster.h
 0x2F7B6 sub_2F7B6 game/map_attack.h
+
+# ANI.DAT animation-frame command decoder (funcs_37012 table + entry points).
+# Loaded/played by 0x20421: palette (0x52766) + VGA frame buffer (0x52762).
+# Previously skipped as "small library functions"; the 0x20421 ANI.DAT loader
+# proves they are game content.  The opcode cursor is the original ESI, modelled
+# as `const unsigned char **sp`.
+0x36E3D sub_36E3D game/ani.h
+0x36E57 sub_36E57 game/ani.h
+0x36E65 sub_36E65 game/ani.h
+0x36EA7 sub_36EA7 game/ani.h
+0x36EE0 sub_36EE0 game/ani.h
+0x36F08 sub_36F08 game/ani.h
+0x36F24 sub_36F24 game/ani.h
+0x36F69 sub_36F69 game/ani.h
+0x36F82 sub_36F82 game/ani.h
+0x36FAC sub_36FAC game/ani.h
+0x36FD3 sub_36FD3 game/ani.h
+0x36FF4 sub_36FF4 game/ani.h

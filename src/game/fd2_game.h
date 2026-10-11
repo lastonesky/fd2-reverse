@@ -7,6 +7,7 @@
 #include "../include/fd2_funcs.h"
 #include "../include/fd2_aliases.h"
 
+#include "ani.h"
 #include "anim.h"
 #include "bgm.h"
 #include "boot.h"

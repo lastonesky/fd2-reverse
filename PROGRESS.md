@@ -1544,10 +1544,49 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
   `0x24BDE` 返回 0/1、`0x2F7B6` 返回伤害（同时写入 `out[5]`）。
 - 无对拍器，标“已还原未验证”；`sub_2AE0E` 型的未初始化读陷阱不适用本批。
 
+### 60) ANI.DAT 动画帧命令解释器（`funcs_37012` 表 + 两个入口，本轮 12 函数）→ `src/game/ani.c/.h`（新建）
+
+本轮闭包就绪头名里，除 CRT/库包装（`0x3645D`/`0x2E95B`/`0x365DA`）与超预算的 `0x2EBE1`(2291B) 外，
+唯一连贯的游戏内容簇是 `0x36E3D..0x36FAC` 十件套 + 其调度器 `0x36FF4`(u1) 与缓冲绑定 `0x36FD3`(u1)：
+十者互为 `sub_36FF4` 的唯一 callee 且同为 `funcs_37012` 表项，真闭包＝本 12 函数（扁平、无外部依赖），
+合计 488B（≤1500B）。**此前批次按“小库函数”跳过（见 §33）；本批据 `0x20421` 装载器证据改判为游戏内容**：
+`0x20421` 打开 ANI.DAT，逐帧 `malloc(0x300)` 调色板 + `malloc(0xFA00)` 帧暂存，再
+`sub_36FD3(64000, 0xA0000, palette)` + `sub_36FF4(cmd_count, frame_bytes)` —— 即 320×200 VGA 帧缓冲
+（`dword_52762`/`word_52760`=64000）与调色板（`dword_52766`/0x300）的动画解码器。
+
+| 原址 | 索引 | 新名 | 行为 |
+|---|---|---|---|
+| `0x36FD3` | — | `ani_target_set(size,screen,palette)` | 绑定帧缓冲尺寸/指针与调色板指针（写 `word_52760`/`dword_52762`/`dword_52766`） |
+| `0x36FF4` | — | `ani_run_frame(count,cmds)` | 逐命令：取一字节 opcode → `funcs_37012[op]`（表＝10 项 dword @`0x5276A`） |
+| `0x36E3D` | 0 | `ani_pal_fill` | 调色板（768B）以单字节灰值填充 |
+| `0x36E57` | 1 | `ani_pal_copy` | 由流复制 0x300 字节到调色板 |
+| `0x36E65` | 2 | `ani_pal_rle` | RLE 展开到调色板（0xC0 标记＝行程） |
+| `0x36EA7` | 3 | `ani_pal_blocks` | `n` 个调色板块：{偏移=3·b, 长度=3·b}+数据 |
+| `0x36EE0` | 4 | `ani_fb_fill` | 帧缓冲以单字节填充 |
+| `0x36F08` | 5 | `ani_fb_copy` | 由流复制 `size` 字节到帧缓冲 |
+| `0x36F24` | 6 | `ani_fb_rle` | RLE 展开到帧缓冲（至 `size`） |
+| `0x36F69` | 7 | `ani_fb_pixels` | `n` 个单像素 {16 位偏移, 值字节} |
+| `0x36F82` | 8 | `ani_fb_fill_runs` | `n` 个填充段 {偏移, 长度, 值} |
+| `0x36FAC` | 9 | `ani_fb_copy_runs` | `n` 个复制段 {偏移, 长度}+数据 |
+
+**陷阱 / 伪代码伪影**：
+- **隐式 ESI ABI**：`sub_36FF4` 仅在入口 `mov esi,[ebp+0xc]` 一次，之后各 handler 用 `lodsb/lodsw` 自行推进
+  ESI 并在返回时归还（调度器循环不重载 ESI）⇒ 流游标是 in/out 隐式实参，C 侧建模为 `const unsigned char **sp`。
+- **Hex-Rays 伪影**：各 handler 的 ESI 局部指针被渲染成未初始化（`_BYTE *v1; LOBYTE(v0)=*v1;`）——按上条语义处理。
+- **表地址提示**：`funcs_37012` 名指调用点 `0x37012`，真表是 dword 数组 @`0x5276A`（=`fd2_data1[0x276A]`，
+  逐项＝0x36E3D/57/65/A7/E0/08/24/69/82/AC），已按镜像字节核实。
+- **`rcl ecx,1` 还原长度**：RLE 内 `shr ecx,1; rep stosw; rcl ecx,1; rep stosb` 是 len 的 word+余字节写法
+  （等价写 `len` 个字节）；C 侧直接写 `len` 字节。
+- **do/while 计数**：op3/7/8/9 的 `dec/jne`、`loop` 均为 do/while（最小执行一次）；ANI 数据计数恒 ≥1，按原样还原。
+- **函数计数偏差说明**：本簇 12 函数超“1..6”条，但它是**单一 10 项调度表 + 其两个入口**（同 §0-H/§0-I
+  整表拉出先例），闭包扁平、488B、无外部依赖。
+- 无对拍器，标“已还原未验证”；另以 `-m32` 临时自测（帧填充 / RLE / 像素 / 填充段 / 复制段 / 调色板块 / 调度）
+  全部通过验证行为，自测文件未入库。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **97 → 94**（本轮 §59 −3），已还原未验证 **226 → 229**（本轮 +3）。
+- `function-map.csv`：待还原 **94 → 82**（本轮 §60 −12），已还原未验证 **229 → 241**（本轮 +12）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1640,6 +1679,7 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 整体拉出（`fade.c`/`party_roster.c`/`map_attack.c` 追加），故 `sub_24754`/`sub_2EBE1` 现闭包就绪；
 下一游戏头名回落至 u1 小簇 `0x1B1E7`(sub_19DF7，内层读未初始化，暂跳)/`0x1BBDC`/`0x1CFF0`(sub_18D8C)
 及商店族 `0x2872B`(sub_279BC)/`0x2AA00`(sub_29DAA) 等，CRT/库包装 `0x3645D`(u4)/`0x2E95B`(u3)/`0x365DA`(u2) 仍按既定策略跳过。
+本轮 §60 把该列表里改判为游戏内容的 ANI.DAT 解码簇 `0x36E3D..0x36FAC`+`0x36FD3`/`0x36FF4` 整体拉出（新建 `ani`），故闭包就绪游戏头名转为 `0x1B1E7`/`0x1BBDC`/`0x1CFF0`/`0x2000A`/`0x2872B`/`0x2AA00` 等大驱动器与 `0x36C56`(u1) 等库包装。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交
