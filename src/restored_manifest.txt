@@ -723,3 +723,9 @@
 # function-map callee sub_2968D is a false dependency (the `jmp 0x29862` tail is
 # a shared free-epilogue inside 0x2968D's body).
 0x2B777 sub_2B777 game/party_roster.h
+
+# 0x2872B: the place menu's first-option buy screen (driven from the place's
+# stock list).  Its callees are the shop_screen family (shop_items_paint/run),
+# the 0x602AD item table and the already-restored helpers; it ends with the
+# local epilogue at 0x28B39 (add esp,0x58; pop ebp/edi/esi/ebx; ret).
+0x2872B sub_2872B game/shop_screen.h

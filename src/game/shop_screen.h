@@ -24,6 +24,13 @@
  * The remaining place-menu entry screens (the four menu options of 0x279BC)
  * are driven here too:
  *
+ *   0x2872B  shop_place_buy_run the buy screen of the place menu's first
+ *            option, driven from the place's stock list: run shop_items_paint/
+ *            run over the list, look the confirmed item up in the 23-byte
+ *            table 0x602AD (class byte +0, price word +19) and gather the
+ *            members that can take it (box_item_usable), then claim a slot
+ *            (rec_slot_claim + unit_metrics) and spend the price
+ *            (place_money_spend).  Returns 0 on cancel.
  *   0x28CBD  shop_sell_run     the member item list: pick a member with
  *            menu_list_select, gather the state-bit-clear item slots of their
  *            record, run shop_items_run over them, and on confirm show the
@@ -77,6 +84,10 @@ int shop_box_run(void);
 
 /* 0x2A43E - the place menu's buy screen.  Returns 0. */
 int shop_buy_run(void);
+
+/* 0x2872B - the place menu's first option: the buy screen driven from the
+ * place's stock list (`count` item ids in `items`).  Returns 0 on cancel. */
+int shop_place_buy_run(int count, const uint8_t *items);
 
 /* 0x2A07A - collect the indices whose rec_flag is 1 into `dst`; count. */
 int shop_usable_items(uint8_t *dst);

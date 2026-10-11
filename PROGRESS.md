@@ -1668,10 +1668,33 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - **chkstk**：`push 0x20; call 0x3702F` 不分配帧，丢弃。
 - 无对拍器，标“已还原未验证”。
 
+### 65) 地点菜单首选项商店驱动（本轮，1 函数）→ `src/game/shop_screen.c/.h`（追加）
+
+§32 留下商店屏族的下一层调用者（`0x2872B`/`0x28CBD`/`0x28F65`/`0x2A43E`…），§45 已收 `0x28CBD/0x28EFE`，
+§57/58 收 `0x28F65` 相关预览屏；本轮取 `0x279BC` 四个菜单选项里最后一个闭包就绪的驱动器 `0x2872B`
+（其全部真实 callee 均已还原）并入同族 `shop_screen`：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2872B` | `shop_place_buy_run(count, items)` | 地点菜单第一项的“按店存货购买”屏：把 `count` 个物品 id（`0x26A0D` 填的字节）交给 `shop_items_paint`/`shop_items_run` 交互列表；确认项在 23 字节物品表 `0x602AD` 里取描述（类字节 `+0`、价格 word `+19`→`dword_53AE1`）；类字节 `<0x20` 时用 `box_item_usable` 筛可接收该物品的队员，否则全体队员入围；玩家选择（`shop_party_stat_run` 或全体时 `menu_list_select`）后，若队员有空槽且 `dword_53BF3 >= dword_53AE1`，则 `rec_slot_claim` 占槽、`unit_metrics` 合算、`place_transition`+`place_money_spend` 扣款；取消返回 0。 |
+
+**陷阱 / 伪代码伪影**：
+- **`[esp+N]` 位移随 push 变化**：伪代码把 `push DWORD PTR [esp+0x74]` 的两个参数位读成 `a1`/`a2`；
+  实际两条调用前已各压 2 个值，`[esp+0x74]` 落到帧基 `+0x6C`=`a1`（物品数），`ebp=[esp+0x70]`=`a2`（物品指针）。
+  故 `shop_items_*` 实收 `(count,items,0)`，与机器 `push 0; push ebp; push [esp+0x74]` 一致。
+- **四张 per-place 标签字表**：`0x52428/0x52434/0x52440/0x5244C`（各 3 dword）拷进局部 20-dword 暂存块，
+  成员表在头部字节、四表落在 `+0x20/+0x2c/+0x38/+0x44`；列由 `dword_53F4A`（0..4）选字（`*((int16_t*)&v12[k]+place)`）。
+  物品表 `0x602AD` 用已还原的 `tbl_ptr(&fd2_data2[0x2AD],23,item,0)`（与 shop_rows 同基址/步长）。
+- **伪 callee**：`function-map.csv` 未误挂额外依赖；`0x4E8BC` 即该 23 字节物品表访问器。
+- **返回值**：机器唯一出口 `0x28B39`（`add esp,0x58; pop ebp/edi/esi/ebx; ret`）的 EAX 系前一条 `msg_close_portrait`（void）
+  残留，调用点 `sub_279BC` 不读取，C 侧取消时返回 0。
+- **chkstk**：`push 0x90; call 0x3702F` 不分配帧，丢弃。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **77 → 76**（本轮 §64 −1），已还原未验证 **246 → 247**（本轮 +1）。
+- `function-map.csv`：待还原 **76 → 75**（本轮 §65 −1），已还原未验证 **247 → 248**（本轮 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
