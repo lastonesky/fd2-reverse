@@ -31,6 +31,14 @@ free.sort(key=lambda r:-int(r["usage"] or 0))
    function tail that lands INSIDE another function body is a shared epilogue (plain `return`), not a
    call. Verify in the disassembly; do not transitively pull such functions in.
 4. Skip clusters whose true closure exceeds ~8 functions; choose a smaller closure-ready cluster.
+5. **Large single-function unblock**: if the closure-ready list has no in-budget *game-content* item
+   (only CRT/library wrappers or over-budget items remain), you MAY take ONE larger single function
+   (up to ~2500 B) provided its TRUE closure is just itself (every callee already restored) and you
+   verify it instruction-by-instruction. State this deviation explicitly in the report.
+6. **Uninitialised tick-baseline registers**: several functions read a never-written `ebp`/`esi` holding
+   an (uninitialised) BIOS-tick baseline before the first render (established precedents: `map_wait_key`
+   0x12DAC, `map_zoom_run` 0x2000A). Model the baseline as `0` and annotate the source; do NOT skip the
+   function solely for that quirk.
 
 ## Translation rules (mandatory)
 - Read BOTH the Hex-Rays decomp AND the disassembly. Disassembly is authoritative for argument
