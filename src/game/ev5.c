@@ -26,7 +26,7 @@ typedef void     (*pal_anim_fn)(void);                 /* 0x4E31C */
 typedef int      (*kbd_pending_fn)(void);              /* 0x10620 */
 
 
-extern uint32_t dos_lowmem_base;
+extern uintptr_t dos_lowmem_base;
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(dos_lowmem_base + (off)))
 
 /* --- globals ----------------------------------------------------------- */

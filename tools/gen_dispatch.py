@@ -23,11 +23,14 @@ LEN = {
 
 def load_alias():
     alias = {}
-    p = os.path.join(ROOT, 'src', 'include', 'fd2_aliases.h')
-    for line in open(p, encoding='utf-8'):
-        m = re.match(r'#define\s+(sub_[0-9A-Fa-f]+)\s+(\w+)', line)
-        if m:
-            alias[m.group(1)] = m.group(2)
+    for name in ('fd2_aliases.h', 'fd2_restored_aliases.h'):
+        p = os.path.join(ROOT, 'src', 'include', name)
+        if not os.path.exists(p):
+            continue
+        for line in open(p, encoding='utf-8'):
+            m = re.match(r'#define\s+(sub_[0-9A-Fa-f]+)\s+(\w+)', line)
+            if m:
+                alias[m.group(1)] = m.group(2)
     return alias
 
 

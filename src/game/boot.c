@@ -51,7 +51,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-int main(int argc, char **argv)
+int fd2_game_main(int argc, char **argv)
 {
     void *mdi, *dig;
     int v, r;

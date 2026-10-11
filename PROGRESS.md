@@ -3000,3 +3000,22 @@ port3 已去 guest）。
 （`fd2_vga`+调色板→BGRA→`render_present`）、`fd2_audio.c`（用 synth/xmidi 实现
 `src/lib/ail.h` 的 16 入口）、`fd2_platform.c`（`int386/outp/delay/fd2_mem_lock` + BDA 键/tick
 写入 `fd2_lowmem`）。
+
+---
+
+## 7. `modern-platform`：首个可链接的原生引擎
+
+- **P0/P1 别名补齐**（首次全量链接发现的潜在问题）：port3 自己还原的函数用了语义名，
+  但 `fd2_aliases.h` 只覆盖 port/ 的 309 资产，导致调用点/分派表里的 `sub_XXXX` 链接不上。
+  新增 `src/include/fd2_restored_aliases.h`（57 条，地址取自 `function-map.csv`，语义名
+  取自模块头/.c 的 `/* 0xADDR */` 注释），伞头与 `gen_dispatch.py` 同步。
+- **适配层完成**：`fd2_audio.c`（AIL，方案 A）、`fd2_video.c`（palette+VGA→BGRA）、
+  `fd2_platform.c`（delay/outp/INT16h/int386/fd2_mem_lock/j___delay）、
+  `fd2_kernel.c`（fd2_data_init + 游戏线程 + BDA tick/键环 + dos_lowmem_base）、
+  `main_sokol.c`（sokol_app 入口，复用 port 的键映射）。
+- **入口重命名**：`boot.c` 的 `main` → `fd2_game_main`（避免与 sokol 入口冲突）。
+- **de-guest 修正**：`dos_lowmem_base` 由 `uint32_t` 改 `uintptr_t`（64 位不再截断）。
+- **首次全量链接成功**：`make -C host engine` → `host/build/fd2engine`（游戏 C +
+  host 后端 + sokol，`-lX11 -lXi -lXcursor -lGL -lasound -ldl -lm -lpthread`）。
+- 未决：链接有少量 `-Wpointer-to-int-cast`/`-Wmaybe-uninitialized` 警告（原生 64 位下
+  确需清理）；本环境无显示，运行验证留待桌面端。

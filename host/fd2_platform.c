@@ -13,6 +13,7 @@
 #include "fd2_video.h"     /* fd2_palette / fd2_palette_dirty */
 #include "platform.h"
 #include "../src/lib/crt.h"
+#include "fd2_kernel.h"   /* fd2_kbd_wait/pop */
 
 /* ---- timer --------------------------------------------------------------
  * Watcom delay(ms): busy-wait on the BIOS tick.  A host sleep is equivalent
@@ -64,7 +65,27 @@ unsigned char outp(unsigned port, int value)
  * bits / read the REGS cell, never a return value. */
 int int386(int intno, const void *in, void *out)
 {
-    (void)intno; (void)in; (void)out;
+    if (intno == 0x16 && in && out) {
+        uint8_t       *o  = (uint8_t *)out;
+        const uint8_t *i  = (const uint8_t *)in;
+        uint8_t        scan, ascii;
+
+        switch (i[1]) {                       /* AH selects the function   */
+        case 0x00:                            /* read key                  */
+        case 0x10:                            /* enhanced read (game)      */
+            fd2_kbd_wait(&scan, &ascii);
+            o[0] = ascii;
+            o[1] = scan;
+            break;
+        case 0x01:                            /* check (peek)              */
+        case 0x11:
+            if (fd2_kbd_pop(&scan, &ascii)) { o[0] = ascii; o[1] = scan; }
+            else                            { o[0] = 0;     o[1] = 0;    }
+            break;
+        default:
+            break;
+        }
+    }
     return 0;
 }
 
@@ -73,4 +94,13 @@ int int386(int intno, const void *in, void *out)
 void fd2_mem_lock(void *addr, unsigned len)
 {
     (void)addr; (void)len;
+}
+
+/* ---- CRT wrappers referenced by the restored code -----------------------
+ * j___delay is the Watcom jump-table alias for delay; the game calls it from
+ * ev_script.c etc. */
+int j___delay(int ms)
+{
+    plat_sleep_ms((unsigned)ms);
+    return 0;
 }
