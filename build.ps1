@@ -50,7 +50,7 @@ $missing = $all | Where-Object { -not (Test-Path $_) }
 if ($missing) { throw "missing sources: $missing" }
 
 $libs = "user32.lib gdi32.lib winmm.lib d3d11.lib dxgi.lib shell32.lib ole32.lib"
-$link = if ($Console) { "/link /SUBSYSTEM:CONSOLE" } else { "/link /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup" }
+$link = if ($Console) { "/link /SUBSYSTEM:CONSOLE /DYNAMICBASE:NO /MAP:`"$out\fd2engine.map`"" } else { "/link /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup /DYNAMICBASE:NO /MAP:`"$out\fd2engine.map`"" }
 $objdir = Join-Path $out "fd2engine.obj"
 New-Item -ItemType Directory -Force -Path $objdir | Out-Null
 

@@ -53,11 +53,11 @@
 #include <stdint.h>
 
 /* 0x29AB2 - draw the four slot rows of the `base` image into `dst`. */
-void save_slot_rows(int selected, uint8_t *dst, int base);
+void save_slot_rows(int selected, uint8_t *dst, const uint8_t *base);
 
 /* 0x29BCB - run the four-slot selector over `base`; returns 1 on confirm,
  * -1 on cancel. */
-int save_slot_select(int base, int wait_keys);
+int save_slot_select(const uint8_t *base, int wait_keys);
 
 /* 0x2968D - write the current game into the selected slot of the FD2.SAV
  * image; when wait_keys != 0 the selector waits for animated keys (the

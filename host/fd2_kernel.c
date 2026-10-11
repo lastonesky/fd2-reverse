@@ -136,6 +136,17 @@ static uint8_t g_keys[64];
 static int     g_nkeys;
 static int     g_key_delay = 800;
 
+static uint8_t key_ascii(uint8_t sc)
+{
+    switch (sc) {
+    case 0x1C: return 0x0D;   /* Enter  */
+    case 0x39: return 0x20;   /* Space  */
+    case 0x01: return 0x1B;   /* Esc    */
+    case 0x0E: return 0x08;   /* Backsp */
+    default:   return 0;
+    }
+}
+
 static int is_extended_scan(uint8_t sc)
 {
     return sc == 0x48 || sc == 0x50 || sc == 0x4B || sc == 0x4D ||
@@ -149,7 +160,7 @@ static void key_thread(void *arg)
     (void)arg;
     plat_sleep_ms(1200);                 /* let the title screen appear */
     for (i = 0; i < g_nkeys && !g_quit; i++) {
-        fd2_kbd_push(g_keys[i], is_extended_scan(g_keys[i]) ? 0xE0 : 0);
+        fd2_kbd_push(g_keys[i], is_extended_scan(g_keys[i]) ? 0xE0 : key_ascii(g_keys[i]));
         printf("fd2: autokey scan=%02X\n", (unsigned)g_keys[i]);
         plat_sleep_ms(g_key_delay);
     }

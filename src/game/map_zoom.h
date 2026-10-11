@@ -18,7 +18,7 @@
  * `zoom`/128 scale, centred on the fixed-point point (x, y).  `cells` is the
  * caller's row-major table of 32-bit source base pointers into the
  * dword_53A5D buffer, indexed cells[row*64 + col]. */
-void map_zoom_draw(int x, int y, int zoom, const uint32_t *cells);
+void map_zoom_draw(int x, int y, int zoom, const uint8_t *const *cells);
 
 /* 0x2000A - run the whole zoom-in / hold / zoom-out transition; returns 0. */
 int map_zoom_run(void);

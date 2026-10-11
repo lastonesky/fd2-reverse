@@ -128,15 +128,15 @@ void status_panel_draw(int *layout, int mode)
                                    (bank + 48u * (uint32_t)rec + 4u * (uint32_t)v4);
 
                     sprite24_plain49(sprite,
-                                     (void *)(uintptr_t)(320 * (26 * i + 117) + 655374),
+                                     VGA_P(320 * (26 * i + 117) + 655374),
                                      320);
                 }
             }
         }
     } else {
         gfx_blit_transparent(
-            (void *)(uintptr_t)(*(const uint32_t *)(const void *)
-                                    ((uintptr_t)layout + 4u * dword_53C57) + 709680u),
+            (void *)VGA_P(*(const uint32_t *)(const void *)
+                              ((uintptr_t)layout + 4u * dword_53C57) + 709680u),
             (const void *)(uintptr_t)
                 (dword_53F66 + *(const uint32_t *)(uintptr_t)
                     (dword_53F66 + 8u * dword_53C57 + 4 * half + 18)),
@@ -167,7 +167,7 @@ int status_screen_run(int mode)
             if (i == (int)dword_53C57)
                 v4 = 2 * i + 4;
             gfx_blit_transparent(
-                (void *)(uintptr_t)((uint32_t)layout[i] + 709680u),
+                (void *)VGA_P((uint32_t)layout[i] + 709680u),
                 (const void *)(uintptr_t)
                     (dword_53F66 + *(const uint32_t *)(uintptr_t)
                         (dword_53F66 + 4u * (uint32_t)v4 + 6)),

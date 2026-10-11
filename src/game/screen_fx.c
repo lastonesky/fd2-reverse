@@ -10,8 +10,8 @@
 #include <stdint.h>
 #include <string.h>
 
-#define SCREEN_CURTAIN_TBL 0x00052408u  /* 4 dwords {-39,-13,13,39} */
-#define SCREEN_CURTAIN_SRC 0x00053F66u  /* base of the sub-image pointer table */
+/* 4 dwords {-39,-13,13,39} at dseg02 0x52408 -> mirror offset 0x2408 */
+#define SCREEN_CURTAIN_TBL 0x2408u
 
 /* 0x26CE4 */
 void screen_curtain(int mode)
@@ -21,7 +21,7 @@ void screen_curtain(int mode)
     uint8_t *v2;
     int      i, j, k;
 
-    memcpy(tbl, (const void *)(uintptr_t)SCREEN_CURTAIN_TBL, sizeof tbl);
+    memcpy(tbl, (const void *)&fd2_data1[SCREEN_CURTAIN_TBL], sizeof tbl);
 
     p = (uint8_t *)guest_malloc(0xFA00u);
     memmove(p, (const void *)(uintptr_t)VGA_P(0xA0000u), 0xFA00u);

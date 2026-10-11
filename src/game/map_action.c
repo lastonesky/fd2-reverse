@@ -666,7 +666,7 @@ int map_action_zoom_resolve(int a1, int table_idx, int count,
     uint8_t *scratch1;
     uint8_t *scratch2;
     uint8_t *pool[4];
-    uint32_t *cells;
+    uint8_t **cells;
     int      i, j, k, m, n;
 
     /* 0x52096/0x520A2/0x520AE: the x base, y base and zoom of the three key
@@ -696,15 +696,14 @@ int map_action_zoom_resolve(int a1, int table_idx, int count,
     pool[3]  = scratch1;   /* the machine's 4th slot aliases the 2nd buffer */
 
     /* 64x64 table of 24x24 source bases over the decoded shape library. */
-    cells = (uint32_t *)guest_malloc(0x4000);
+    cells = (uint8_t **)guest_malloc(64u * 64u * sizeof(uint8_t *));
     for (i = 0; i < (int)dword_53AC5; ++i) {
         for (j = 0; j < (int)dword_53AC1; ++j) {
             uint8_t cell[8];
 
             map_cell_info(j, i, cell);
-            cells[64 * i + j] =
-                (uint32_t)(uintptr_t)(dword_53A5D + 6 +
-                                      576u * *(uint16_t *)(void *)cell);
+            cells[64 * i + j] = dword_53A5D + 6 +
+                                576u * *(uint16_t *)(void *)cell;
         }
     }
 

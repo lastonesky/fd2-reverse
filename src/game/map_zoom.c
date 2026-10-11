@@ -33,7 +33,7 @@
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(DOS_LOWMEM_BASE + (off)))
 
 /* 0x1F558 */
-void map_zoom_draw(int x, int y, int zoom, const uint32_t *cells)
+void map_zoom_draw(int x, int y, int zoom, const uint8_t *const *cells)
 {
     int      qx = (x - 156 * zoom) / 3072;
     int      rx = (x - 156 * zoom) % 3072;
@@ -61,8 +61,7 @@ void map_zoom_draw(int x, int y, int zoom, const uint32_t *cells)
 
         if (qy >= 0 && qy < (int)dword_53AC5) {
             const uint8_t *src =
-                (const uint8_t *)(uintptr_t)(cells[qy * 64 + qx] +
-                                             (uint32_t)cellofs);
+                cells[qy * 64 + qx] + (uint32_t)cellofs;
             int col;
 
             for (col = 0; col < 312; ++col) {
@@ -72,8 +71,7 @@ void map_zoom_draw(int x, int y, int zoom, const uint32_t *cells)
                 if (rx >= 3072) {
                     ++qx;
                     rx -= 3072;
-                    src = (const uint8_t *)(uintptr_t)(cells[qy * 64 + qx] +
-                                                       (uint32_t)cellofs);
+                    src = cells[qy * 64 + qx] + (uint32_t)cellofs;
                 }
             }
         }
@@ -118,7 +116,7 @@ int map_zoom_run(void)
     int       zoom_w;
     int       cx0, cy0;       /* fixed-point start centre (0x53AA9/0x53AAD) */
     int       cx1, cy1;       /* fixed-point end centre   (0x53AC1/0x53AC5) */
-    uint32_t *cells;
+    uint8_t **cells;
     int       phase, phase_step;
     int       last_tick;
     int       i, j, k;
@@ -145,13 +143,12 @@ int map_zoom_run(void)
     cy1 = 1536 * (int)dword_53AC5;
 
     /* 64x64 table of 24x24 source bases over the decoded shape library. */
-    cells = (uint32_t *)guest_malloc(0x4000);
+    cells = (uint8_t **)guest_malloc(64u * 64u * sizeof(uint8_t *));
     for (i = 0; i < (int)dword_53AC5; ++i) {
         for (j = 0; j < (int)dword_53AC1; ++j) {
             map_cell_info(j, i, cell);
-            cells[64 * i + j] =
-                (uint32_t)(uintptr_t)(dword_53A5D + 6 +
-                                      576u * *(uint16_t *)(void *)cell);
+            cells[64 * i + j] = dword_53A5D + 6 +
+                                576u * *(uint16_t *)(void *)cell;
         }
     }
 

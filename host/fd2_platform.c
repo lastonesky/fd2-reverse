@@ -111,15 +111,50 @@ int j___delay(int ms)
  * code and faulting address to the log so a in-game crash is actionable. */
 #if defined(_WIN32)
 #include <windows.h>
+
+static void crash_write(const char *prefix, EXCEPTION_POINTERS *ep)
+{
+    char buf[4096];
+    int n = 0, i;
+    void *frames[40];
+    USHORT k = CaptureStackBackTrace(0, 40, frames, NULL);
+    DWORD wrote;
+    HANDLE h;
+
+    n += wsprintfA(buf + n, "fd2: CRASH %s code=%08lX addr=%p\r\n", prefix,
+                   (unsigned long)ep->ExceptionRecord->ExceptionCode,
+                   ep->ExceptionRecord->ExceptionAddress);
+    for (i = 0; i < (int)k && n < (int)sizeof buf - 40; i++)
+        n += wsprintfA(buf + n, "  #%02d %p\r\n", i, frames[i]);
+    h = CreateFileA("fd2_crash.log", FILE_APPEND_DATA, FILE_SHARE_READ, NULL,
+                    OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h != INVALID_HANDLE_VALUE) {
+        SetFilePointer(h, 0, NULL, FILE_END);
+        WriteFile(h, buf, (DWORD)n, &wrote, NULL);
+        CloseHandle(h);
+    }
+}
+
 static LONG WINAPI fd2_unhandled(EXCEPTION_POINTERS *ep)
 {
-    fprintf(stderr, "fd2: CRASH code=%08lX addr=%p\n",
-            (unsigned long)ep->ExceptionRecord->ExceptionCode,
-            ep->ExceptionRecord->ExceptionAddress);
-    fflush(stderr);
+    crash_write("unhandled", ep);
     return EXCEPTION_EXECUTE_HANDLER;
 }
-void fd2_install_crash_handler(void) { SetUnhandledExceptionFilter(fd2_unhandled); }
+
+static LONG WINAPI fd2_veh(EXCEPTION_POINTERS *ep)
+{
+    DWORD code = ep->ExceptionRecord->ExceptionCode;
+    /* 0x406D1388 = MS_VC_EXCEPTION (thread naming) - benign. */
+    if (code != 0x406D1388u)
+        crash_write("veh", ep);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+void fd2_install_crash_handler(void)
+{
+    AddVectoredExceptionHandler(1, (PVECTORED_EXCEPTION_HANDLER)fd2_veh);
+    SetUnhandledExceptionFilter(fd2_unhandled);
+}
 #else
 void fd2_install_crash_handler(void) { }
 #endif

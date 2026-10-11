@@ -37,8 +37,8 @@
  * §3.5). They are scene buffers released by scene_apply_state; module-local
  * aliases keep those short names out of the shared globals header.
  * 0x53A61 is also the icon 32-bit offset table (RE_MAP §4 / round27). */
-#define g_p_53A55   (*(uint32_t *)&fd2_data1[0x3A55])   /* 'p'   */
-#define g_buf_53A61 (*(uint32_t *)&fd2_data1[0x3A61])   /* 'buf' */
+#define g_p_53A55   dword_53A55                          /* 'p'   */
+#define g_buf_53A61 dword_53A61                          /* 'buf' */
 
 /* low word of the BIOS tick counter at linear 0x46C (BDA 40:6C), read as
  * int16 like the machine code (movsx in scene_apply_state's delta math). */
@@ -106,7 +106,7 @@ int scenario_menu(void)
 
     dword_53C57 = 0;                                    /* slot counter      */
     do {
-        v8 = sub_29BCB((int)(uintptr_t)buf, 0);         /* slot-select dialog */
+        v8 = sub_29BCB(buf, 0);         /* slot-select dialog */
         if (v8 != -1) {
             v9 = buf + SLOT_STRIDE * dword_53C57 + SLOT_PARTY_OFF;
             memmove((void *)(uintptr_t)dword_53BF7, v9, 0xA00u);  /* party */
