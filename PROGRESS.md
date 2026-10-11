@@ -2314,14 +2314,34 @@ CRT/库包装 `0x3645D`(read)/`0x365DA`(int386) 后，游戏头名同为 u1 的�
 - **chkstk**：`push 0x6c; call 0x3702F`（不分配帧），丢弃；`sub_4E98D`=rle_decode、`sub_2FACD`=ui_status_panel_at、`sub_2DF01`=pal_blend_to。
 - 无对拍器，标“已还原未验证”。
 
+### 91) 片头队伍图形演示 `0x31C49` → `figure_showcase_run`（本轮，1 函数，§5 大单函数条款）→ `src/game/figure_showcase.c/.h`（新建）
+
+按 §90 遗留建议、依 playbook §5 的“超预算单函数”例外拉出闭包就绪头名 `0x31C49`（1511B，u1）：
+闭包就绪列表已无 in-budget 游戏内容项（仅 CRT/库包装与伪函数条目），本函数的**真闭包＝自身**
+（唯一调用者片头驱动 `0x31529` 仍待还原；所有 callee 已在册），已逐指令核对离线反汇编 `31c49..3222f`。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x31C49` | `figure_showcase_run(void)` | 片头队伍演示（由 `0x31529` 无参调用一次）：`world_load_party(30)`、`dword_53C67=3208` → 分配并清零 0x36B00 缓冲、`vm_run(dword_53A79,44,buf+76848,320,205,76,0,25,0)` 预绘 → 500 帧淡入（`pal_fade_range(0,255,fade)`，fade 40→0 于 i<200 每 5 帧减、i>300 每 5 帧增）+ 发屏 + `svc_wait_ticks(1)` → 释放 → 分配 work(0x1F400)/screen(0xFA00)/stage(0xFA00)、载 TAI 条(FDOTHER 3) 与 FDOTHER 56 → `rle_decode(56,0,0,screen,320,-1)`、释放 plate、`bgm_play(4,0)` → 由 `j=dword_53BFB-1` 递减到 0 遍历队伍：记录号 `j(≥2)` / `j==1→0` / `j==0→1`，取 80 字节记录 `rec`、组字节 `grp=rec[7]`，载 FIGANI 组 `3*grp+1`(fig_next)/`3*grp`(fig_base) → `figure_attack_scroll(j,1,fig_base,0,work,screen,portrait)` + `anim_cycle_frame(fig_base,0,work,320)` + 20 帧基组步进（每帧 `gfx_copy_rows`/`anim_cycle_frame(fig_base,-1,…)`/发屏/等待 1）→ 逐子帧 `m<fig_next[2]`：`sub=fig_next+*(u32*)(fig_next+4m+8)`，`gfx_copy_rows`+`res_blit(fig_next,m,work,320,-1)`+发屏+`svc_wait_ticks(sub[6])` → `memmove(stage,screen,0xFA00)`、`dword_53A85=res_load(aDatoDat,dword_53A85,grp)`、`dlg_box_stage(stage,320,5,7,5,5)` → 对话帧预算 `nframes=j?220:440`，逐帧：`gfx_copy_rows(work,320,stage,320,320,200)`、光标闪烁（`cursor` 递减；归零则 `cursor=(util_rand()&0x1F)+40`，`cursor>=2→col=0` 否则 `col=12`）、`rle2_blit(work+3208, dword_53A85+*(u32*)(dword_53A85+col), 320)`、`anim_cycle_frame(fig_base,-1,work,320)`、五条 `vm_run` 文本（`53A79:10`@work+5865、`53A7D:rec[8]+1`@work+5915、`53A79:11`@work+12265、`53A7D:rec[32]+150`@work+12315、`53A79:(n>=220?45:rec[8]+12)`@work+32008(0,20,0)）、发屏、等待 1、`kbd_pending()` 为真则 `j=1`+`kbd_flush()` → 每记录末 `pal_fade_out()` → 收尾释放 screen/stage/fig_next/portrait/work。 |
+
+**陷阱 / 伪代码伪影**：
+- **ABI/尾跳**：`int(void)` 原型系 chkstk 伪影；函数体无栈参，出口 `jmp 0x2E2A8` 是共享收尾（`add esp,0x24; pop ebp/edi/esi/ebx; ret`）＝普通 `return`，故 C 取 `void figure_showcase_run(void)`。
+- **malloc 尺寸伪影**：Hex-Rays 把 `malloc/memset` 的立即数渲染成 `&loc_36B00`/`&loc_1F400`；实为 `0x36B00`/`0x1F400`。`0x36B00`（其偏移 0x12C30 处写文本）在片头淡入中分块发屏；`0x1F400`＝640 行距 work。
+- **`0x36B00` 伪函数条目**：`function-map.csv` 里的 `0x36b00` 条目实为大函数体中部，非独立函数，本轮未碰。
+- **记录号映射**：`j!=0 且 j!=1` 用 `(uint8_t)j`，`j==1→0`，`j==0→1`（机器 `bl` 分支），非简单 `j`。
+- **末行 vm_run 子号**：`n>=220→45` 否则 `(uint8_t)(rec[8]+12)`（机器 `bl` 单字节，`rec[8]+12` 可能 >255 需回绕）。
+- **光标计数器** `cursor`（机器 `[esp+0x1c]` 单字节）与 `col`（0/12）共同选 DATO 子图；`rle2_blit` 目的 `work+dword_53C67(3208)`。
+- **伪 callee**：仅误挂 `sub_3702F`(chkstk)；真依赖全部已还原（res/rle/rle2/gfx/fade/svc/vm/dlg/bgm/world_load/kbd/util/anim/figure_attack_scroll）。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **34 → 33**（本轮 §90 −1），已还原未验证 **289 → 290**（本轮 +1）。
-- **闭包就绪游戏内容项**：本轮 §90 取走 `0x2D80D` 后，闭包就绪待还原仍无 in-budget 游戏内容项——
+- `function-map.csv`：待还原 **33 → 32**（本轮 §91 −1），已还原未验证 **290 → 291**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §91 取走 `0x31C49` 后，闭包就绪待还原仍无 in-budget 游戏内容项——
   只剩 CRT/库包装（`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）、伪函数条目
-  （`0x10000`/`0x36B00`），及超预算单函数 `0x31C49`(1511B，真闭包＝自身)/`0x31529`(1718B，闭包＝自身+`0x31C49`)。
-  下批按 §5 取 `0x31C49`(1511B)（片头队伍演示收尾，真闭包＝自身；其 caller `0x31529` 亦将转闭包就绪）。
+  （`0x10000`/`0x36B00`），及超预算单函数 `0x31529`(1718B，本轮后真闭包＝自身，其唯一 callee `0x31C49` 已还原)。
+  下批按 §5 取 `0x31529`(1718B)（片头/标题演示驱动，真闭包＝自身；其所有 callee 已在册）。
 
 > **台账发现**：`0x1CEED` 的 caller `0x1CFF0`（行动菜单驱动）仍待还原，其真闭包含 `0x1AA1D`/`0x1DB65`
 > 等大件（>8 函数，按 §4 跳过）；另一个 caller `0x1D51D` 已在 §83 还原。

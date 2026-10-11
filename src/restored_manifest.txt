@@ -919,3 +919,15 @@
 # epilogue (plain return), 0x3702F is the Watcom stack probe, both dropped.  No
 # differential harness.
 0x28F65 sub_28F65 game/shop_screen.h
+
+# 0x31C49 - the intro party-figure showcase, called once (argument-less) by the
+# intro driver 0x31529: fade in, then for every party record (dword_53BFB-1..0)
+# load the FIGANI base/+1 groups of its 80-byte record's group byte (+7), slide
+# the plate in (figure_attack_scroll), step 20 base frames, play the +1 group's
+# sub-sprites, then stamp the DATO dialogue box (dlg_box_stage) under five vm_run
+# text lines and a blinking cursor, polling the keyboard for up to 220 frames
+# (440 for the first record), ending each record with pal_fade_out.  True closure
+# = itself (all callees already in the manifest); the `int(void)` prototype is a
+# chkstk artifact and the `jmp 0x2E2A8` exit is a shared epilogue (plain return),
+# both dropped.  No differential harness.
+0x31C49 sub_31C49 game/figure_showcase.h

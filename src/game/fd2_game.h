@@ -23,6 +23,7 @@
 #include "ev_script.h"
 #include "fade.h"
 #include "fb_slide.h"
+#include "figure_showcase.h"
 #include "figure_view.h"
 #include "fx.h"
 #include "gfx.h"
