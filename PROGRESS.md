@@ -2068,15 +2068,46 @@ CRT/库包装 `0x3645D`(read)/`0x365DA`(int386) 后，游戏头名同为 u1 的�
 - **对既有模块的唯一改动**：仅追加函数与头声明，未改任何已验证/已还原函数。
 - 无对拍器，标“已还原未验证”。本批后 `0x2DFC8` 的两个调用者 `0x15055`(u2)/`0x31C49`(u1) 转为闭包就绪。
 
+### 81) AI 物品使用执行体 `0x15055` → `map_ai_use_item`（本轮，1 函数，按 §1 取在预算游戏头名）→ `src/game/map_ai.c/.h`（追加）
+
+§80 记“下批按 §1 取 usage 最高的在预算游戏项 `0x15055`(u2，700B)”。闭包就绪列表按 usage 降序，
+跳过 CRT/库包装 `0x3645D`(read)/`0x365DA`(int386) 后，`0x15055` 即最高使用的游戏内容项，
+且与既有 `map_ai` 同族（它是决策驱动器 `0x14EF0` 的三个执行体之一、`0x14EF0` 在册），故追加该模块
+（不新建头，伞头已含 `map_ai.h`）。生成器验得**真闭包＝自身**（全部 callee 在册）。
+逐指令核过离线反汇编 `15055..15310`（155 行），ABI＝cdecl、2 参。
+
+| 项 | 要点 |
+|---|---|
+| 签名/ABI | `int map_ai_use_item(int actor, int require_empty)`（调用点 `14f6c: push a2; push a1`） |
+| 取物品 | `dword_53C57 = rec_field_byte(actor, dword_53C3F)`（`dword_53C3F` 是**物品栏槽位**而非目标记录，与 `map_ai_pick_item_target` 写 `dword_53C3F = i` 一致）→ `eff = item_entry(dword_53C57)`（`0x4E8BC`，base 0x602AD/步长 23）→ `filter = require_empty ? eff[17] : (eff[17]==0)` |
+| 伸手范围 | `kind=eff[16]`：`<= 0x0F` → `count = map_reveal_reachable(dword_53C37, dword_53C3B, list, eff[18], 0, filter)`；`>= 0x10` → `count = map_scan_records(dword_53C37, dword_53C3B, list, rec[0], rec[1], kind-16, 0)`（reach vs 直线扫，与 `map_ai_pick_item_target` 同构） |
+| 通用段 | `util_fix_records(dword_53A51)`；`j___delay(200)`；`dword_51A83 = eff[18]+2` |
+| 大招分支（`kind >= 0x10`） | `ev5_1F04A(actor, list[0])` → `map_view_update(1)` → `svc_wait_ticks(1,2)` → `figure_scene_play(actor)`（0x2DFC8）→ `portrait_reveal_cell(actor,80,-4)` → 延时 200 → `for i=64..0: pal_fade_add(0,255,i); j___delay(4)` → `dword_51A83=6` → `kind-=16` → 从 `qword_53AB1` 线性插值新视图中心并**有符号钳制**到 `[0, dword_53AC1/53AC5 - 1]` → `dword_53C1F=0; map_slide_view(...)` → `dword_51A83=0; for j=1..8: dword_53C1F=j; map_view_update(1); svc_wait_ticks(1)` → `util_fix_records` → `svc_wait_ticks(2)` → `dlg_portrait_glide(list[0])` |
+| 小分支（`kind < 0x10`） | `map_slide_view(dword_53C37, dword_53C3B)` |
+| 收尾 | `map_action_router(actor, dword_53C3F, count, list)`（0x20C6F，物品条目 +13 动作码本体）→ `dlg_portrait_clear()` → `dword_53EC8 = 0` → `return 0` |
+
+**陷阱 / 伪代码伪影**：
+- **`qword_53AB1` 假 64 位视图**：Hex-Rays 渲染成 `(dword_53C37 - qword_53AB1)*v14 + qword_53AB1`，但离线反汇编
+  `151ec..15251` 全程 32 位（`sub eax, ds:53ab1` / `imul ebx,eax` / `add eax,ds:53ab1`），y 侧用 `ds:53ab5`（即 8 字节值的
+  **高 dword**）。C 侧按 32 位 `(int32_t)(dword_53C37 - (uint32_t)qword_53AB1)` 与 `dword_53AB5` 忠实还原。
+- **有符号钳制**：`cmp/jl/jge` 全为有符号（`1520b`/`1524e`），`dword_53AC1/53AC5` 虽在生成头里是 `uint32_t`，C 侧比较时
+  强转 `int32_t`，越界侧写 `dword_53ACn - 1`（`dec` 的 32 位回绕语义）。
+- **伪 callee**：`sub_3702F`＝Watcom chkstk（`push 0x54`，不分配帧），非依赖；尾声 `add esp,0x24; pop×4; ret` 自清，无跨函数跳转。
+- **局部缓冲**：`v13`（机器 `[esp]`，0x20B）既作 `map_reveal_reachable`/`map_scan_records` 的 `out`，也作 `map_action_router` 的 `list`；
+  C 侧用 `uint8_t list[32]`（与 `map_ai_pick_item_target` 的 `cells[32]` 同尺寸）。`list[0]` 供 `ev5_1F04A`/`dlg_portrait_glide`。
+- **`dword_53C3F` 语义**：在 `15055` 里被 `rec_field_byte(actor, slot)` 与 `map_action_router(..., slot, ...)` 当**槽位**用，
+  印证它在 `map_ai_pick_item_target` 中确实是槽位 `i`（非目标记录索引）。
+- 对既有模块的唯一改动：仅追加函数与头声明，未改任何已验证/已还原函数。
+- 无对拍器，标“已还原未验证”。本批后 `0x15055` 的调用者 `0x14EF0`(u6) 仍待其另一 callee `0x15311`（大闭包），暂未闭包就绪。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **47 → 46**（本轮 §80 −1），已还原未验证 **276 → 277**（本轮 +1）。
-- **闭包就绪游戏内容项**：本轮 §80 取走 `0x2DFC8` 后，闭包就绪待还原为 CRT/库包装
+- `function-map.csv`：待还原 **46 → 45**（本轮 §81 −1），已还原未验证 **277 → 278**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §81 取走 `0x15055` 后，闭包就绪待还原为 CRT/库包装
   （`0x3645D`/`0x365DA`/`0x36C56`/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`），
-  加上**新解锁的** `0x15055`(700B，u2，`0x2DFC8` 的调用者)与 `0x31C49`(1511B，u1)，及仍在册的
-  `0x2CF30`(2269B)/`0x2D80D`(1780B)/`0x15DF3`(126B)。下批按 §1 取 usage 最高的在预算游戏项
-  `0x15055`(u2，700B)。
+  加上仍在册的游戏内容项 `0x31C49`(1511B，u1)、`0x15DF3`(126B，u1)、`0x2CF30`(2269B)、`0x2D80D`(1780B)。
+  下批按 §1 取 usage 最高的在预算游戏项 `0x31C49`(u1，1511B，略超预算，属 §2 整闭包可拉) 或 `0x15DF3`(u1，126B)。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 

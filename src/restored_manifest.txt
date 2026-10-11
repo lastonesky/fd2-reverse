@@ -822,3 +822,12 @@
 # the frame counter is an uninitialised EDI modelled as 0).  No differential
 # harness.
 0x2DFC8 sub_2DFC8 game/figure_view.h
+
+# 0x15055 - the AI item-use executor, called only by the decision driver
+# 0x14EF0 (still pending) when its item target scores highest.  Resolves the
+# chosen item slot through rec_field_byte and the 0x4E8BC effect table, plays
+# the reach reveal (map_reveal_reachable / map_scan_records), then the
+# figure-summon sequence for effect kind >= 0x10, and hands the targets to
+# map_action_router.  True closure = itself (all callees in the manifest);
+# 0x3702F is the Watcom stack probe, dropped.  No differential harness.
+0x15055 sub_15055 game/map_ai.h

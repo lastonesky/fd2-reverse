@@ -426,3 +426,98 @@ int map_ai_pick_reach_target(int actor, int mode)
     guest_free(v26);
     return 0;
 }
+
+/* 0x15055 - the AI item-use executor, chosen by the decision driver 0x14EF0
+ * when the item target scores highest.  Reads the actor's chosen slot
+ * dword_53C3F through rec_field_byte and the effect entry through the 0x4E8BC
+ * accessor.  The effect byte +16 selects the reach: <= 0x0F scans the effect
+ * range (item[18]) / radius 0 (map_reveal_reachable), >= 0x10 walks the actor
+ * cell with map_scan_records and then plays the full-screen figure_summon
+ * sequence and interpolates a new view centre from qword_53AB1.  Byte +17 is
+ * the empty filter (inverted when `require_empty` is 0) and byte +18 the
+ * effect band (also the dword_51A83 fade selector).  The collected targets go
+ * to map_action_router, then the portrait is cleared.  Always 0. */
+int map_ai_use_item(int actor, int require_empty)
+{
+    const uint8_t *rec =
+        (const uint8_t *)dword_53A45 + REC_STRIDE * (uint32_t)actor;
+    const uint8_t *eff;
+    uint8_t list[32];
+    int filter, kind, count, i;
+
+    dword_53C57 = (uint32_t)rec_field_byte(actor, (int)dword_53C3F);
+    eff = item_entry((int)dword_53C57);
+
+    if (require_empty != 0)
+        filter = eff[17];
+    else
+        filter = (eff[17] == 0);
+
+    dlg_portrait_glide(actor);
+
+    kind = eff[16];
+    if (kind <= 0x0F)
+        count = map_reveal_reachable((int)dword_53C37, (int)dword_53C3B,
+                                     list, eff[18], 0, filter);
+    else
+        count = map_scan_records((int)dword_53C37, (int)dword_53C3B, list,
+                                 rec[0], rec[1], kind - 16, 0);
+
+    util_fix_records(dword_53A51);
+    j___delay(200);
+    dword_51A83 = eff[18] + 2;
+
+    if (kind >= 0x10) {
+        int32_t cx, cy, j;
+
+        ev5_1F04A(actor, list[0]);
+        map_view_update(1);
+        svc_wait_ticks(1);
+        svc_wait_ticks(2);
+        figure_scene_play(actor);
+        portrait_reveal_cell(actor, 80, -4);
+        j___delay(200);
+        for (i = 64; i >= 0; --i) {
+            pal_fade_add(0, 255, i);
+            j___delay(4);
+        }
+        dword_51A83 = 6;
+        kind -= 16;
+        cx = (int32_t)(dword_53C37 - (uint32_t)qword_53AB1) * kind
+             + (int32_t)(uint32_t)qword_53AB1;
+        if (cx < (int32_t)dword_53AC1) {
+            if (cx < 0)
+                cx = 0;
+        } else {
+            cx = (int32_t)(dword_53AC1 - 1u);
+        }
+        dword_53C37 = (uint32_t)cx;
+        cy = (int32_t)(dword_53C3B - dword_53AB5) * kind
+             + (int32_t)dword_53AB5;
+        if (cy < (int32_t)dword_53AC5) {
+            if (cy < 0)
+                cy = 0;
+        } else {
+            cy = (int32_t)(dword_53AC5 - 1u);
+        }
+        dword_53C3B = (uint32_t)cy;
+        dword_53C1F = 0;
+        map_slide_view((int)dword_53C37, (int)dword_53C3B);
+        dword_51A83 = 0;
+        for (j = 1; j < 9; ++j) {
+            dword_53C1F = j;
+            map_view_update(1);
+            svc_wait_ticks(1);
+        }
+        util_fix_records(dword_53A51);
+        svc_wait_ticks(2);
+        dlg_portrait_glide(list[0]);
+    } else {
+        map_slide_view((int)dword_53C37, (int)dword_53C3B);
+    }
+
+    map_action_router(actor, (int)dword_53C3F, count, list);
+    dlg_portrait_clear();
+    dword_53EC8 = 0;
+    return 0;
+}

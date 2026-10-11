@@ -26,6 +26,12 @@
  *                                    for `actor`'s item and score every record
  *                                    the item can hit, keeping the best in
  *                                    dword_53C43..dword_53C4F.
+ *   0x15055  map_ai_use_item      execute the item action the decision driver
+ *                                    picked: resolve the chosen item slot,
+ *                                    play the effect's reach reveal (or the
+ *                                    figure-summon sequence for effect kind
+ *                                    0x10+) and hand the targets to
+ *                                    map_action_router.
  *
  * Two shared map helpers:
  *
@@ -35,7 +41,8 @@
  *   0x1DEBE  map_ai_target_adjacent  1 when a record is orthogonally adjacent
  *                                    to a cell and carries a weak-slot item.
  *
- * The decision driver 0x14EF0 is still pending.
+ * The decision driver 0x14EF0 (which dispatches between 0x15055, 0x15311 and
+ * 0x1548E) is still pending.
  *
  * ABI = cdecl, decoded from the offline disassembly
  * (analysis/cseg01_disasm.txt), which is the authority for the argument order
@@ -87,5 +94,16 @@ void map_exclude_record_cells(int actor, int mode);
 /* 0x1DEBE - 1 when record `target` is orthogonally adjacent to cell (x,y) and
  * carries a weak (effect byte +11 <= 1) item in its first slot; else -1. */
 int map_ai_target_adjacent(int target, int x, int y);
+
+/* 0x15055 - execute the item action the decision driver 0x14EF0 selected.
+ * Resolves the actor's chosen item slot (dword_53C3F) through rec_field_byte
+ * and the effect table (0x4E8BC): the effect byte +16 picks the reach (<= 15:
+ * map_reveal_reachable over the effect range/radius; >= 0x10: map_scan_records
+ * over the actor cell, then the full-screen figure_summon and a new view
+ * centre interpolated from qword_53AB1), byte +17 the empty filter and byte
+ * +18 the effect band.  The collected targets go to map_action_router, then
+ * the portrait is cleared.  `require_empty` picks the reachable-cell filter
+ * (0/1).  Always returns 0. */
+int map_ai_use_item(int actor, int require_empty);
 
 #endif /* GAME_MAP_AI_H */
