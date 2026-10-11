@@ -18,6 +18,7 @@
 #include "ev.h"
 
 #include <stdint.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 /* --- service entry points (called at their original addresses) --------- */
@@ -29,12 +30,6 @@ typedef int      (*slot_free_fn)(int index);
 typedef int      (*slot_claim_fn)(int index, int value);
 typedef uint32_t (*mask_records_fn)(void);
 
-#define ORIG_VM_RUN     ((vm_fn)          (uintptr_t)0x00015F84u)
-#define ORIG_STATUS     ((status_fn)      (uintptr_t)0x000344F2u)
-#define ORIG_REC_FLAG   ((flag_fn)        (uintptr_t)0x00034894u)
-#define ORIG_SLOT_FREE  ((slot_free_fn)   (uintptr_t)0x0001B8A6u)
-#define ORIG_SLOT_CLAIM ((slot_claim_fn)  (uintptr_t)0x0001BB8Cu)
-#define ORIG_MASK       ((mask_records_fn)(uintptr_t)0x00034D64u)
 
 /* --- original data-segment globals ------------------------------------- */
 
@@ -46,7 +41,7 @@ typedef uint32_t (*mask_records_fn)(void);
  * wait 1); only the sub-stream changes. */
 static int vm_sub(int sub)
 {
-    return ORIG_VM_RUN((void *)(uintptr_t)dword_53A79, sub, VGA_BASE, 320,
+    return vm_run((void *)(uintptr_t)dword_53A79, sub, VGA_BASE, 320,
                        205, 76, 74, 19, 1);
 }
 
@@ -63,7 +58,7 @@ uint32_t ev_status24_27(void)
     uint32_t flag = *((uint8_t *)(uintptr_t)dword_53AD5 + 16);
 
     if (flag == 0) {
-        ORIG_STATUS(24, 27, 7);
+        rec_status_set(24, 27, 7);
         vm_sub(3);
         *((uint8_t *)(uintptr_t)dword_53AD5 + 16) = 1;
         return (uint32_t)(uintptr_t)dword_53AD5;
@@ -77,11 +72,11 @@ void ev_status7_36(void)
 {
     int i, hit = 0;
 
-    ORIG_STATUS(7, 36, 7);
+    rec_status_set(7, 36, 7);
     vm_sub(8);
 
     for (i = 7; i <= 36; i++) {
-        if (ORIG_REC_FLAG(i) == 0)
+        if (rec_flag(i) == 0)
             hit = 1;
     }
     if (hit)
@@ -91,7 +86,7 @@ void ev_status7_36(void)
 /* 0x34B2F */
 void ev_flag8_gate(void)
 {
-    if (ORIG_REC_FLAG(8) == 0)
+    if (rec_flag(8) == 0)
         vm_sub(2);
 }
 
@@ -102,7 +97,7 @@ uint32_t ev_rec6_gate(int idx)
                    + (uint32_t)idx * REC_STRIDE + 6);
 
     if (b != 0) {
-        ORIG_STATUS(9, 27, 0);
+        rec_status_set(9, 27, 0);
         *((uint8_t *)(uintptr_t)dword_53AD5 + 16) = 1;
         return (uint32_t)(uintptr_t)dword_53AD5;
     }
@@ -113,7 +108,7 @@ uint32_t ev_rec6_gate(int idx)
 uint32_t ev_mask_records(void)
 {
     vm_sub(2);
-    return ORIG_MASK();
+    return rec_status_mask_records();
 }
 
 /* 0x34F74 */
@@ -131,12 +126,12 @@ void ev_slot8_claim(int idx)
 {
     if (idx != 0)
         return;
-    if (ORIG_SLOT_FREE(idx) == 8)
+    if (rec_slot_free(idx) == 8)
         return;
     if (*((uint8_t *)(uintptr_t)dword_53AD5 + 16) != 0)
         return;
 
-    ORIG_SLOT_CLAIM(idx, 89);
+    rec_slot_claim(idx, 89);
     vm_sub(11);
     *((uint8_t *)(uintptr_t)dword_53AD5 + 16) = 1;
 }
@@ -147,7 +142,7 @@ uint32_t ev_status16_71(void)
     uint32_t flag = *((uint8_t *)(uintptr_t)dword_53AD5 + 16);
 
     if (flag == 0) {
-        ORIG_STATUS(16, 71, (int)flag);
+        rec_status_set(16, 71, (int)flag);
         vm_sub(1);
         *((uint8_t *)(uintptr_t)dword_53AD5 + 16) = 1;
         return (uint32_t)(uintptr_t)dword_53AD5;
@@ -157,7 +152,7 @@ uint32_t ev_status16_71(void)
 
 /* 0x351E6 - the window 64..73 is a constant, independent of the record
  * count; the fields cleared are byte +53 (not +52). */
-uint32_t ev_clear64_73(void)
+void ev_clear64_73(void)
 {
     int i;
 
@@ -165,13 +160,13 @@ uint32_t ev_clear64_73(void)
     for (i = 64; i <= 73; i++)
         *((uint8_t *)(uintptr_t)dword_53A45 + (uint32_t)i * REC_STRIDE + 53) = 0;
 
-    ORIG_STATUS(64, 73, 3);
-    return ORIG_STATUS(35, 49, 0);
+    rec_status_set(64, 73, 3);
+    rec_status_set(35, 49, 0);
 }
 
 /* 0x35258 */
-uint32_t ev_status16_34(void)
+void ev_status16_34(void)
 {
     vm_sub(8);
-    return ORIG_STATUS(16, 34, 0);
+    rec_status_set(16, 34, 0);
 }

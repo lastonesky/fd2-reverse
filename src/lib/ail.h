@@ -25,6 +25,25 @@ void   *AIL_install_MDI_INI(void);              /* 0x3AA72 -> HMDIDRIVER or NULL
 void   *AIL_allocate_sample_handle(void *dig);  /* 0x392D0 -> HSAMPLE (main x2) */
 void   *AIL_allocate_sequence_handle(void *mdi);/* 0x3ACA3 -> HSEQUENCE */
 
+/* Sample-handle entries the game calls (de-guest C4: the ORIG_* machine
+ * callbacks now point here instead of the AIL library addresses).  Return
+ * values follow the call-site evidence in svc.c: the play_sfx helpers keep
+ * the last call's result in EAX, so these are declared int32_t. */
+int32_t AIL_init_sample(void *handle);                          /* 0x39521 */
+int32_t AIL_set_sample_address(void *handle, const void *start,
+                               uint32_t len);                    /* 0x39694 */
+int32_t AIL_set_sample_loop_count(void *handle, int32_t loops);  /* 0x39AAE */
+int32_t AIL_start_sample(void *handle);                          /* 0x39798 */
+int32_t AIL_stop_sample(void *handle);                           /* 0x39805 */
+
+/* Sequence-handle entries used by bgm.c / scene.c / sys_menu.c. */
+void   *AIL_init_sequence(void *handle, void *start, int32_t seq_num);/* 0x3ADF5 */
+void    AIL_start_sequence(void *handle);                             /* 0x3AEEE */
+void    AIL_stop_sequence(void *handle);                              /* 0x3AF5B */
+void    AIL_set_sequence_volume(void *handle, int32_t volume,
+                                int32_t ramp_ms);                     /* 0x3B124 */
+int32_t AIL_set_sequence_loop_count(void *handle, int32_t count);     /* 0x3B1A6 */
+
 /* TODO(phase 2/3): the other 10 entries the game calls (RE_MAP §3.1):
  *   AIL_init_sample, AIL_set_sample_address, AIL_set_sample_loop_count,
  *   AIL_start_sample, AIL_stop_sample, AIL_init_sequence, AIL_start_sequence,

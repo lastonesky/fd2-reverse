@@ -2914,8 +2914,25 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
   `--full` 两 profile `-Werror` rc=0，伞头自检通过。
 - 过渡期宽容现仅 hybrid 需要（bit-exact 的 4 字节镜像 + `ORIG_*` 回调）。
 
-### 5.2 待办
+### 5.2 C4 完成：删除全部机器码回调（本轮）
 
-- **C4**：420 个 `ORIG_*` 调用点（100 个别名）全部换成已还原 C 函数/libc。
+- 207 条 `ORIG_*` 宏（106 个地址/17 个文件）由 `((fn)(uintptr_t)0x…)`
+  改为直接指向已还原 C 函数或库边界，随后 594 个调用点**内联**为真实函数名，
+  `ORIG_*` 名字在 `src/` 中仅剩注释，机器码 `0x1xxxx..0x4Fxxx` 回调归零。
+- 同样处理了未走 `ORIG_` 前缀的 7 个文件的机器回调（`bgm/fade/fx/msg/scene/
+  sys_menu/title_screen` 的 `RES_LOAD/AIL_*/OUTP/DELAY/…`）。
+- `src/lib/ail.h` 新增 10 个样本/序列句柄入口真签名（AIL `init/start/stop/
+  volume/loop_count` × sample/sequence）；`gen_headers.py` 的 `AIL_BOUNDARY_SKIP`
+  与 `CRT_BOUNDARY_SKIP` 让 IDA 的栈探针 arity 不再与边界头冲突。
+- 新增 `src/lib/crt.h`：`delay/outp/int386/fd2_mem_lock`（DOS/Watcom 边界）。
+- 顺带修好 C4 暴露的真签名问题：`ev_script_run` script 参数 `const void*`、
+  `path_mark/path_find` 的 `cost_row` 改指针、`res_blit/res_blit6` buf 改 `const`、
+  `dlg_blit_dato/dlg_scroll_text` 的 1 参机器 ABI 调用点补 globals；
+  `unit_load`/`map`/`ev5` 的 0x4E8xx 表访问器改用 `tbl_ptr(base,stride,i,0)`。
+- 验收：standalone strict 0 error、hybrid 0、`--full` 两 profile `-Werror` rc=0。
+- 剩余绝对地址仅 VGA/低内存（C3）。
+
+### 5.3 待办
+
 - **C2**：17 张 `funcs_*` 表改真实函数指针数组；`fd2_relocate` 的 4 字节写删除。
-- **C3**：173 处 `0xA0000/0xA0504` VGA 与 `fd2_lowmem`/`MEMORY` 抽 framebuffer/平台缝。
+- **C3**：~100 处 `0xA0000/0xA0504` VGA 与 `fd2_lowmem`/`MEMORY` 抽 framebuffer/平台缝。

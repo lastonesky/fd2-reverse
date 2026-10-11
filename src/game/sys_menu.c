@@ -36,7 +36,6 @@
 /* 0x3B124 - AIL_set_sequence_volume(handle, volume, ms).  The AIL entry is
  * called at its original address, exactly as src/game/bgm.c / svc.c do. */
 typedef void (*ail_vol_fn)(void *h, int32_t volume, int32_t ms);
-#define AIL_SEQ_VOLUME ((ail_vol_fn)(uintptr_t)0x0003B124u)
 
 /* The shared "cancelled" dialogue frame living at 0x1716F inside 0x16F55's
  * body (VM sub-stream 412, a 200 ms pause, portrait close).  0x16F55's own
@@ -170,7 +169,7 @@ void sys_menu_audio(void)
 
         if (dword_53C57 == 0) {
             byte_51E61 = (byte_51E61 == 0);
-            AIL_SEQ_VOLUME(dword_53ED0, byte_51E61 ? 127 : 0, 1000);
+            AIL_set_sequence_volume(dword_53ED0, byte_51E61 ? 127 : 0, 1000);
         } else if (dword_53C57 == 2) {
             byte_53AF9 ^= 1;
         } else if (dword_53C57 == 3) {

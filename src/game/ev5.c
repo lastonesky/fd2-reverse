@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 /* --- services ---------------------------------------------------------- */
@@ -24,20 +25,6 @@ typedef void     (*outp_fn)(int port, int val);        /* 0x37AE5 */
 typedef void     (*pal_anim_fn)(void);                 /* 0x4E31C */
 typedef int      (*kbd_pending_fn)(void);              /* 0x10620 */
 
-#define ORIG_RES_LOAD   ((res_load_fn)   (uintptr_t)0x000111BAu)
-#define ORIG_PAL_ADD    ((pal_add_fn)    (uintptr_t)0x00011DF2u)
-#define ORIG_DELAY      ((delay_fn)      (uintptr_t)0x0003790Au)
-#define ORIG_FIND       ((find_fn)       (uintptr_t)0x0002AEDBu)
-#define ORIG_VM_RUN     ((vm_fn)         (uintptr_t)0x00015F84u)
-#define ORIG_REC_FLAG   ((flag_fn)       (uintptr_t)0x00034894u)
-#define ORIG_SLOT_CLAIM ((slot_claim_fn) (uintptr_t)0x0001BB8Cu)
-#define ORIG_REC_FIELD  ((rec_field_fn)  (uintptr_t)0x0001B722u)
-#define ORIG_SLOT_FIND  ((slot_find_fn)  (uintptr_t)0x0001B83Du)
-#define ORIG_TBL_8BC    ((tbl_fn)        (uintptr_t)0x0004E8BCu)
-#define ORIG_FLUSH      ((flush_fn)      (uintptr_t)0x0004E381u)
-#define ORIG_OUTP       ((outp_fn)       (uintptr_t)0x00037AE5u)
-#define ORIG_PAL_ANIM   ((pal_anim_fn)   (uintptr_t)0x0004E31Cu)
-#define ORIG_KBD_PEND   ((kbd_pending_fn)(uintptr_t)0x00010620u)
 
 extern uint32_t dos_lowmem_base;
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(dos_lowmem_base + (off)))
@@ -81,7 +68,7 @@ void ev5_13536(void)
 void *ev5_1D4CB(void)
 {
     dword_53B13 = 0;
-    dword_53B13 = ORIG_RES_LOAD("FDOTHER.DAT", NULL, 80);
+    dword_53B13 = res_load("FDOTHER.DAT", NULL, 80);
     return (void *)(uintptr_t)dword_53B13;
 }
 
@@ -98,7 +85,7 @@ int ev5_24B14(int a5)
 {
     int i;
     for (i = 0; i < 16; i++)
-        if (ORIG_FIND(i, a5) != -1)
+        if (ev3_2AEDB(i, a5) != -1)
             return 1;
     return -1;
 }
@@ -107,8 +94,8 @@ int ev5_24B14(int a5)
 void ev5_25052(int from, int ms)
 {
     while (from >= 0) {
-        ORIG_PAL_ADD(0, 255, from);
-        ORIG_DELAY(ms);
+        pal_fade_add(0, 255, from);
+        delay(ms);
         --from;
     }
 }
@@ -152,7 +139,7 @@ int ev5_1C220(int value)
     for (i = 0; i < (int)dword_53BEB; i++) {
         r = *(uint8_t *)(uintptr_t)(dword_53A45 + REC * (uint32_t)i + 6);
         if (r == 2) {
-            r = ORIG_SLOT_CLAIM(i, value);
+            r = rec_slot_claim(i, value);
             if (r != -1)
                 break;
         }
@@ -166,12 +153,12 @@ void ev5_1E5C0(int ticks)
     int t0 = (int16_t)BDA_W(0x46C);
     int k;
     do {
-        ORIG_PAL_ANIM();
-        k = ORIG_KBD_PEND();
+        pal_anim_step();
+        k = kbd_pending();
         if ((int16_t)BDA_W(0x46C) - t0 >= ticks || (int16_t)BDA_W(0x46C) < t0)
             k = 1;
     } while (k == 0);
-    ORIG_FLUSH();
+    kbd_flush();
 }
 
 /* 0x2B749 - count nonzero bytes of p[0 .. dword_53BFB-2]. */
@@ -203,7 +190,7 @@ void *ev5_314DE(const uint8_t *p)
 {
     static const char idx[6] = { '0', '1', '2', '3', '4', '5' };
     if (p != NULL && p[4] != 0)
-        return ORIG_RES_LOAD("FDOTHER.DAT", NULL, idx[p[4] - 1]);
+        return res_load("FDOTHER.DAT", NULL, idx[p[4] - 1]);
     return NULL;
 }
 
@@ -217,7 +204,7 @@ int ev5_1B5F1(int kind)
             int v9 = r[7];
             if (v9 != 121) {
                 int v10 = r[31];
-                if (v10 != 10 && ORIG_REC_FLAG(i) == 0)
+                if (v10 != 10 && rec_flag(i) == 0)
                     ++v6;
             }
         }
@@ -248,41 +235,41 @@ void ev5_203BD(int r, int g, int b)
 {
     int i;
     for (i = 0; i < 256; i++) {
-        ORIG_OUTP(0x3C8, i);
-        ORIG_OUTP(0x3C9, r);
-        ORIG_OUTP(0x3C9, g);
-        ORIG_OUTP(0x3C9, b);
+        outp(0x3C8, i);
+        outp(0x3C9, r);
+        outp(0x3C9, g);
+        outp(0x3C9, b);
     }
 }
 
 /* 0x208CF */
 void ev5_208CF(void)
 {
-    if (ORIG_REC_FLAG(0) != 0 || ORIG_REC_FLAG(16) != 0 || ORIG_REC_FLAG(17) != 0)
+    if (rec_flag(0) != 0 || rec_flag(16) != 0 || rec_flag(17) != 0)
         dword_53ECC = 1;
-    if (ORIG_REC_FLAG(52) != 0)
+    if (rec_flag(52) != 0)
         dword_53ECC = 2;
 }
 
 /* 0x20AAF */
 void ev5_20AAF(void)
 {
-    if (ORIG_REC_FLAG(0) != 0 || ORIG_REC_FLAG(1) != 0
-        || ORIG_REC_FLAG(16) != 0 || ORIG_REC_FLAG(17) != 0)
+    if (rec_flag(0) != 0 || rec_flag(1) != 0
+        || rec_flag(16) != 0 || rec_flag(17) != 0)
         dword_53ECC = 1;
-    if (ORIG_REC_FLAG(18) != 0)
+    if (rec_flag(18) != 0)
         dword_53ECC = 2;
 }
 
 /* 0x20BF5 */
 void ev5_20BF5(void)
 {
-    if (ORIG_REC_FLAG(20) != 0)
+    if (rec_flag(20) != 0)
         dword_53ECC = 2;
-    if (ORIG_REC_FLAG(0) != 0)
+    if (rec_flag(0) != 0)
         dword_53ECC = 1;
-    if (ORIG_REC_FLAG(1) != 0) {
-        ORIG_VM_RUN((void *)(uintptr_t)dword_53A45, 7, 0xA0000, 320, 205,
+    if (rec_flag(1) != 0) {
+        vm_run((void *)(uintptr_t)dword_53A45, 7, 0xA0000, 320, 205,
                     76, 74, 19, 1);
         dword_53ECC = 1;
     }
@@ -295,10 +282,10 @@ void ev5_20B72(void)
         && *(uint8_t *)(uintptr_t)(dword_53AD5 + 19) != 0
         && *(uint8_t *)(uintptr_t)(dword_53AD5 + 20) != 0)
         dword_53ECC = 2;
-    if (ORIG_REC_FLAG(0) != 0)
+    if (rec_flag(0) != 0)
         dword_53ECC = 1;
-    if (ORIG_REC_FLAG(1) != 0) {
-        ORIG_VM_RUN((void *)(uintptr_t)dword_53A45, 9, 0xA0000, 320, 205,
+    if (rec_flag(1) != 0) {
+        vm_run((void *)(uintptr_t)dword_53A45, 9, 0xA0000, 320, 205,
                     76, 74, 19, 1);
         dword_53ECC = 1;
     }
@@ -349,10 +336,10 @@ int ev5_1F0DC(int a, int b)
     v9 += v6[1] > v7[1] ? v6[1] - v7[1] : v7[1] - v6[1];
     if (v9 != 1)
         return -1;
-    r = ORIG_SLOT_FIND(b, 0);
+    r = rec_slot_find(b, 0);
     if (r != -1) {
-        int v10 = ORIG_REC_FIELD(b, r);
-        uint8_t *t = (uint8_t *)ORIG_TBL_8BC(v10);
+        int v10 = rec_field_byte(b, r);
+        uint8_t *t = (uint8_t *)tbl_ptr(&fd2_data2[0x02AD], 23, v10, 0);
         if (t[11] != 1)
             return -1;
         return 1;

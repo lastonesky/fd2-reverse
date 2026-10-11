@@ -41,14 +41,14 @@
 /* 0x4E390 - mark the reachable region from (x,y). `cost_row` is the
  * per-unit movement cost row (original arg0), `map` the grid, `cost_table`
  * the terrain -> cost-row-index table (original arg5). */
-void path_mark(int cost_row, int x, int y, int start_mp, void *map,
+void path_mark(const void *cost_row, int x, int y, int start_mp, void *map,
                const void *cost_table);
 
 /* 0x4E4F6 - trace a path from (x,y) to (target_x,target_y) and write the
  * best route's direction codes to `out`. `mode` (original byte_6017A):
  *   0 = plain, 1 = prefer fewer turns on equal MP, 2 = mark target.
  * Returns the best path length (original byte_60078, 0xFF if none). */
-int path_find(int cost_row, int x, int y, int start_mp, void *out,
+int path_find(const void *cost_row, int x, int y, int start_mp, void *out,
               int target_x, int target_y, int mode, void *map,
               const void *cost_table);
 

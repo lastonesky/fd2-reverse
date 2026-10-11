@@ -353,6 +353,18 @@ CRT_SKIP = {
     'main',  # defined by the restored entry module
 }
 
+# AIL library-boundary entries owned by src/lib/ail.h (correct Miles signatures);
+# the IDA prototypes here have the stack-probe arity and would collide.
+AIL_BOUNDARY_SKIP = {
+    'AIL_init_sample', 'AIL_set_sample_address', 'AIL_set_sample_loop_count',
+    'AIL_start_sample', 'AIL_stop_sample',
+    'AIL_init_sequence', 'AIL_start_sequence', 'AIL_stop_sequence',
+    'AIL_set_sequence_volume', 'AIL_set_sequence_loop_count',
+}
+
+# DOS/Watcom runtime boundary owned by src/lib/crt.h.
+CRT_BOUNDARY_SKIP = { 'int386' }
+
 def gen_funcs(protos, restored):
     os.makedirs(INC, exist_ok=True)
     out = []
@@ -381,7 +393,7 @@ def gen_funcs(protos, restored):
             if len(r) >= 3:
                 overrides[r[0].strip().lower()] = (r[2], r[3] if len(r) > 3 else '')
     for addr, name, size, sig in protos:
-        if name in CRT_SKIP or name in restored:
+        if name in CRT_SKIP or name in AIL_BOUNDARY_SKIP or name in CRT_BOUNDARY_SKIP or name in restored:
             continue  # standard header or restored module provides it
         if '@' in name:
             out.append('/* %s @ %s : %s  <- MANUAL (non-C identifier) */' % (name, addr, sig))

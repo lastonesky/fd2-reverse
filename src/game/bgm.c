@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 /* --- the game's data segment (IDA names kept) --------------------------- */
@@ -33,13 +34,6 @@ typedef void   (*ail_seq_fn)(void *h);
 typedef void   (*ail_vol_fn)(void *h, int32_t volume, int32_t ms);
 typedef int32_t (*ail_loop_fn)(void *h, int32_t count);
 
-#define RES_LOAD     ((res_load_fn)  (uintptr_t)0x000111BAu)
-#define RES_LOCK     ((lock_fn)      (uintptr_t)0x0003666Cu)
-#define AIL_INIT     ((ail_init_seq_fn)(uintptr_t)0x0003ADF5u)
-#define AIL_START    ((ail_seq_fn)   (uintptr_t)0x0003AEEEu)
-#define AIL_STOP     ((ail_seq_fn)   (uintptr_t)0x0003AF5Bu)
-#define AIL_VOLUME   ((ail_vol_fn)   (uintptr_t)0x0003B124u)
-#define AIL_LOOP     ((ail_loop_fn)  (uintptr_t)0x0003B1A6u)
 
 void bgm_play(int track, int loop_count)
 {
@@ -51,30 +45,30 @@ void bgm_play(int track, int loop_count)
     byte_51A11 = (uint8_t)track;
 
     if (track == -1) {
-        AIL_VOLUME(dword_53ED0, 0, 4000);        /* fade the current one out */
+        AIL_set_sequence_volume(dword_53ED0, 0, 4000);        /* fade the current one out */
         return;
     }
     if (!byte_53EF0)
         return;                                  /* music switched off       */
 
     if (dword_53EE0)
-        AIL_STOP(dword_53ED0);
+        AIL_stop_sequence(dword_53ED0);
 
-    dword_53EE0 = RES_LOAD("FDMUS.DAT", dword_53EE0, track);
-    RES_LOCK(dword_53EE0, dword_53BFF);          /* res_load set 53BFF       */
+    dword_53EE0 = res_load("FDMUS.DAT", dword_53EE0, track);
+    fd2_mem_lock(dword_53EE0, dword_53BFF);          /* res_load set 53BFF       */
 
-    AIL_INIT(dword_53ED0, dword_53EE0, 0);
-    AIL_START(dword_53ED0);
+    AIL_init_sequence(dword_53ED0, dword_53EE0, 0);
+    AIL_start_sequence(dword_53ED0);
 
     if (byte_51E61) {
         if (track == 16 || track == 17) {
-            AIL_VOLUME(dword_53ED0, 127, 0);     /* fanfare: full volume now */
+            AIL_set_sequence_volume(dword_53ED0, 127, 0);     /* fanfare: full volume now */
         } else {
-            AIL_VOLUME(dword_53ED0, 0, 0);       /* silence, then            */
-            AIL_VOLUME(dword_53ED0, 127, 2000);  /* ramp up over 2 s         */
+            AIL_set_sequence_volume(dword_53ED0, 0, 0);       /* silence, then            */
+            AIL_set_sequence_volume(dword_53ED0, 127, 2000);  /* ramp up over 2 s         */
         }
     } else {
-        AIL_VOLUME(dword_53ED0, 0, 0);
+        AIL_set_sequence_volume(dword_53ED0, 0, 0);
     }
-    AIL_LOOP(dword_53ED0, loop_count);
+    AIL_set_sequence_loop_count(dword_53ED0, loop_count);
 }

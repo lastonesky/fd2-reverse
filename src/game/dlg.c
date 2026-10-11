@@ -55,6 +55,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 #define VGA_BASE 0x000A0000u
@@ -74,15 +75,6 @@ typedef int     (*pending_fn)(void);        /* 0x10620: key waiting?       */
 typedef void    (*palette_fn)(void);        /* 0x4E31C: DAC animation      */
 typedef int     (*int386_fn)(int intno, const void *in, void *out);
 
-#define ORIG_DELAY       ((delay_fn)      (uintptr_t)0x0003790Au)
-#define ORIG_FLUSH       ((flush_fn)      (uintptr_t)0x0004E381u)
-#define ORIG_GLIDE       ((glide_fn)      (uintptr_t)0x00012CEAu)
-#define ORIG_ALLOC       ((crt_alloc_fn)  (uintptr_t)0x0003706Eu)
-#define ORIG_TICK        ((tick_fn)       (uintptr_t)0x0004E310u)
-#define ORIG_RAND        ((rand_fn)       (uintptr_t)0x0004EBE3u)
-#define ORIG_PENDING     ((pending_fn)    (uintptr_t)0x00010620u)
-#define ORIG_PALETTE     ((palette_fn)    (uintptr_t)0x0004E31Cu)
-#define ORIG_INT386      ((int386_fn)     (uintptr_t)0x000370F0u)
 
 /* The 310x86 frame drawn by dlg_open_box, as five growing tile stages:
  * (cols, lines) per stage, 16 px cells inside a 3 px border. */
@@ -130,7 +122,7 @@ void *dlg_open_box(int face_x, int face_y, int rows)
 
     if (rows != 0) {
         dword_51A83 = 0;                       /* fast: no per-step wait   */
-        ORIG_GLIDE(face_x, face_y);
+        map_slide_view(face_x, face_y);
         dword_51A83 = 1;
 
         vw    = 24 * dword_53AB9 + 4;
@@ -143,8 +135,8 @@ void *dlg_open_box(int face_x, int face_y, int rows)
                 dword_53A18[0] = dlg_snap_save(face, VGA, 320,
                                                vw - i * (vw - 5) / steps,
                                                vh - i * (vh - rows) / steps);
-                ORIG_DELAY(10);
-                ORIG_FLUSH();
+                delay(10);
+                kbd_flush();
                 dlg_snap_restore(dword_53A18[0], VGA, 320);
             }
         }
@@ -155,7 +147,7 @@ void *dlg_open_box(int face_x, int face_y, int rows)
     }
 
     for (i = 0; i < 5; i++)
-        dword_53A18[i] = ORIG_ALLOC(26668);
+        dword_53A18[i] = malloc(26668);
 
     off = 320 * rows + 5;
     for (i = 0; i < 5; i++) {
@@ -163,9 +155,9 @@ void *dlg_open_box(int face_x, int face_y, int rows)
         dlg_box_stage(VGA, 320, 5, rows, dlg_stage_cols[i],
                       dlg_stage_lines[i]);
         if (i < 4)
-            ORIG_DELAY(10);
+            delay(10);
     }
-    ORIG_FLUSH();
+    kbd_flush();
     return dword_53A18;
 }
 
@@ -176,7 +168,7 @@ void dlg_close_box(void **stages, int rows)
 
     for (i = 4; i > 0; i--) {                 /* reverse of the open order */
         dlg_snap_restore(stages[i], VGA, 320);
-        ORIG_DELAY(10);
+        delay(10);
     }
     dlg_snap_restore(stages[0], VGA, 320);
 
@@ -192,7 +184,7 @@ void dlg_close_box(void **stages, int rows)
                 stages[0] = dlg_snap_save(face, VGA, 320,
                                           5 - i * (5 - vw) / steps,
                                           rows - i * (rows - vh) / steps);
-                ORIG_DELAY(10);
+                delay(10);
                 dlg_snap_restore(stages[0], VGA, 320);
             }
         }
@@ -270,17 +262,17 @@ void dlg_wait_key(int speaker)
     if (dword_53A51 == 0)
         base = 0x4770;
 
-    tick_at    = (int16_t)ORIG_TICK();
-    mouth_wait = (int)(ORIG_RAND() % 30) + 2;
+    tick_at    = (int16_t)pal_tick_word();
+    mouth_wait = (int)(util_rand() % 30) + 2;
     area = (dword_53C67 == 0x728) ? 0xA0B4F : 0xA951F;
 
     if (speaker == 1)
         dlg_frame_tile((void *)(uintptr_t)(area + base + 0x640), 320,
                        dword_53A81, 18);
 
-    while (!ORIG_PENDING()) {
-        ORIG_PALETTE();
-        if ((int16_t)ORIG_TICK() - tick_at < 2)
+    while (!kbd_pending()) {
+        pal_anim_step();
+        if ((int16_t)pal_tick_word() - tick_at < 2)
             continue;
 
         if (speaker == 1 && ++fast == 3) {          /* flip the tile   */
@@ -292,13 +284,13 @@ void dlg_wait_key(int speaker)
         }
         if (mouth_open) {                           /* close the mouth */
             dlg_blit_dato(dword_53A85, dword_53C67, 0);
-            mouth_wait = (int)(ORIG_RAND() % 30) + 2;
+            mouth_wait = (int)(util_rand() % 30) + 2;
             mouth_open = 0;
         } else if (mouth_wait-- == 0) {             /* open it         */
             dlg_blit_dato(dword_53A85, dword_53C67, 3);
             mouth_open = 1;
         }
-        tick_at = (int16_t)ORIG_TICK();
+        tick_at = (int16_t)pal_tick_word();
     }
 
     if (speaker == 1)
@@ -306,7 +298,7 @@ void dlg_wait_key(int speaker)
                        dword_53A81, 13);
 
     byte_53A8E = 0x10;                  /* AH = 10h: BIOS read (enhanced) */
-    ORIG_INT386(0x16, &word_53A8D, &word_53A8D);
+    int386(0x16, &word_53A8D, &word_53A8D);
     if (byte_53A8E == 0xE0 || byte_53A8E == 0x52)
         byte_53A8E = 0x1C;
     if (byte_53A8E == 0x53)
@@ -380,7 +372,7 @@ void dlg_portrait_glide(int idx)
 {
     const uint8_t *e = (const uint8_t *)(uintptr_t)dword_53A45 + 80 * idx;
 
-    ORIG_GLIDE(e[0], e[1]);
+    map_slide_view(e[0], e[1]);
 }
 
 /* 0x134E4 - clear the "mouth open" flag (byte +3) of every portrait record
@@ -394,7 +386,7 @@ void dlg_portrait_clear(void)
         p[3] = 0;
         p += 80;
     }
-    ORIG_DELAY(20);
+    delay(20);
 }
 
 /* 0x12C0D - find the portrait record whose (byte0,byte1) equals the 64-bit
@@ -427,7 +419,7 @@ int dlg_portrait_find(void)
 void dlg_portrait_draw(int idx)
 {
     const uint8_t *p = (const uint8_t *)(uintptr_t)dword_53A45 + 80 * idx;
-    int32_t tick = (int32_t)(int16_t)ORIG_TICK();
+    int32_t tick = (int32_t)(int16_t)pal_tick_word();
     int x, y, dir, frame, mouth, step, off, mode;
     const uint8_t *src;
 

@@ -7,7 +7,7 @@
 #ifndef FD2_GAME_EV_SCRIPT_H
 #define FD2_GAME_EV_SCRIPT_H
 
-void ev_script_run(int rec_index, int steps, int script);
+void ev_script_run(int rec_index, int steps, const void *script);
 
 /* Call sites keep the IDA name. */
 #define sub_1AA1D ev_script_run

@@ -250,7 +250,7 @@ int map_ai_pick_action_target(int actor, int require_empty)
 
         if (act[5] > limit)
             continue;
-        path_mark((int)(uintptr_t)cost_row, x, y, act[3], (void *)dword_53A51,
+        path_mark(cost_row, x, y, act[3], (void *)dword_53A51,
                   (const void *)(uintptr_t)dword_53A69);
         n = ev5_14B16((uint8_t *)p);
         util_fix_records(dword_53A51);
@@ -366,7 +366,7 @@ int map_ai_pick_reach_target(int actor, int mode)
     if (mode == 0)
         v25 = 1;
     unit_mark_nearby(mode);
-    path_mark((int)(uintptr_t)cost_row, v7, v20, v6, (void *)dword_53A51,
+    path_mark(cost_row, v7, v20, v6, (void *)dword_53A51,
               (const void *)(uintptr_t)dword_53A69);
     map_exclude_record_cells(actor, mode);
     v24 = ev5_14B16((uint8_t *)v26);
@@ -583,7 +583,7 @@ int map_ai_do_action(int actor, int require_empty)
     steps = ev5_1B653(hit);
     map_view_update(0);
     map_units_animate();
-    ev_script_run((int)dword_53C4B, steps, (int)(intptr_t)hit);
+    ev_script_run((int)dword_53C4B, steps, hit);
     map_view_update(0);
     dword_53EC8 = 0;
     dword_51A83 = 0;

@@ -10,6 +10,7 @@
  * the game reads that address.
  */
 #include "res.h"
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "guest_mem.h"
 #include "rle.h"
 #include <stdio.h>
@@ -62,9 +63,10 @@ void *res_load(const char *filename, void *old_buffer, int index)
  *
  * The 9-byte header (w, h, plus 5 bytes the decoder does not need here) and
  * the RLE stream are the format rle_decode already handles. */
-void res_blit(void *buf, int index, void *dst, int pitch, int mode)
+void res_blit(const void *buf, int index, void *dst, int pitch, int mode)
 {
-    uint8_t *hdr = (uint8_t *)buf + *(uint32_t *)((uint8_t *)buf + 4 * index + 8);
+    const uint8_t *base = (const uint8_t *)buf;
+    uint8_t *hdr = (uint8_t *)base + *(const uint32_t *)(base + 4 * index + 8);
     uint16_t w   = *(uint16_t *)hdr;
     uint16_t h   = *(uint16_t *)(hdr + 2);
 
@@ -77,9 +79,10 @@ void res_blit(void *buf, int index, void *dst, int pitch, int mode)
  *     rle_decode(buf + *(u32 *)(buf + 4*index + 6), 0, 0, dst, pitch, -1);
  *
  * (0x2EB9F/res_blit is the +8 variant that also takes x/y.) */
-void res_blit6(void *dst, int pitch, void *buf, int index)
+void res_blit6(void *dst, int pitch, const void *buf, int index)
 {
-    uint8_t *src = (uint8_t *)buf + *(uint32_t *)((uint8_t *)buf + 4 * index + 6);
+    const uint8_t *base = (const uint8_t *)buf;
+    uint8_t *src = (uint8_t *)base + *(const uint32_t *)(base + 4 * index + 6);
 
     rle_decode(src, 0, 0, dst, pitch, -1);
 }
@@ -87,8 +90,6 @@ void res_blit6(void *dst, int pitch, void *buf, int index)
 /* 0x15F0E - save background + draw a sub-image over it. */
 typedef void (*saverect_fn)(void *, int, int, const void *, int, int);
 typedef void (*rle2trans_fn)(void *, const void *, int);
-#define ORIG_SAVERECT  ((saverect_fn) (uintptr_t)0x0004ECBFu)
-#define ORIG_RLE2TRANS ((rle2trans_fn)(uintptr_t)0x0004EBABu)
 
 void *res_draw_subimage(const void *tbl, void *surface, int stride,
                         int base, int row, int index)
@@ -101,7 +102,7 @@ void *res_draw_subimage(const void *tbl, void *surface, int stride,
     int off = row * stride + base;
     void *rec = guest_malloc((size_t)w * (size_t)h + 8u);
 
-    ORIG_SAVERECT(rec, w, h, surface, off, stride);
-    ORIG_RLE2TRANS((uint8_t *)surface + off, e, stride);
+    gfx_save_rect(rec, w, h, surface, off, stride);
+    rle2_blit_trans((uint8_t *)surface + off, e, stride);
     return rec;
 }

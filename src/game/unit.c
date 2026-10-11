@@ -34,9 +34,9 @@
 
 /* The three data tables this module reads, with their fixed FD2 bases
  * (src/repl.c installs the same arithmetic for the machine-code callers). */
-static void *tbl_602AD(int i) { return tbl_ptr((void *)(uintptr_t)0x602ADu, 23, i, 0); }
-static void *tbl_61DA1(int i) { return tbl_ptr((void *)(uintptr_t)0x61DA1u, 24, i, 0); }
-static void *tbl_620A1(int i) { return tbl_ptr((void *)(uintptr_t)0x620A1u, 11, i, 0); }
+static void *tbl_602AD(int i) { return tbl_ptr((void *)&fd2_data2[0x02AD], 23, i, 0); }
+static void *tbl_61DA1(int i) { return tbl_ptr((void *)&fd2_data2[0x1DA1], 24, i, 0); }
+static void *tbl_620A1(int i) { return tbl_ptr((void *)&fd2_data2[0x20A1], 11, i, 0); }
 
 static uint8_t *party_rec(int index)
 {

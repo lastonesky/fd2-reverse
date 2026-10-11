@@ -28,6 +28,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 
@@ -418,7 +419,6 @@ void map_draw_cursor(uint8_t *dst, int pitch)
  *
  * Callers ignore the return value (IDA: every call site overwrites EAX). */
 typedef int (*sfx_fn)(const void *bank, int index, int loops);
-#define ORIG_SFX ((sfx_fn)(uintptr_t)0x00025A96u)
 
 void map_unit_ping(int idx)
 {
@@ -429,7 +429,7 @@ void map_unit_ping(int idx)
 
     if (rec_skip(idx)) {
         if ((uint8_t)byte_54132 % 6 == 0)
-            ORIG_SFX(dword_53EEC, 10, 1);
+            svc_play_sfx(dword_53EEC, 10, 1);
     } else {
         int k = *(const uint8_t *)((uintptr_t)dword_53A45 + 80u * (uint32_t)idx
                                    + 32u);
@@ -437,13 +437,13 @@ void map_unit_ping(int idx)
         s = t[k - 1];
         if (s == 0) {
             if ((uint8_t)byte_54132 % 6 == 0)
-                ORIG_SFX(dword_53EEC, 9, 1);
+                svc_play_sfx(dword_53EEC, 9, 1);
         } else if (s == 1) {
             if ((uint8_t)byte_54132 % 4 == 0)
-                ORIG_SFX(dword_53EEC, 9, 1);
+                svc_play_sfx(dword_53EEC, 9, 1);
         } else {
             if ((uint8_t)byte_54132 % 9 == 0)
-                ORIG_SFX(dword_53EEC, 11, 1);
+                svc_play_sfx(dword_53EEC, 11, 1);
         }
     }
     ++byte_54132;
@@ -475,14 +475,6 @@ typedef void  (*path_flood_fn)(void *, int, int, int, void *, void *);
 typedef int   (*wait_fn)(int);
 typedef void  (*h0v_fn)(void);
 
-#define ORIG_PATH_TBL   ((path_tbl_fn)  (uintptr_t)0x0004E8A5u)
-#define ORIG_PATH_FLOOD ((path_flood_fn)(uintptr_t)0x0004E390u)
-#define ORIG_11B48      ((h0v_fn)(uintptr_t)0x00011B48u)
-#define ORIG_11B9B      ((h0v_fn)(uintptr_t)0x00011B9Bu)
-#define ORIG_11BFA      ((h0v_fn)(uintptr_t)0x00011BFAu)
-#define ORIG_11C59      ((h0v_fn)(uintptr_t)0x00011C59u)
-#define ORIG_17AA9      ((wait_fn)(uintptr_t)0x00017AA9u)
-#define ORIG_4E381      ((h0v_fn)(uintptr_t)0x0004E381u)
 
 /* 0x14818 */
 int map_reveal_reachable(int x, int y, uint8_t *out, int range, int radius,
@@ -499,8 +491,8 @@ int map_reveal_reachable(int x, int y, uint8_t *out, int range, int radius,
             if (abs(i - y) <= lim)
                 dword_53A51[4 * (x + i * dword_53AC1) + 7] = 0;
     } else {
-        void *tbl = ORIG_PATH_TBL(0);
-        ORIG_PATH_FLOOD(tbl, x, y, range, dword_53A51,
+        void *tbl = tbl_ptr(&fd2_data2[0x1646], 20, 0, 0);
+        path_mark(tbl, x, y, range, dword_53A51,
                         (void *)(uintptr_t)dword_53A69);
         if (radius != 0) {
             for (j = 0; j < dword_53AC5; j++)
@@ -556,21 +548,21 @@ void map_slide_view(int target_x, int target_y)
     map_view_update(0);
     while (target_x != dword_53AB1) {
         if (target_x >= dword_53AB1)
-            ORIG_11BFA();
+            ev4_11BFA();
         else
-            ORIG_11C59();
+            ev4_11C59();
         if (dword_51A83 != 0 && dword_51A83 != 6)
-            ORIG_17AA9(1);
-        ORIG_4E381();
+            svc_wait_ticks(1);
+        kbd_flush();
     }
     while (target_y != dword_53AB5) {
         if (target_y >= dword_53AB5)
-            ORIG_11B9B();
+            ev4_11B9B();
         else
-            ORIG_11B48();
+            ev4_11B48();
         if (dword_51A83 != 0 && dword_51A83 != 6)
-            ORIG_17AA9(1);
-        ORIG_4E381();
+            svc_wait_ticks(1);
+        kbd_flush();
     }
 }
 
@@ -578,9 +570,6 @@ void map_slide_view(int target_x, int target_y)
 typedef void (*rle2trans_fn2)(void *, const void *, int);
 typedef void (*gfxrows_fn)(void *, int, const void *, int, int, int);
 typedef void (*delay_fn2)(int);
-#define ORIG_RLE2TRANS2 ((rle2trans_fn2)(uintptr_t)0x0004EBABu)
-#define ORIG_GFXROWS    ((gfxrows_fn)   (uintptr_t)0x00011EB0u)
-#define ORIG_DELAY2     ((delay_fn2)    (uintptr_t)0x0003790Au)
 
 void map_draw_status_popups(void)
 {
@@ -604,17 +593,17 @@ void map_draw_status_popups(void)
                     + 10944u * (uint32_t)(rec[1] - dword_53AAD)
                     + byte_53D34[j]
                     + (uint32_t)(456 * ((int)v3[j % 4u + i] - 3));
-                ORIG_RLE2TRANS2(dst,
+                rle2_blit_trans(dst,
                     (const void *)(uintptr_t)(dword_53A81 +
                         *(const uint32_t *)(uintptr_t)(dword_53A81 +
                             4u * (uint32_t)byte_53C6C[j] + 6u)), 456);
             }
         }
-        ORIG_GFXROWS((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
-        ORIG_DELAY2(2);
+        gfx_copy_rows((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
+        delay(2);
     }
     guest_free(p);
-    ORIG_DELAY2(500);
+    delay(500);
 }
 
 /* 0x1C2DA - draw a list of party records' 24x24 icons into the map bitmap,
@@ -622,9 +611,6 @@ void map_draw_status_popups(void)
 typedef int  (*sfx_fn2)(void *, int, int);
 typedef void (*wait_fn2)(int);
 typedef void (*spr24_fn)(const void *, void *, int);
-#define ORIG_SFX2   ((sfx_fn2) (uintptr_t)0x00025A96u)
-#define ORIG_WAIT   ((wait_fn2)(uintptr_t)0x00017AA9u)
-#define ORIG_SPR24  ((spr24_fn)(uintptr_t)0x0004E127u)
 
 void map_draw_party_icons(int unused, int table_idx, int count, const uint8_t *list)
 {
@@ -633,7 +619,7 @@ void map_draw_party_icons(int unused, int table_idx, int count, const uint8_t *l
 
     (void)unused;
     (void)table_idx;   /* only feeds sprite24_const's ignored 4th argument */
-    ORIG_SFX2((void *)(uintptr_t)dword_53B13, 1, 1);
+    svc_play_sfx((void *)(uintptr_t)dword_53B13, 1, 1);
     p = (uint8_t *)guest_malloc(0x25680u);
     memmove(p, dword_53A49, 0x25680u);
     for (i = 0; i < count; i++) {
@@ -648,16 +634,16 @@ void map_draw_party_icons(int unused, int table_idx, int count, const uint8_t *l
             const void *src;
             ebx += (dword_53C0B == 3) ? 2 : dword_53C0B;
             src = dword_53A61 + *(uint32_t *)(uintptr_t)(dword_53A61 + 4u * (uint32_t)ebx);
-            ORIG_SPR24(src, dst, 456);
+            sprite24_const(src, dst, 456);
         }
     }
     for (i = 0; i < 5; i++) {
-        ORIG_GFXROWS((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
-        ORIG_WAIT(1);
-        ORIG_GFXROWS((void *)0xA0504u, 320, p + 32904u, 456, 312, 192);
-        ORIG_WAIT(1);
+        gfx_copy_rows((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
+        svc_wait_ticks(1);
+        gfx_copy_rows((void *)0xA0504u, 320, p + 32904u, 456, 312, 192);
+        svc_wait_ticks(1);
     }
-    ORIG_GFXROWS((void *)0xA0504u, 320, p + 32904u, 456, 312, 192);
+    gfx_copy_rows((void *)0xA0504u, 320, p + 32904u, 456, 312, 192);
     guest_free(p);
 }
 
@@ -693,10 +679,10 @@ void map_draw_party_icons_anim(int unused, int table_idx, int count,
                 y >= dword_53AAD - 1 && y <= dword_51A8B + dword_53AAD + 1) {
                 uint8_t *dst = dword_53A49 + 24u * (uint32_t)(x - dword_53AA9)
                     + 32904u + 10944u * (uint32_t)(y - dword_53AAD) - 2736u;
-                ORIG_RLE2TRANS2(dst, v20, 456);
+                rle2_blit_trans(dst, v20, 456);
             }
         }
-        ORIG_GFXROWS((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
+        gfx_copy_rows((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
         if (i != 0 || v17[table_idx] == 0) {
             int s = -1;
             if (table_idx == 22 && i == 7)                     s = 3;
@@ -706,11 +692,11 @@ void map_draw_party_icons_anim(int unused, int table_idx, int count,
             else if (table_idx == 8  && (i == 3 || i == 6))    s = 10;
             else if (table_idx == 9  && (i == 15 || i == 19))  s = 15;
             if (s >= 0)
-                ORIG_SFX2((void *)(uintptr_t)dword_53B13, s, 1);
+                svc_play_sfx((void *)(uintptr_t)dword_53B13, s, 1);
         } else {
-            ORIG_SFX2((void *)(uintptr_t)dword_53B13, v17[table_idx], 1);
+            svc_play_sfx((void *)(uintptr_t)dword_53B13, v17[table_idx], 1);
         }
-        ORIG_WAIT(1);
+        svc_wait_ticks(1);
     }
     guest_free(p);
     map_view_update(0);
@@ -723,11 +709,6 @@ typedef void (*h0v3_fn)(void);
 typedef void (*render3_fn)(uint8_t *, int, int, int, int, int);
 typedef void (*blittrans_fn)(void *, const void *, int);
 typedef void (*gfxrows3_fn)(void *, int, const void *, int, int, int);
-#define ORIG_ANIM3     ((h0v3_fn)     (uintptr_t)0x0001297Du)
-#define ORIG_RENDER3   ((render3_fn)  (uintptr_t)0x00011EEEu)
-#define ORIG_ALLPORT3  ((h0v3_fn)     (uintptr_t)0x000127A9u)
-#define ORIG_BLITTRANS ((blittrans_fn)(uintptr_t)0x0004ED34u)
-#define ORIG_GFXROWS3  ((gfxrows3_fn) (uintptr_t)0x00011EB0u)
 
 void map_draw_text_window(void)
 {
@@ -736,14 +717,14 @@ void map_draw_text_window(void)
     int32_t v14 = -16, v15 = 16;
     int i, j, k;
 
-    v13[0] = *(const uint32_t *)(uintptr_t)0x00051EE5u;
-    v13[1] = *(const uint32_t *)(uintptr_t)0x00051EE9u;
+    v13[0] = *(const uint32_t *)&fd2_data1[0x1EE5];
+    v13[1] = *(const uint32_t *)&fd2_data1[0x1EE9];
     base = dword_53A49 + 0x1A59Cu;
     if ((uint32_t)(uintptr_t)dword_53A51 > 1u) {
-        ORIG_ANIM3();
-        ORIG_RENDER3(dword_53A49 + 0x8088u, 456, 13, 8,
+        anim_frame_step();
+        map_render_view(dword_53A49 + 0x8088u, 456, 13, 8,
                      dword_53AA9, dword_53AAD);
-        ORIG_ALLPORT3();
+        dlg_portraits_refresh();
     }
     for (i = 0; i < 4; i++) {
         v14 += 4;
@@ -754,12 +735,12 @@ void map_draw_text_window(void)
                                               + 320u * (uint32_t)k), 310);
         for (j = 0; j < 2; j++) {
             int off = (j == 0) ? v14 : v15;
-            ORIG_BLITTRANS(base + off,
+            gfx_blit_transparent(base + off,
                 (const void *)(uintptr_t)(dword_53A89 +
                     *(const uint32_t *)(uintptr_t)(dword_53A89
                         + 12u * v13[j])), 456);
         }
-        ORIG_GFXROWS3((void *)0xA0504u, 320, dword_53A49 + 0x8088u, 456, 312, 192);
+        gfx_copy_rows((void *)0xA0504u, 320, dword_53A49 + 0x8088u, 456, 312, 192);
     }
     for (k = 0; k < 86; k++)
         memmove((uint8_t *)(uintptr_t)0xA8C05u + 320u * (uint32_t)k,

@@ -16,7 +16,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define OUTP ((int (*)(unsigned, int))(uintptr_t)0x00037AE5u)
 
 /* screen offsets the three option bands are blitted to (9 rows apart) */
 #define TITLE_BAND0_DST 0x000ACD81u
@@ -30,10 +29,10 @@ void pal_blend_to(int first, int last, int step, int r, int g, int b)
     int i;
 
     for (i = first; i < last; ++i) {
-        OUTP(0x3C8u, i);
-        OUTP(0x3C9u, r + ((int)pal[3 * i]     - r) * step / 40);
-        OUTP(0x3C9u, g + ((int)pal[3 * i + 1] - g) * step / 40);
-        OUTP(0x3C9u, b + ((int)pal[3 * i + 2] - b) * step / 40);
+        outp(0x3C8u, i);
+        outp(0x3C9u, r + ((int)pal[3 * i]     - r) * step / 40);
+        outp(0x3C9u, g + ((int)pal[3 * i + 1] - g) * step / 40);
+        outp(0x3C9u, b + ((int)pal[3 * i + 2] - b) * step / 40);
     }
 }
 

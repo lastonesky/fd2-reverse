@@ -639,7 +639,7 @@ tail:
     menu_stop_and_free_music();
     steps = map_collect_scripts(scripts);
     map_units_animate();
-    ev_script_run(actor, steps, (int)(intptr_t)scripts);
+    ev_script_run(actor, steps, scripts);
     return 0;
 }
 

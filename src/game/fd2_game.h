@@ -6,6 +6,8 @@
 #include "../include/fd2_globals.h"
 #include "../include/fd2_funcs.h"
 #include "../include/fd2_aliases.h"
+#include "../lib/crt.h"   /* DOS/Watcom runtime boundary (de-guest C4) */
+#include "../lib/ail.h"   /* AIL library boundary       (de-guest C4) */
 
 #include "action_menu.h"
 #include "ani.h"

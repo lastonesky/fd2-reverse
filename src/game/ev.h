@@ -77,9 +77,9 @@ uint32_t ev_status16_71(void);
 
 /* 0x351E6 - sub-stream 6, clear byte +53 of records 64..73, then
  * status(64,73,3) and status(35,49,0); returns the second call's EAX. */
-uint32_t ev_clear64_73(void);
+void ev_clear64_73(void);
 
 /* 0x35258 - sub-stream 8, then status(16,34,0); returns its EAX. */
-uint32_t ev_status16_34(void);
+void ev_status16_34(void);
 
 #endif /* GAME_EV_H */

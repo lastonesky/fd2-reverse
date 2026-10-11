@@ -38,6 +38,7 @@
 #include "vm.h"
 #include <stdio.h>
 #include <string.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 #define VGA_BASE      0x000A0000u
@@ -66,18 +67,6 @@ typedef int   (*draw_fn)(void *font, int glyph, int addr, int pitch,
 typedef void  (*blit_fn)(void *dst, const void *src, int len);
 typedef int   (*pending_fn)(void);
 
-#define ORIG_OPEN      ((open_box_fn) (uintptr_t)0x000165ACu)
-#define ORIG_CLOSE     ((close_box_fn)(uintptr_t)0x00016B43u)
-#define ORIG_DATO      ((dato_fn)     (uintptr_t)0x00016559u)
-#define ORIG_WAIT      ((wait_fn)     (uintptr_t)0x00016C57u)
-#define ORIG_SCROLL    ((scroll_fn)   (uintptr_t)0x00016E24u)
-#define ORIG_TYPE_STEP ((type_step_fn)(uintptr_t)0x000164E8u)
-#define ORIG_REC_FIND  ((rec_find_fn) (uintptr_t)0x00012C60u)
-#define ORIG_RES       ((res_fn)      (uintptr_t)0x000111BAu)
-#define ORIG_DRAW      ((draw_fn)     (uintptr_t)0x0004ED7Au)
-#define ORIG_RLE_TOP   ((blit_fn)     (uintptr_t)0x0004EBFFu)
-#define ORIG_RLE_BOT   ((blit_fn)     (uintptr_t)0x0004EC31u)
-#define ORIG_PENDING   ((pending_fn)  (uintptr_t)0x00010620u)
 
 /* Close whatever box is open - the same three calls in the same order the
  * machine code uses at the top of -1/-17/-18/-19/-20. */
@@ -85,9 +74,9 @@ static void close_open_box(int box, int mode)
 {
     if (!box)
         return;
-    ORIG_DATO(0);
-    ORIG_WAIT(0);
-    ORIG_CLOSE((void *)(intptr_t)box, mode);
+    dlg_blit_dato(dword_53A85, dword_53C67, 0);
+    dlg_wait_key(0);
+    dlg_close_box((void *)(intptr_t)box, mode);
 }
 
 /* Shared tail of -17/-19 (top box, RLE 0x4EBFF) and -18/-20 (bottom box,
@@ -100,15 +89,15 @@ static void open_and_blit(int box_id, uint8_t *rec, int mode, int rle_top,
     uint8_t *buf;
     int      origin = (box_id == BOX_TOP) ? (int)ADDR_TOP : (int)ADDR_BOTTOM;
 
-    *box = (int)(intptr_t)ORIG_OPEN(rec[0], rec[1], mode);
+    *box = (int)(intptr_t)dlg_open_box(rec[0], rec[1], mode);
 
     buf    = (uint8_t *)dword_53A85;
     *rec_io = buf + *buf;                       /* EDI after the blit setup */
     if (rle_top)
-        ORIG_RLE_TOP((void *)(uintptr_t)(VGA_BASE + (uint32_t)dword_53C67),
+        rle2_blit((void *)(uintptr_t)(VGA_BASE + (uint32_t)dword_53C67),
                      *rec_io, 320);
     else
-        ORIG_RLE_BOT((void *)(uintptr_t)(VGA_BASE + (uint32_t)dword_53C67),
+        rle2_blit_mirror((void *)(uintptr_t)(VGA_BASE + (uint32_t)dword_53C67),
                      *rec_io, 320);
 
     *start = origin;
@@ -148,7 +137,7 @@ int vm_run(void *stream, int sub, int addr, int pitch,
         case -2:                                /* new paragraph, no wait  */
             if ((dword_53C67 == BOX_TOP || dword_53C67 == BOX_BOTTOM) &&
                 line == 3) {
-                ORIG_SCROLL();
+                dlg_scroll_text(dword_53C67);
                 line--;
             }
             line++;
@@ -159,15 +148,15 @@ int vm_run(void *stream, int sub, int addr, int pitch,
         case -3:                                /* new paragraph + wait    */
             if ((dword_53C67 == BOX_TOP || dword_53C67 == BOX_BOTTOM) &&
                 line == 3) {
-                ORIG_SCROLL();
+                dlg_scroll_text(dword_53C67);
                 line--;
             }
             line++;
             cur = start + pitch * line_step * line;
             p = next;
             if (dword_53C67 == BOX_TOP || dword_53C67 == BOX_BOTTOM)
-                ORIG_DATO(0);
-            ORIG_WAIT(1);
+                dlg_blit_dato(dword_53A85, dword_53C67, 0);
+            dlg_wait_key(1);
             wait = 1;
             continue;
 
@@ -187,12 +176,12 @@ int vm_run(void *stream, int sub, int addr, int pitch,
             sprintf(num, "%d", dword_53AE1);
             len = (int)strlen(num);
             for (i = 0; i < len; i++) {
-                ORIG_DRAW(dword_53A75, num[i] - '0', cur, pitch,
+                gfx_draw_glyph(dword_53A75, num[i] - '0', (void *)(uintptr_t)cur, pitch,
                           fg, shadow, bgfill);
-                if (ORIG_PENDING())
+                if (kbd_pending())
                     wait = 0;
                 if (wait)
-                    ORIG_TYPE_STEP();
+                    dlg_type_step();
                 cur += 16;
             }
             p = next;
@@ -203,7 +192,7 @@ int vm_run(void *stream, int sub, int addr, int pitch,
 
             close_open_box(box, mode);
             dword_53C67 = BOX_TOP;
-            mode = (ORIG_REC_FIND(id) == -1) ? 0 : 2;
+            mode = (rec_find(id) == -1) ? 0 : 2;
             if (id != FACE_KEEP) {
                 rec = (uint8_t *)dword_53C1B;
                 id  = rec[7];
@@ -214,7 +203,7 @@ int vm_run(void *stream, int sub, int addr, int pitch,
                        " record\n", id);
                 rec = (uint8_t *)dword_53C1B;
             }
-            dword_53A85 = ORIG_RES("DATO.DAT", dword_53A85, id);
+            dword_53A85 = res_load("DATO.DAT", dword_53A85, id);
             p = next + 1;                       /* opcode + operand        */
             open_and_blit(BOX_TOP, rec, mode, 1, &box, &rec, &start, &cur);
             wait = 1;
@@ -227,10 +216,10 @@ int vm_run(void *stream, int sub, int addr, int pitch,
 
             close_open_box(box, mode);
             dword_53C67 = BOX_BOTTOM;
-            mode = (ORIG_REC_FIND(id) == -1) ? 0 : 0x70;
+            mode = (rec_find(id) == -1) ? 0 : 0x70;
             rec  = (uint8_t *)dword_53C1B;
             id   = rec[7];
-            dword_53A85 = ORIG_RES("DATO.DAT", dword_53A85, id);
+            dword_53A85 = res_load("DATO.DAT", dword_53A85, id);
             p = next + 1;
             open_and_blit(BOX_BOTTOM, rec, mode, 0, &box, &rec, &start, &cur);
             wait = 1;
@@ -245,7 +234,7 @@ int vm_run(void *stream, int sub, int addr, int pitch,
             dword_53C67 = BOX_TOP;
             mode = 2;
             rec  = (uint8_t *)dword_53A45 + RECORD_SIZE * idx;
-            dword_53A85 = ORIG_RES("DATO.DAT", dword_53A85, rec[7]);
+            dword_53A85 = res_load("DATO.DAT", dword_53A85, rec[7]);
             p = next + 1;
             open_and_blit(BOX_TOP, rec, mode, 1, &box, &rec, &start, &cur);
             wait = 1;
@@ -260,7 +249,7 @@ int vm_run(void *stream, int sub, int addr, int pitch,
             dword_53C67 = BOX_BOTTOM;
             mode = 0x70;
             rec  = (uint8_t *)dword_53A45 + RECORD_SIZE * idx;
-            dword_53A85 = ORIG_RES("DATO.DAT", dword_53A85, rec[7]);
+            dword_53A85 = res_load("DATO.DAT", dword_53A85, rec[7]);
             p = next + 1;
             open_and_blit(BOX_BOTTOM, rec, mode, 0, &box, &rec, &start, &cur);
             wait = 1;
@@ -269,13 +258,13 @@ int vm_run(void *stream, int sub, int addr, int pitch,
         }
 
         default:                                /* one glyph              */
-            ORIG_DRAW(dword_53A75, op, cur, pitch, fg, shadow, bgfill);
+            gfx_draw_glyph(dword_53A75, op, (void *)(uintptr_t)cur, pitch, fg, shadow, bgfill);
             cur += 16;
             p = next;
-            if (ORIG_PENDING())
+            if (kbd_pending())
                 wait = 0;
             if (wait)
-                ORIG_TYPE_STEP();
+                dlg_type_step();
             continue;
         }
     }

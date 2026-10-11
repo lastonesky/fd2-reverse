@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 #define VGA_BASE 0x000A0000u
@@ -32,12 +33,6 @@ typedef void *(*res_load_fn)(const char *name, void *old_buffer, int index);
 typedef int   (*rle_blit_fn)(void *buf, int index, void *dst, int pitch,
                              int mode);
 
-#define BGM_PLAY   ((bgm_fn)      (uintptr_t)0x00025977u)
-#define WAIT_TICKS ((wait_fn)     (uintptr_t)0x00017AA9u)
-#define FADE_OUT   ((fade_fn)     (uintptr_t)0x0001F882u)  /* 0..63: darken   */
-#define FADE_IN    ((fade_fn)     (uintptr_t)0x0001F525u)  /* 64..0: restore  */
-#define RES_LOAD   ((res_load_fn) (uintptr_t)0x000111BAu)
-#define RLE_BLIT   ((rle_blit_fn) (uintptr_t)0x0002EB9Fu)
 
 /* The three services the funcs_25E23[] state handlers use, called through
  * their original addresses for the same reason as above (host: patched to C;
@@ -48,10 +43,6 @@ typedef void (*unit_refresh_fn)(void);
 typedef int  (*unit_add_fn)(int id);
 typedef int  (*unit_exists_fn)(int id);
 
-#define VM_RUN       ((vm_fn)          (uintptr_t)0x00015F84u)
-#define UNIT_REFRESH ((unit_refresh_fn)(uintptr_t)0x00011506u)
-#define UNIT_ADD     ((unit_add_fn)    (uintptr_t)0x000112A5u)
-#define UNIT_EXISTS  ((unit_exists_fn) (uintptr_t)0x00033499u)
 
 /* Game globals (obj1 data segment) used by the handlers:
  *   dword_53A79  the current VM stream pointer (vm_run's first argument)
@@ -62,16 +53,16 @@ void scene_card(void)
 {
     void *buf;
 
-    BGM_PLAY(-1, 1);                       /* fade the music out          */
-    WAIT_TICKS(1);
-    FADE_OUT();                            /* darken the palette          */
-    buf = RES_LOAD("FDOTHER.DAT", NULL, 79);
+    bgm_play(-1, 1);                       /* fade the music out          */
+    svc_wait_ticks(1);
+    pal_fade_out();                            /* darken the palette          */
+    buf = res_load("FDOTHER.DAT", NULL, 79);
     memset((void *)(uintptr_t)VGA_BASE, 0, 320 * 200);
-    RLE_BLIT(buf, 0, (void *)(uintptr_t)VGA_BASE, 320, -1);
-    FADE_IN();
-    WAIT_TICKS(9);
-    RLE_BLIT(buf, 1, (void *)(uintptr_t)VGA_BASE, 320, -1);
-    WAIT_TICKS(36);
+    res_blit(buf, 0, (void *)(uintptr_t)VGA_BASE, 320, -1);
+    pal_fade_in();
+    svc_wait_ticks(9);
+    res_blit(buf, 1, (void *)(uintptr_t)VGA_BASE, 320, -1);
+    svc_wait_ticks(36);
     guest_free(buf);
 }
 
@@ -100,22 +91,22 @@ void scene_card(void)
 /* The shared vm_run(stream=dword_53A79, sub, ...) with the fixed 8 tail args. */
 static int vm9(void)
 {
-    return VM_RUN((void *)(uintptr_t)dword_53A79, 9, 0xA0000, 320, 205, 76, 74, 19, 1);
+    return vm_run((void *)(uintptr_t)dword_53A79, 9, 0xA0000, 320, 205, 76, 74, 19, 1);
 }
 static int vm4(void)
 {
-    return VM_RUN((void *)(uintptr_t)dword_53A79, 4, 0xA0000, 320, 205, 76, 74, 19, 1);
+    return vm_run((void *)(uintptr_t)dword_53A79, 4, 0xA0000, 320, 205, 76, 74, 19, 1);
 }
 static int vm3(void)
 {
-    return VM_RUN((void *)(uintptr_t)dword_53A79, 3, 0xA0000, 320, 205, 76, 74, 19, 1);
+    return vm_run((void *)(uintptr_t)dword_53A79, 3, 0xA0000, 320, 205, 76, 74, 19, 1);
 }
 
 /* 0x22EF6 - funcs_25E23[0]: vm_run(...,9,...), refresh, then *set* state 1. */
 void scene_state_00(void)
 {
     vm9();
-    UNIT_REFRESH();
+    unit_refresh_all();
     dword_53C03 = 1;
 }
 
@@ -123,7 +114,7 @@ void scene_state_00(void)
 void scene_state_03(void)
 {
     vm4();
-    UNIT_REFRESH();
+    unit_refresh_all();
     dword_53C03++;
 }
 
@@ -131,8 +122,8 @@ void scene_state_03(void)
 void scene_state_10(void)
 {
     vm3();
-    UNIT_REFRESH();
-    UNIT_ADD(14);
+    unit_refresh_all();
+    unit_add(14);
     dword_53C03++;
 }
 
@@ -140,8 +131,8 @@ void scene_state_10(void)
 void scene_state_12(void)
 {
     vm9();
-    UNIT_REFRESH();
-    UNIT_ADD(3);
+    unit_refresh_all();
+    unit_add(3);
     dword_53C03++;
 }
 
@@ -154,19 +145,19 @@ void scene_state_12(void)
  * machine code; the C writes the behaviour out directly (rounds/30). */
 void scene_state_14(void)
 {
-    int exists = UNIT_EXISTS(12);
+    int exists = unit_exists(12);
     int sub    = (int)(uint8_t)((exists ^ 1) + 12);
 
-    VM_RUN((void *)(uintptr_t)dword_53A79, sub, 0xA0000, 320, 205, 76, 74, 19, 1);
-    UNIT_REFRESH();
-    UNIT_ADD(15);
+    vm_run((void *)(uintptr_t)dword_53A79, sub, 0xA0000, 320, 205, 76, 74, 19, 1);
+    unit_refresh_all();
+    unit_add(15);
     dword_53C03++;
 }
 
 /* 0x23E39 - funcs_25E23[18]: refresh *before* vm_run(...,3,...), advance. */
 void scene_state_18(void)
 {
-    UNIT_REFRESH();
+    unit_refresh_all();
     vm3();
     dword_53C03++;
 }
@@ -174,11 +165,6 @@ void scene_state_18(void)
 /* 0x233C6 - place records from coordinate arrays, set the view origin and
  * fade back in. */
 typedef void (*h0v_fn)(void);
-#define ORIG_FADE_OUT ((h0v_fn)(uintptr_t)0x0001F882u)
-#define ORIG_FADE_IN  ((h0v_fn)(uintptr_t)0x0001F525u)
-#define ORIG_VIEW     ((void (*)(int))(uintptr_t)0x00011CACu)
-#define ORIG_13536    ((h0v_fn)(uintptr_t)0x00013536u)
-#define ORIG_DELAY    ((void (*)(int))(uintptr_t)0x0003790Au)
 
 void scene_place_records(const uint8_t *xs, const uint8_t *ys, uintptr_t kind,
                          int first, int last, int single,
@@ -186,8 +172,8 @@ void scene_place_records(const uint8_t *xs, const uint8_t *ys, uintptr_t kind,
 {
     int i;
 
-    ORIG_FADE_OUT();
-    ORIG_13536();
+    pal_fade_out();
+    ev5_13536();
     for (i = first; i <= last; i++) {
         uint8_t *rec = dword_53A45 + 80u * (uint32_t)i;
         rec[0] = xs[i];
@@ -206,7 +192,7 @@ void scene_place_records(const uint8_t *xs, const uint8_t *ys, uintptr_t kind,
     qword_53AB1 = origin;
     dword_53AB9 = 0;
     dword_53ABD = 0;
-    ORIG_VIEW(1);
-    ORIG_FADE_IN();
-    ORIG_DELAY(200);
+    map_view_update(1);
+    pal_fade_in();
+    delay(200);
 }

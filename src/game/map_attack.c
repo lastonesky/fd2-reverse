@@ -389,7 +389,7 @@ int map_attack_run(int actor, int mode)
     steps = map_collect_scripts(scripts);
     map_view_update(0);
     map_units_animate();
-    ev_script_run((int)dword_53C4B, steps, (int)(intptr_t)scripts);
+    ev_script_run((int)dword_53C4B, steps, scripts);
     map_view_update(0);
     map_levelup_run((int)dword_53C4B);
     return 1;

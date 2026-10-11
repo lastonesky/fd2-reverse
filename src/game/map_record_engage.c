@@ -44,9 +44,9 @@ extern uint32_t dos_lowmem_base;
 #define MAP_Y ((int)(uint32_t)(qword_53AB1 >> 32))
 
 /* movement-cost table accessor 0x4E8A5: base 0x61646, stride 20 (dseg03). */
-static int cost_row_for(int profile)
+static const void *cost_row_for(int profile)
 {
-    return (int)(uintptr_t)tbl_ptr((void *)&fd2_data2[0x1646], 20, profile, 0);
+    return tbl_ptr((void *)&fd2_data2[0x1646], 20, profile, 0);
 }
 
 /* 0x18B84 - pump the map animation until a key is pending. */
@@ -82,7 +82,7 @@ int map_record_engage(int rec_idx)
     int      dirbuf[4];             /* copy of the 0x53F12 patch tile array */
     unsigned int size;
     int      profile;
-    int      cost_row;
+    const void *cost_row;
     void    *p;
     int      low, high;             /* cursor target split (qword_53AB1) */
     int      picked;

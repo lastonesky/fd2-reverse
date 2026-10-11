@@ -12,7 +12,9 @@
 #include "ev3.h"
 
 #include <stddef.h>
+#include <stdlib.h>
 #include <stdint.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 /* --- service entry points (called at their original addresses) --------- */
@@ -54,44 +56,6 @@ typedef int      (*flag_fn)(int index);
 typedef int      (*flag_or80_fn)(int index);
 typedef uint32_t (*rand_fn)(void);
 
-#define ORIG_VM_RUN     ((vm_fn)          (uintptr_t)0x00015F84u)
-#define ORIG_135DD      ((scroll_fn)      (uintptr_t)0x000135DDu)
-#define ORIG_SCENE      ((scene_fn)       (uintptr_t)0x0001AA1Du)
-#define ORIG_LOAD       ((load_fn)        (uintptr_t)0x00010B4Eu)
-#define ORIG_WAIT       ((wait_fn)        (uintptr_t)0x00017AA9u)
-#define ORIG_SEQ        ((seq_fn)         (uintptr_t)0x00035B78u)
-#define ORIG_CLEAR      ((clear_fn)       (uintptr_t)0x00035F10u)
-#define ORIG_RAMP       ((ramp_fn)        (uintptr_t)0x000361B0u)
-#define ORIG_FIND       ((find_fn)        (uintptr_t)0x0002AEDBu)
-#define ORIG_PAIR       ((pair3_fn)       (uintptr_t)0x00033F78u)
-#define ORIG_DELAY      ((delay_fn)       (uintptr_t)0x0003790Au)
-#define ORIG_PAL_ADD    ((pal_add_fn)     (uintptr_t)0x00011DF2u)
-#define ORIG_VIEW       ((view_fn)        (uintptr_t)0x00011CACu)
-#define ORIG_FLUSH      ((flush_fn)       (uintptr_t)0x0004E381u)
-#define ORIG_MSG_OPEN   ((msg_open_fn)    (uintptr_t)0x0001956Bu)
-#define ORIG_MSG_CLOSE  ((msg_close_fn)   (uintptr_t)0x000196CBu)
-#define ORIG_DLG_BLIT   ((blit_fn)        (uintptr_t)0x00016559u)
-#define ORIG_DLG_WAIT   ((waitkey_fn)     (uintptr_t)0x00016C57u)
-#define ORIG_SLOT_FREE  ((slot_free_fn)   (uintptr_t)0x0001B8A6u)
-#define ORIG_SLOT_CLAIM ((slot_claim_fn)  (uintptr_t)0x0001BB8Cu)
-#define ORIG_SLOT_REMV  ((slot_remove_fn) (uintptr_t)0x0001B8E7u)
-#define ORIG_REC_FIELD  ((rec_field_fn)   (uintptr_t)0x0001B722u)
-#define ORIG_MAP_CELL   ((map_cell_fn)    (uintptr_t)0x00012E38u)
-#define ORIG_RES_LOAD   ((res_load_fn)    (uintptr_t)0x000111BAu)
-#define ORIG_RES_BLIT   ((res_blit_fn)    (uintptr_t)0x0002EB9Fu)
-#define ORIG_FREE       ((free_fn)        (uintptr_t)0x0003776Eu)
-#define ORIG_12263      ((notify_fn)      (uintptr_t)0x00012263u)
-#define ORIG_1DB65      ((notify_fn)      (uintptr_t)0x0001DB65u)
-#define ORIG_2E2B0      ((two_fn)         (uintptr_t)0x0002E2B0u)
-#define ORIG_1366A      ((one_fn)         (uintptr_t)0x0001366Au)
-#define ORIG_134E4      ((notify_fn)      (uintptr_t)0x000134E4u)
-#define ORIG_STATUS     ((status_fn)      (uintptr_t)0x000344F2u)
-#define ORIG_UNIT_ADD   ((unit_add_fn)    (uintptr_t)0x000112A5u)
-#define ORIG_REC_FLAG   ((flag_fn)        (uintptr_t)0x00034894u)
-#define ORIG_FLAG_OR80  ((flag_or80_fn)   (uintptr_t)0x00013512u)
-#define ORIG_RAND       ((rand_fn)        (uintptr_t)0x0004EBE3u)
-#define ORIG_12CEA      ((pair2_fn)       (uintptr_t)0x00012CEAu)
-#define ORIG_22253      ((five_fn)        (uintptr_t)0x00022253u)
 
 /* --- original data-segment globals ------------------------------------- */
 
@@ -100,7 +64,7 @@ typedef uint32_t (*rand_fn)(void);
 
 static void vm(void *stream, int sub, int addr)
 {
-    ORIG_VM_RUN(stream, sub, addr, 320, 205, 76, 74, 19, 1);
+    vm_run(stream, sub, addr, 320, 205, 76, 74, 19, 1);
 }
 static void vm_sub(void *stream, int sub) { vm(stream, sub, VGA_BASE); }
 
@@ -108,7 +72,7 @@ static void vm_sub(void *stream, int sub) { vm(stream, sub, VGA_BASE); }
 void ev3_352CA(int arg)
 {
     static const uint8_t scr[3] = { 0x00, 0xD3, 0x00 };
-    ORIG_SCENE(arg, 1, scr);
+    sub_1AA1D(arg, 1, scr);
     vm_sub(dword_53A79, 0x0B);
 }
 
@@ -117,7 +81,7 @@ void ev3_35346(int arg)
 {
     static const uint8_t scr[3] = { 0x00, 0xD5, 0x00 };
     vm_sub(dword_53A79, 3);
-    ORIG_SCENE(arg, 1, scr);
+    sub_1AA1D(arg, 1, scr);
     vm_sub(dword_53A79, 4);
 }
 
@@ -125,16 +89,16 @@ void ev3_35346(int arg)
 void ev3_35468(int arg)
 {
     (void)arg;
-    ORIG_LOAD((int)dword_53BEF / 2);
-    ORIG_WAIT(1);
-    ORIG_135DD(0, 0);
-    ORIG_WAIT(8);
-    ORIG_135DD(0x1C, 0);
-    ORIG_WAIT(8);
-    ORIG_135DD(0x1C, 0x20);
-    ORIG_WAIT(8);
-    ORIG_135DD(0, 0x20);
-    ORIG_WAIT(8);
+    unit_sprites_build((int)dword_53BEF / 2);
+    svc_wait_ticks(1);
+    ev2_135DD(0, 0);
+    svc_wait_ticks(8);
+    ev2_135DD(0x1C, 0);
+    svc_wait_ticks(8);
+    ev2_135DD(0x1C, 0x20);
+    svc_wait_ticks(8);
+    ev2_135DD(0, 0x20);
+    svc_wait_ticks(8);
     if (dword_53BEF == 2)
         vm_sub(dword_53A79, 3);
 }
@@ -143,7 +107,7 @@ void ev3_35468(int arg)
 void ev3_355F0(int arg)
 {
     static const uint8_t scr[3] = { 0x00, 0x65, 0x00 };
-    ORIG_SCENE(arg, 1, scr);
+    sub_1AA1D(arg, 1, scr);
     vm_sub(dword_53A79, 3);
 }
 
@@ -151,15 +115,15 @@ void ev3_355F0(int arg)
 void ev3_356B3(int arg)
 {
     (void)arg;
-    ORIG_LOAD((int)dword_53BEF);
-    ORIG_135DD(0, 4);
-    ORIG_DELAY(400);
-    ORIG_135DD(0, 0x16);
-    ORIG_DELAY(400);
-    ORIG_135DD(0x1A, 0x18);
-    ORIG_DELAY(400);
-    ORIG_135DD(0x1A, 2);
-    ORIG_DELAY(400);
+    unit_sprites_build((int)dword_53BEF);
+    ev2_135DD(0, 4);
+    delay(400);
+    ev2_135DD(0, 0x16);
+    delay(400);
+    ev2_135DD(0x1A, 0x18);
+    delay(400);
+    ev2_135DD(0x1A, 2);
+    delay(400);
 }
 
 /* ---------------------------------------------------------------- 0x35730 */
@@ -169,13 +133,13 @@ void ev3_35730(int arg)
 
     if (arg == 0 && *(uint8_t *)(uintptr_t)dword_53AD5 == 0) {
         vm_sub(dword_53A79, 0);
-        ORIG_2E2B0(0x11, arg);
-        ORIG_1DB65();
-        if (ORIG_REC_FLAG(0x11) != 0) {
+        sub_2E2B0(0x11, arg);
+        sub_1DB65();
+        if (rec_flag(0x11) != 0) {
             *(uint8_t *)(uintptr_t)dword_53AD5 = 1;
-            ORIG_12263();
-            ORIG_VIEW(1);
-            ORIG_SCENE(arg, 1, scr);
+            ev4_12263();
+            map_view_update(1);
+            sub_1AA1D(arg, 1, scr);
         }
     }
     dword_53EC8 = 0;
@@ -185,20 +149,20 @@ void ev3_35730(int arg)
 void ev3_357DD(int arg)
 {
     (void)arg;
-    ORIG_135DD(6, 0x28);
-    ORIG_LOAD(1);
-    ORIG_1366A(0x4A);
+    ev2_135DD(6, 0x28);
+    unit_sprites_build(1);
+    ev4_1366A(0x4A);
     vm_sub(dword_53A79, 5);
-    ORIG_134E4();
+    dlg_portrait_clear();
 }
 
 /* ---------------------------------------------------------------- 0x35833 */
 void ev3_35833(int arg)
 {
     (void)arg;
-    ORIG_LOAD((int)dword_53BEF);
-    ORIG_135DD(9, 0);
-    ORIG_DELAY(400);
+    unit_sprites_build((int)dword_53BEF);
+    ev2_135DD(9, 0);
+    delay(400);
 }
 
 /* ---------------------------------------------------------------- 0x35854 */
@@ -208,27 +172,27 @@ void ev3_35854(int arg)
     uint8_t out[8];   /* map_cell_info writes 5 bytes (the +4 kind flag) */
     int     i;
 
-    ORIG_FLUSH();
-    ORIG_MSG_OPEN(*(uint8_t *)(uintptr_t)(dword_53A45 + REC_STRIDE * arg + 7));
+    kbd_flush();
+    msg_open_portrait(*(uint8_t *)(uintptr_t)(dword_53A45 + REC_STRIDE * arg + 7));
 
-    if (ORIG_SLOT_FREE(arg) == 8) {
+    if (rec_slot_free(arg) == 8) {
         vm_sub(dword_53A7D, 0x1E0);
-        ORIG_DLG_BLIT(0);
-        ORIG_DLG_WAIT(0);
-        ORIG_MSG_CLOSE();
+        dlg_blit_dato(dword_53A85, dword_53C67, 0);
+        dlg_wait_key(0);
+        ev4_196CB();
         return;
     }
 
-    ORIG_MAP_CELL((int)dword_53AB1, (int)dword_53AB5, out);
+    map_cell_info((int)dword_53AB1, (int)dword_53AB5, out);
     dword_53AD9 = (uint32_t)table5[out[2]] + 0xB5;
     vm(dword_53A7D, 0x1A6, 0xA9F23);
-    ORIG_DLG_BLIT(0);
-    ORIG_DLG_WAIT(0);
-    ORIG_SLOT_CLAIM(arg, table5[out[2]]);
-    ORIG_MSG_CLOSE();
+    dlg_blit_dato(dword_53A85, dword_53C67, 0);
+    dlg_wait_key(0);
+    rec_slot_claim(arg, table5[out[2]]);
+    ev4_196CB();
     for (i = 0; i < 5; i++)
         *(uint8_t *)(uintptr_t)(dword_53AD5 + i) = 1;
-    ORIG_12263();
+    ev4_12263();
 }
 
 /* ---------------------------------------------------------------- 0x35A0D */
@@ -240,31 +204,31 @@ void ev3_35A0D(int arg)
     if (*(uint8_t *)(uintptr_t)(dword_53AD5 + 0x0C) != 0)
         return;
 
-    ORIG_MSG_OPEN(*(uint8_t *)(uintptr_t)(dword_53A45 + REC_STRIDE * arg + 7));
-    e = ORIG_FIND(arg, 0xD0);
+    msg_open_portrait(*(uint8_t *)(uintptr_t)(dword_53A45 + REC_STRIDE * arg + 7));
+    e = ev3_2AEDB(arg, 0xD0);
     if (e == -1) {
         vm(dword_53A79, 2, 0xA951F);
-        ORIG_DLG_BLIT(0);
-        ORIG_DLG_WAIT(0);
-        ORIG_MSG_CLOSE();
+        dlg_blit_dato(dword_53A85, dword_53C67, 0);
+        dlg_wait_key(0);
+        ev4_196CB();
         return;
     }
-    ORIG_SLOT_REMV(arg, e);
+    rec_slot_remove(arg, e);
     vm(dword_53A79, 3, 0xA951F);
-    ORIG_DLG_WAIT(0);
-    ORIG_MSG_CLOSE();
+    dlg_wait_key(0);
+    ev4_196CB();
 
-    buf = ORIG_RES_LOAD("FDOTHER.DAT", NULL, 0x2D);
+    buf = res_load("FDOTHER.DAT", NULL, 0x2D);
     for (i = 0; i < 0x3B; i++) {
-        ORIG_RES_BLIT(buf, i, (void *)(uintptr_t)0xABCE4u, 320, -1);
-        ORIG_WAIT(2);
+        res_blit(buf, i, (void *)(uintptr_t)0xABCE4u, 320, -1);
+        svc_wait_ticks(2);
     }
-    ORIG_FREE(buf);
+    free(buf);
 
     *(uint8_t *)(uintptr_t)(dword_53AD5 + 0x0C) = 1;
-    ORIG_12263();
-    ORIG_LOAD(1);
-    ORIG_UNIT_ADD(0x1F);
+    ev4_12263();
+    unit_sprites_build(1);
+    unit_add(0x1F);
     vm_sub(dword_53A79, 4);
 }
 
@@ -277,13 +241,13 @@ void ev3_35C40(int arg)
     v = *(uint8_t *)(uintptr_t)(dword_53AD5 + 0x10);
     if (v == 1) {
         vm_sub(dword_53A79, 1);
-        ORIG_SEQ(9, 0x2C, 3);
-        ORIG_SEQ(0, 9, 4);
-        ORIG_SEQ(0x11, 9, 5);
+        ev3_35B78(9, 0x2C, 3);
+        ev3_35B78(0, 9, 4);
+        ev3_35B78(0x11, 9, 5);
         dword_51A83 = 1;
     } else if (v == 2) {
         vm_sub(dword_53A79, 2);
-        ORIG_CLEAR(0x10);
+        ev3_35F10(0x10);
     }
     ++*(uint8_t *)(uintptr_t)(dword_53AD5 + 0x10);
 }
@@ -303,7 +267,7 @@ void ev3_35D1E(int arg)
 {
     (void)arg;
     vm_sub(dword_53A79, 3);
-    ORIG_SEQ(0x11, 0x12, 1);
+    ev3_35B78(0x11, 0x12, 1);
     vm_sub(dword_53A79, 6);
 }
 
@@ -312,7 +276,7 @@ void ev3_35D9E(int arg)
 {
     (void)arg;
     vm_sub(dword_53A79, 4);
-    ORIG_SEQ(0x0E, 7, 2);
+    ev3_35B78(0x0E, 7, 2);
     vm_sub(dword_53A79, 6);
     *(uint8_t *)(uintptr_t)(dword_53AD5 + 0x12) = 1;
 }
@@ -332,11 +296,11 @@ void ev3_35E0E(int arg)
 void ev3_35E5B(int arg)
 {
     (void)arg;
-    ORIG_STATUS(0x29, 0x2D, 0);
+    rec_status_set(0x29, 0x2D, 0);
     vm_sub(dword_53A79, 5);
-    ORIG_SEQ(8, 7, 3);
-    ORIG_SEQ(4, 7, 4);
-    ORIG_SEQ(0, 7, 5);
+    ev3_35B78(8, 7, 3);
+    ev3_35B78(4, 7, 4);
+    ev3_35B78(0, 7, 5);
     /* 0x35E5B's tail jumps into 0x35D1E at 0x35D55, which after the
      * 0x35B78 call is not a plain `retn` - it continues with vm_run(6). */
     vm_sub(dword_53A79, 6);
@@ -348,7 +312,7 @@ void ev3_35EC1(int arg)
     (void)arg;
     if (*(uint8_t *)(uintptr_t)(dword_53AD5 + 0x13) != 0) {
         vm_sub(dword_53A79, 2);
-        ORIG_CLEAR(0x14);
+        ev3_35F10(0x14);
     }
     ++*(uint8_t *)(uintptr_t)(dword_53AD5 + 0x13);
 }
@@ -357,8 +321,8 @@ void ev3_35EC1(int arg)
 void ev3_35F48(int arg)
 {
     (void)arg;
-    ORIG_SEQ(4, 0x23, 2);
-    ORIG_SEQ(0x0E, 0x23, 3);
+    ev3_35B78(4, 0x23, 2);
+    ev3_35B78(0x0E, 0x23, 3);
     dword_51A83 = 1;
 }
 
@@ -369,7 +333,7 @@ void ev3_35F88(int arg)
 
     (void)arg;
     v = *(uint8_t *)(uintptr_t)(dword_53AD5 + 0x10);
-    ORIG_SEQ(0x0A, 0x1D, v);
+    ev3_35B78(0x0A, 0x1D, v);
     if (v != 7)
         *(uint8_t *)(uintptr_t)(dword_53A55 + 3) = (uint8_t)(dword_53BEF + 1);
     ++*(uint8_t *)(uintptr_t)(dword_53AD5 + 0x10);
@@ -386,11 +350,11 @@ void ev3_35FCF(int arg)
         return;
 
     if (*(uint8_t *)(uintptr_t)(rec + 8) != 9) {
-        ORIG_MSG_OPEN(*(uint8_t *)(uintptr_t)(rec + 7));
+        msg_open_portrait(*(uint8_t *)(uintptr_t)(rec + 7));
         vm(dword_53A79, 0, 0xA951F);
-        ORIG_DLG_BLIT(0);
-        ORIG_DLG_WAIT(0);
-        ORIG_MSG_CLOSE();
+        dlg_blit_dato(dword_53A85, dword_53C67, 0);
+        dlg_wait_key(0);
+        ev4_196CB();
     } else {
         vm_sub(dword_53A79, 1);
         *(uint8_t *)(uintptr_t)(dword_53AD5 + 0x11) = 1;
@@ -407,21 +371,21 @@ void ev3_360B6(int arg)
 
     (void)arg;
     if (*(uint8_t *)(uintptr_t)(dword_53AD5 + 0x11) != 4) {
-        ORIG_FLAG_OR80(1);
+        rec_flag_or80(1);
         ++*(uint8_t *)(uintptr_t)(dword_53AD5 + 0x11);
         *(uint8_t *)(uintptr_t)(dword_53A55 + 6) = (uint8_t)(dword_53BEF + 1);
         return;
     }
     vm_sub(dword_53A79, 2);
-    ORIG_LOAD(1);
+    unit_sprites_build(1);
     *(uint8_t *)(uintptr_t)(dword_53AD5 + 0x15) = (uint8_t)(dword_53BEB - 3);
     *(uint8_t *)(uintptr_t)(dword_53A55 + 9) = (uint8_t)dword_53BEF;
-    ORIG_RAMP();
-    ORIG_DELAY(400);
-    ORIG_RAMP();
-    ORIG_DELAY(400);
+    ev3_361B0();
+    delay(400);
+    ev3_361B0();
+    delay(400);
     for (i = 3; i <= 6; i++) {
-        ORIG_RAMP();
+        ev3_361B0();
         vm_sub(dword_53A79, i);
     }
 }
@@ -433,10 +397,10 @@ void ev3_3623C(int arg)
 
     (void)arg;
     *(uint8_t *)(uintptr_t)(dword_53A55 + 9) = (uint8_t)(dword_53BEF + 1);
-    r = (int)ORIG_RAND();
+    r = (int)util_rand();
     base = *(uint8_t *)(uintptr_t)(dword_53AD5 + 0x15);
-    ORIG_FLAG_OR80(base + r % 3);
-    ORIG_FLAG_OR80(base + (r + 1) % 3);
+    rec_flag_or80(base + r % 3);
+    rec_flag_or80(base + (r + 1) % 3);
 }
 
 /* ---------------------------------------------------------------- 0x362E8 */
@@ -445,20 +409,20 @@ void ev3_362E8(int arg)
     uint8_t v;
 
     (void)arg;
-    ORIG_135DD(0x10, 1);
+    ev2_135DD(0x10, 1);
     v = *(uint8_t *)(uintptr_t)(dword_53AD5 + 0x10);
     vm_sub(dword_53A79, (int)v + 2);
     dword_51A83 = 0;
-    ORIG_135DD(0x10, 0x0E);
-    ORIG_PAIR(0x18 - (int)v, 0x16, 0x12);
+    ev2_135DD(0x10, 0x0E);
+    ev3_33F78(0x18 - (int)v, 0x16, 0x12);
     v = *(uint8_t *)(uintptr_t)(dword_53AD5 + 0x10);
     if (v != 4) {
-        ORIG_LOAD((int)v);
-        ORIG_STATUS(0x18 - (int)v, 0x18 - (int)v, 0);
-        ORIG_PAIR(2 * (int)v + 0x19, 0x15, 0x12);
-        ORIG_PAIR(2 * (int)v + 0x1A, 0x17, 0x12);
+        unit_sprites_build((int)v);
+        rec_status_set(0x18 - (int)v, 0x18 - (int)v, 0);
+        ev3_33F78(2 * (int)v + 0x19, 0x15, 0x12);
+        ev3_33F78(2 * (int)v + 0x1A, 0x17, 0x12);
     } else {
-        ORIG_STATUS(0x14, 0x14, 0x0B);
+        rec_status_set(0x14, 0x14, 0x0B);
     }
     dword_51A83 = 1;
 }
@@ -468,14 +432,14 @@ void ev3_362E8(int arg)
 /* 0x35B78 */
 void ev3_35B78(int a, int b, int c)
 {
-    ORIG_135DD(a, b);
-    ORIG_LOAD(c);
-    ORIG_DELAY(300);
-    ORIG_PAL_ADD(0, 0xFF, 0xFF);
-    ORIG_DELAY(200);
-    ORIG_PAL_ADD(0, 0xFF, 0);
-    ORIG_VIEW(0);
-    ORIG_DELAY(400);
+    ev2_135DD(a, b);
+    unit_sprites_build(c);
+    delay(300);
+    pal_fade_add(0, 0xFF, 0xFF);
+    delay(200);
+    pal_fade_add(0, 0xFF, 0);
+    map_view_update(0);
+    delay(400);
 }
 
 /* 0x35F10 */
@@ -484,7 +448,7 @@ void ev3_35F10(int from)
     int i;
     for (i = from; i < (int)dword_53BEB; i++)
         *(uint16_t *)(uintptr_t)(dword_53A45 + REC_STRIDE * (uint32_t)i + 0x40) = 0;
-    ORIG_1DB65();
+    sub_1DB65();
 }
 
 /* 0x361B0 */
@@ -492,25 +456,25 @@ void ev3_361B0(void)
 {
     int i;
     for (i = 0; i < 0x40; i++) {
-        ORIG_PAL_ADD(0, 0xFF, i);
-        ORIG_DELAY(8);
+        pal_fade_add(0, 0xFF, i);
+        delay(8);
     }
-    ORIG_DELAY(400);
+    delay(400);
     for (i = 0x3E; i >= 0; i--) {
-        ORIG_PAL_ADD(0, 0xFF, i);
-        ORIG_DELAY(8);
+        pal_fade_add(0, 0xFF, i);
+        delay(8);
     }
 }
 
 /* 0x2AEDB */
 int ev3_2AEDB(int rec, int value)
 {
-    int n = ORIG_SLOT_FREE(rec);
+    int n = rec_slot_free(rec);
     int i;
     if (n == 0)
         return -1;
     for (i = 0; i < n; i++)
-        if (ORIG_REC_FIELD(rec, i) == value)
+        if (rec_field_byte(rec, i) == value)
             return i;
     return -1;
 }
@@ -518,6 +482,6 @@ int ev3_2AEDB(int rec, int value)
 /* 0x33F78 */
 void ev3_33F78(int a, int b, int c)
 {
-    ORIG_12CEA(b, c);
-    ORIG_22253(a, b, c, b, c);
+    map_slide_view(b, c);
+    sub_22253(a, b, c, b, c);
 }

@@ -208,7 +208,7 @@ static void rec2(int depth, uint8_t *cell, uint16_t dx, uint8_t cl, int ebp,
     path_depth--;
 }
 
-void path_mark(int cost_row, int x, int y, int start_mp, void *map,
+void path_mark(const void *cost_row, int x, int y, int start_mp, void *map,
                const void *cost_table)
 {
     uint8_t *m = (uint8_t *)map;
@@ -231,7 +231,7 @@ void path_mark(int cost_row, int x, int y, int start_mp, void *map,
          ebp, (const uint8_t *)(uintptr_t)cost_row);
 }
 
-int path_find(int cost_row, int x, int y, int start_mp, void *out,
+int path_find(const void *cost_row, int x, int y, int start_mp, void *out,
               int target_x, int target_y, int mode, void *map,
               const void *cost_table)
 {

@@ -29,6 +29,7 @@
  */
 #include "svc.h"
 #include "../platform.h"    /* PLAT_CDECL (no __cdecl keyword outside MSVC) */
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 /* --- the game's own data segment (IDA names kept) ---------------------- */
@@ -39,12 +40,6 @@ typedef int32_t  (PLAT_CDECL *ail_addr_fn)(void *handle, const void *start,
                                         uint32_t len);
 typedef int32_t  (PLAT_CDECL *ail_loop_fn)(void *handle, int32_t loops);
 
-#define ORIG_TICK   ((tick_fn)    (uintptr_t)0x0004E310u)
-#define ORIG_INIT   ((ail_h_fn)   (uintptr_t)0x00039521u)
-#define ORIG_ADDR   ((ail_addr_fn)(uintptr_t)0x00039694u)
-#define ORIG_LOOP   ((ail_loop_fn)(uintptr_t)0x00039AAEu)
-#define ORIG_START  ((ail_h_fn)   (uintptr_t)0x00039798u)
-#define ORIG_STOP   ((ail_h_fn)   (uintptr_t)0x00039805u)
 
 /* 0x17AA9
  *
@@ -65,14 +60,14 @@ int svc_wait_ticks(int n)
 {
     int32_t elapsed;
 
-    dword_53A2C = (int16_t)ORIG_TICK();
+    dword_53A2C = (int16_t)pal_tick_word();
     do {
-        elapsed = (int16_t)ORIG_TICK() - dword_53A2C;
+        elapsed = (int16_t)pal_tick_word() - dword_53A2C;
         if (elapsed < 0)
             elapsed += 0x10000;
     } while (elapsed < n);
 
-    dword_53A2C = (int16_t)ORIG_TICK();
+    dword_53A2C = (int16_t)pal_tick_word();
     return dword_53A2C;
 }
 
@@ -112,7 +107,7 @@ static int play_sfx(void **slot, const void *bank, int index, int loops)
     if (byte_53EF1 == 0 || byte_51E62 == 0 || dword_54133 != 0)
         return 0;
 
-    result = ORIG_STOP(*slot);
+    result = AIL_stop_sample(*slot);
     if (index == -1)
         return result;
 
@@ -121,10 +116,10 @@ static int play_sfx(void **slot, const void *bank, int index, int loops)
     end = *(const uint32_t *)(row + 0x0A);
     start = (const uint8_t *)bank + beg;
 
-    ORIG_INIT(*slot);
-    ORIG_ADDR(*slot, start, end - beg);
-    ORIG_LOOP(*slot, loops);
-    return ORIG_START(*slot);
+    AIL_init_sample(*slot);
+    AIL_set_sample_address(*slot, start, end - beg);
+    AIL_set_sample_loop_count(*slot, loops);
+    return AIL_start_sample(*slot);
 }
 
 int svc_play_sfx(const void *bank, int index, int loops)

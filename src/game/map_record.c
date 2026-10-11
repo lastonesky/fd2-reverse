@@ -144,7 +144,7 @@ int map_record_interact(int rec, int *dir_tiles, int reopen)
     dlg_portrait_clear();
     steps = map_collect_scripts(buf);
     map_units_animate();
-    ev_script_run(rec, steps, (int)(intptr_t)buf);
+    ev_script_run(rec, steps, buf);
     rec_flag_or80(rec);
     kbd_flush();
     return 1;

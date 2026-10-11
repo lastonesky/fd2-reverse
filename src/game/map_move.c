@@ -13,9 +13,9 @@
 #include <stdlib.h>
 
 /* movement-cost table accessor 0x4E8A5: base 0x61646, stride 20 (dseg03). */
-static int cost_row_for(int profile)
+static const void *cost_row_for(int profile)
 {
-    return (int)(uintptr_t)tbl_ptr((void *)&fd2_data2[0x1646], 20, profile, 0);
+    return tbl_ptr((void *)&fd2_data2[0x1646], 20, profile, 0);
 }
 
 /* 0x14B78 */
@@ -27,7 +27,7 @@ int map_move_toward(int target_x, int target_y, int actor, int mode)
     int profile = rec[32];
     int rec_x = rec[0];
     int rec_y = rec[1];
-    int cost_row;
+    const void *cost_row;
     void *dirs;
     uint8_t *reach;
     int cur_x = target_x;
@@ -137,7 +137,7 @@ int map_move_to_marked(int actor, int mode)
     int rec_x = rec[0];
     int rec_y = rec[1];
     int profile = rec[32];
-    int cost_row;
+    const void *cost_row;
     uint8_t cell[2];
     int moved = 0;
 

@@ -41,6 +41,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 #include "gfx.h"
 #include "res.h"
@@ -52,10 +53,6 @@ typedef int      (*res_blit_fn)(const void *buf, int index, void *dst,
 typedef int      (*sfx_fn)(const void *bank, int index, int loops);
 typedef uint32_t (*rand_fn)(void);
 
-#define RES_BLIT      ((res_blit_fn)(uintptr_t)0x0002EB9Fu)
-#define SVC_PLAY_SFX  ((sfx_fn)     (uintptr_t)0x00025A96u)
-#define SVC_PLAY_SFX2 ((sfx_fn)     (uintptr_t)0x00025B45u)
-#define UTIL_RAND     ((rand_fn)    (uintptr_t)0x0004EBE3u)
 
 /* --- game globals (obj1 data segment) ---------------------------------- */
 
@@ -96,7 +93,7 @@ static uint8_t fx_rec_flag(int rec)
  * the signed remainder so the translation matches for any 32-bit input. */
 static int fx_rand_mod2(void)
 {
-    return (int)((int32_t)UTIL_RAND() % 2);
+    return (int)((int32_t)util_rand() % 2);
 }
 
 /* 0x2B996 - funcs_30469[0]. Seven particles driven by a 7-byte direction
@@ -130,9 +127,9 @@ int fx_dots7(int rec, const void *buf, void *dst, int pitch, int selector)
             int32_t v = dword_53F76[i];
 
             if (v == 3)
-                SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 1, 1);
+                svc_play_sfx((const void *)(uintptr_t)dword_54153, 1, 1);
             if ((uint32_t)v < 0x10u && dir[i] == 1)
-                RES_BLIT(buf, v,
+                res_blit(buf, v,
                          (void *)((intptr_t)dst + pos[i] +
                                   (intptr_t)pitch * row[i]),
                          pitch, -1);
@@ -144,7 +141,7 @@ int fx_dots7(int rec, const void *buf, void *dst, int pitch, int selector)
             int32_t v = dword_53F76[i];
 
             if ((uint32_t)v < 0x10u && dir[i] == 0)
-                RES_BLIT(buf, v,
+                res_blit(buf, v,
                          (void *)((intptr_t)dst + pos[i] +
                                   (intptr_t)pitch * row[i]),
                          pitch, -1);
@@ -187,7 +184,7 @@ int fx_dots8(int rec, const void *buf, void *dst, int pitch, int selector)
             int32_t v = dword_53F92[i];
 
             if ((uint32_t)v < 0xFu)
-                RES_BLIT(buf, v,
+                res_blit(buf, v,
                          (void *)((intptr_t)dst + pos[i] +
                                   (intptr_t)pitch * row[i] + 80),
                          pitch, -1);
@@ -197,7 +194,7 @@ int fx_dots8(int rec, const void *buf, void *dst, int pitch, int selector)
             int     j = (i + 4) % 8;
 
             if ((uint32_t)v < 0xFu)
-                RES_BLIT(buf, v + 15,
+                res_blit(buf, v + 15,
                          (void *)((intptr_t)dst + pos[j] +
                                   (intptr_t)pitch * row[j] + 80),
                          pitch, -1);
@@ -210,7 +207,7 @@ int fx_dots8(int rec, const void *buf, void *dst, int pitch, int selector)
             int     j = (i + 4) % 8;
 
             if ((uint32_t)v < 0xFu)
-                RES_BLIT(buf, v + 15,
+                res_blit(buf, v + 15,
                          (void *)((intptr_t)dst + pos[j] +
                                   (intptr_t)pitch * row[j] + 80),
                          pitch, -1);
@@ -219,7 +216,7 @@ int fx_dots8(int rec, const void *buf, void *dst, int pitch, int selector)
             int32_t v = dword_53F92[i];
 
             if ((uint32_t)v < 0xFu)
-                RES_BLIT(buf, v,
+                res_blit(buf, v,
                          (void *)((intptr_t)dst + pos[i] +
                                   (intptr_t)pitch * row[i] + 80),
                          pitch, -1);
@@ -229,7 +226,7 @@ int fx_dots8(int rec, const void *buf, void *dst, int pitch, int selector)
             if (dword_53F92[i] == 9)
                 r = 1;
             if (dword_53F92[i] == 5)
-                SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 1, 1);
+                svc_play_sfx((const void *)(uintptr_t)dword_54153, 1, 1);
         }
         return r;
 
@@ -249,7 +246,7 @@ int fx_advance(uint8_t *phase, uint8_t *counter, void *dst, int pitch,
     const uint8_t *b = (const uint8_t *)buf;
     int            ret;
 
-    RES_BLIT(buf, (int)*phase, dst, pitch, -1);
+    res_blit(buf, (int)*phase, dst, pitch, -1);
     ret = *(const uint8_t *)(b + *(const int32_t *)(b + 4 * (int)*phase + 8) + 6);
     if ((uint8_t)(++*counter) == (uint8_t)ret) {
         *counter = 0;
@@ -278,7 +275,7 @@ int fx_blob(int rec, const void *buf, void *dst, int pitch, int selector)
         return 12;
 
     case 6:
-        SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 3, 1);
+        svc_play_sfx((const void *)(uintptr_t)dword_54153, 3, 1);
         byte_53FB2 = 10;
         return 10;
 
@@ -294,29 +291,29 @@ int fx_blob(int rec, const void *buf, void *dst, int pitch, int selector)
     case 2:
     case 8:
         if (byte_53FB2 == 7)
-            SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 1, 1);
+            svc_play_sfx((const void *)(uintptr_t)dword_54153, 1, 1);
         if (v15 != 0) {
             if (byte_53FB2 == 10 && (uint8_t)selector == 2)
                 byte_53FB2 = 15;
             fx_advance(&byte_53FB2, &byte_53FB4, dst, pitch, buf);
         }
         if (byte_53FB2 == 0x10)
-            RES_BLIT(buf, 0x10, dst, pitch, -1);
+            res_blit(buf, 0x10, dst, pitch, -1);
         return 0;
 
     case 4:
         if (v15 == 0)
-            RES_BLIT(buf, 15, (void *)((intptr_t)dst + 1 - pitch), pitch, -1);
+            res_blit(buf, 15, (void *)((intptr_t)dst + 1 - pitch), pitch, -1);
         return 0;
 
     case 5:
         if (v15 != 0)
-            RES_BLIT(buf, 15, (void *)((intptr_t)dst - 1 - pitch), pitch, -1);
-        RES_BLIT(buf, (int)byte_53FB2, (void *)((intptr_t)dst + 1 - pitch),
+            res_blit(buf, 15, (void *)((intptr_t)dst - 1 - pitch), pitch, -1);
+        res_blit(buf, (int)byte_53FB2, (void *)((intptr_t)dst + 1 - pitch),
                  pitch, -1);
         ++byte_53FB2;
         if (byte_53FB2 == 0x11) {
-            SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 2, 1);
+            svc_play_sfx((const void *)(uintptr_t)dword_54153, 2, 1);
             return 1;
         }
         if (byte_53FB2 == 0x12)
@@ -373,19 +370,19 @@ int fx_dots12(int rec, const void *buf, void *dst, int pitch, int selector)
             int     slot = dword_53FE5[i];
 
             if ((uint32_t)v < 0xBu)
-                RES_BLIT(buf, v + v20[slot],
+                res_blit(buf, v + v20[slot],
                          (void *)((intptr_t)dst + v19[slot] -
                                   (intptr_t)pitch * v21[slot]),
                          pitch, -1);
             if (byte_54017 == 0) {
                 if (v == 0 && v20[slot] != 0)
-                    SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 2, 1);
+                    svc_play_sfx((const void *)(uintptr_t)dword_54153, 2, 1);
                 ++dword_53FB5[i];
                 if (dword_53FB5[i] == 3) {
                     /* the machine always reports "done" here; the second
                      * sample only fires when the slot's vertical bias is 0 */
                     if (v20[slot] == 0)
-                        SVC_PLAY_SFX2((const void *)(uintptr_t)dword_54153, 1, 1);
+                        svc_play_sfx2((const void *)(uintptr_t)dword_54153, 1, 1);
                     r = 1;
                 }
                 if (dword_53FB5[i] == 0xB && byte_54016 == 0) {
@@ -442,13 +439,13 @@ int fx_dots6b(int rec, const void *buf, void *dst, int pitch, int selector)
             int     slot = dword_54068[i];
 
             if ((uint32_t)v < 6u)
-                RES_BLIT(buf, (int)((uint8_t)byte_54080[i] + v),
+                res_blit(buf, (int)((uint8_t)byte_54080[i] + v),
                          (void *)((intptr_t)dst + pos[slot]), pitch, -1);
             if (v == 0) {
                 if (i == 0)
-                    SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 1, 1);
+                    svc_play_sfx((const void *)(uintptr_t)dword_54153, 1, 1);
                 else if (i == 3)
-                    SVC_PLAY_SFX2((const void *)(uintptr_t)dword_54153, 1, 1);
+                    svc_play_sfx2((const void *)(uintptr_t)dword_54153, 1, 1);
             }
             ++dword_54050[i];
             if (dword_54050[i] == 2)
@@ -500,11 +497,11 @@ int fx_dots6(int rec, const void *buf, void *dst, int pitch, int selector)
             int32_t v = dword_54018[i];
 
             if ((uint32_t)v < 7u)
-                RES_BLIT(buf, (int)((uint8_t)byte_54048[i] + v),
+                res_blit(buf, (int)((uint8_t)byte_54048[i] + v),
                          (void *)((intptr_t)dst + pos[dword_54030[i]]),
                          pitch, -1);
             if (v == 0)
-                SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 1, 1);
+                svc_play_sfx((const void *)(uintptr_t)dword_54153, 1, 1);
             ++dword_54018[i];
             if (dword_54018[i] == 3)
                 r = 1;
@@ -561,16 +558,16 @@ int fx_dots3(int rec, const void *buf, void *dst, int pitch, int selector)
             int32_t v = dword_540CB[k];
 
             if ((uint32_t)v < 5u)
-                RES_BLIT(buf, (int)v,
+                res_blit(buf, (int)v,
                          (void *)((intptr_t)dst + pos[dword_540DB[k]]),
                          pitch, -1);
             if (byte_540ED == 0) {
                 /* particle 0 uses the first handle, particle 1 the second */
                 if (v == 1) {
                     if (k == 0)
-                        SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 1, 1);
+                        svc_play_sfx((const void *)(uintptr_t)dword_54153, 1, 1);
                     else if (k == 1)
-                        SVC_PLAY_SFX2((const void *)(uintptr_t)dword_54153, 1, 1);
+                        svc_play_sfx2((const void *)(uintptr_t)dword_54153, 1, 1);
                 }
                 if (++dword_540CB[k] == 2)
                     r = 1;
@@ -616,11 +613,11 @@ int fx_dots16(int rec, const void *buf, void *dst, int pitch, int selector)
             int32_t v = dword_540EE[j];
 
             if ((uint32_t)v < 8u)
-                RES_BLIT(buf, tbl[j] + v, dst, pitch, -1);
+                res_blit(buf, tbl[j] + v, dst, pitch, -1);
             if (v == 0)
-                SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 1, 1);
+                svc_play_sfx((const void *)(uintptr_t)dword_54153, 1, 1);
             if (v == 4)
-                SVC_PLAY_SFX2((const void *)(uintptr_t)dword_54153, 2, 1);
+                svc_play_sfx2((const void *)(uintptr_t)dword_54153, 2, 1);
             if (++dword_540EE[j] == 4)
                 r = 1;
         }
@@ -651,7 +648,7 @@ int fx_toggle(int rec, const void *buf, void *dst, int pitch, int selector)
     case 1:
     case 7:
         if (byte_5412F == 0)
-            RES_BLIT(buf, 0, dst, pitch, -1);
+            res_blit(buf, 0, dst, pitch, -1);
         byte_5412F ^= 1;
         return 0;
 
@@ -660,17 +657,17 @@ int fx_toggle(int rec, const void *buf, void *dst, int pitch, int selector)
 
     case 4:
         /* machine code pushes index 0 here, not 4 (Hex-Rays' 9-arg view hides it) */
-        RES_BLIT(buf, 0, dst, pitch, -1);
+        res_blit(buf, 0, dst, pitch, -1);
         return 0;
 
     case 5: {
         uint8_t k = byte_5412E;
 
-        RES_BLIT(buf, (int)(k >> 1), dst, pitch, -1);
+        res_blit(buf, (int)(k >> 1), dst, pitch, -1);
         if (byte_5412E == 6)
-            SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 1, 1);
+            svc_play_sfx((const void *)(uintptr_t)dword_54153, 1, 1);
         else if (byte_5412E == 36)
-            SVC_PLAY_SFX2((const void *)(uintptr_t)dword_54153, 2, 1);
+            svc_play_sfx2((const void *)(uintptr_t)dword_54153, 2, 1);
         ++byte_5412E;
         return (byte_5412E > 0x10u && byte_5412E < 0x2Cu) ? 1 : 0;
     }
@@ -739,7 +736,7 @@ int fx_dots5(int rec, const void *buf, void *dst, int pitch, int selector)
     }
 
     if (sel == 0) {
-        SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 2, 1);
+        svc_play_sfx((const void *)(uintptr_t)dword_54153, 2, 1);
         byte_540C9 = 0;
         byte_540CA = 0;
         return 7;
@@ -762,7 +759,7 @@ int fx_dots5(int rec, const void *buf, void *dst, int pitch, int selector)
         return 12;
     }
     if (sel == 6) {
-        SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 3, 1);
+        svc_play_sfx((const void *)(uintptr_t)dword_54153, 3, 1);
         byte_540C9 = 42;
         return 7;
     }
@@ -775,13 +772,13 @@ int fx_dots5(int rec, const void *buf, void *dst, int pitch, int selector)
             if (v25 != 0) {
                 if (((sel == 1 || sel == 7) && n < 2) ||
                     ((sel == 2 || sel == 8) && n > 1)) {
-                    RES_BLIT(buf, 4,
+                    res_blit(buf, 4,
                              (void *)((intptr_t)dst +
                                       (intptr_t)pitch * y[n] + x[n]),
                              pitch, -1);
                 }
             } else if (sel == 2 || sel == 8) {
-                RES_BLIT(buf, 4,
+                res_blit(buf, 4,
                          (void *)((intptr_t)dst +
                                   (intptr_t)pitch * y[n] + x[n]),
                          pitch, -1);
@@ -804,7 +801,7 @@ int fx_dots5(int rec, const void *buf, void *dst, int pitch, int selector)
 
                 for (m = 0; m < 5; ++m) {
                     if (c4[m] != 0) {
-                        RES_BLIT(buf, c4[m],
+                        res_blit(buf, c4[m],
                                  (void *)((intptr_t)dst +
                                           (intptr_t)pitch * (y[m] - 20) +
                                           x[m] - 60),
@@ -814,9 +811,9 @@ int fx_dots5(int rec, const void *buf, void *dst, int pitch, int selector)
                     }
                     if (b0[m] == 0) {
                         if (m != 0 && m != 2)
-                            SVC_PLAY_SFX2((const void *)(uintptr_t)dword_54153, 1, 1);
+                            svc_play_sfx2((const void *)(uintptr_t)dword_54153, 1, 1);
                         else
-                            SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 1, 1);
+                            svc_play_sfx((const void *)(uintptr_t)dword_54153, 1, 1);
                     }
                     if ((uint32_t)(++b0[m]) == 5u)
                         b0[m] = 0;
@@ -839,14 +836,14 @@ int fx_dots5(int rec, const void *buf, void *dst, int pitch, int selector)
                 c4[n] = 5;
             if (v25 != 0) {
                 if ((sel == 4 && n < 2) || (sel == 5 && n > 1)) {
-                    RES_BLIT(buf, idx,
+                    res_blit(buf, idx,
                              (void *)((intptr_t)dst +
                                       (intptr_t)pitch * (y[n] + v18[idx]) +
                                       x[n] + v15[idx]),
                              pitch, -1);
                 }
             } else if (sel == 5) {
-                RES_BLIT(buf, idx,
+                res_blit(buf, idx,
                          (void *)((intptr_t)dst +
                                   (intptr_t)pitch * (y[n] + v18[idx]) +
                                   x[n] + v15[idx]),

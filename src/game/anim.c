@@ -15,6 +15,7 @@
 #include "../dos.h"
 
 #include <stdint.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 #define BDA_W(off)  (*(volatile uint16_t *)(uintptr_t)(DOS_LOWMEM_BASE + (off)))
@@ -34,7 +35,6 @@ void anim_frame_step(void)
 
 /* 0x311E5 - step a small menu sprite animation. */
 typedef void (*res_blit_fn)(void *, int, void *, int, int);
-#define ORIG_RES_BLIT ((res_blit_fn)(uintptr_t)0x0002EB9Fu)
 
 void anim_cycle_frame(const void *frames, int mode, void *dst, int pitch)
 {
@@ -46,7 +46,7 @@ void anim_cycle_frame(const void *frames, int mode, void *dst, int pitch)
         byte_54131 = 0;
         return;
     }
-    ORIG_RES_BLIT((void *)f, byte_54131, dst, pitch, mode);
+    res_blit((void *)f, byte_54131, dst, pitch, mode);
     n = f[*(const uint32_t *)(const void *)(f + 4 * byte_54131 + 8) + 6u];
     if ((unsigned)++byte_54130 >= n) {
         byte_54130 = 0;

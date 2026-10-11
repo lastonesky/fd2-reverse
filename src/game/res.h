@@ -39,13 +39,13 @@ void *res_load(const char *filename, void *old_buffer, int index);
 /* 0x2EB9F - decode and blit sub-image `index` of an LMI buffer straight to
  * `dst`: the buffer's offset table starts at +8, the sub-image header carries
  * w/h (u16 each) and the RLE stream starts at +9 (see src/leafcheck.c). */
-void res_blit(void *buf, int index, void *dst, int pitch, int mode);
+void res_blit(const void *buf, int index, void *dst, int pitch, int mode);
 
 #endif /* GAME_RES_H */
 
 /* 0x16886 - like res_blit but the offset table starts at +6 and the sub-image
  * is always decoded at (0,0) with mode -1. */
-void res_blit6(void *dst, int pitch, void *buf, int index);
+void res_blit6(void *dst, int pitch, const void *buf, int index);
 
 /* 0x15F0E - save the w*h background rectangle at surface+`offset` into a fresh
  * record, then draw the RLE sub-image `index` of `tbl` transparently over it.

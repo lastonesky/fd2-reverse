@@ -8,8 +8,10 @@
 #include "world_load.h"
 #include "guest_mem.h"
 
+#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 #include "world_load_alias.inc"
 
@@ -22,15 +24,6 @@ typedef int   (*entry_fn)(int, void *);
 typedef void *(*fopen_fn)(const char *, const char *);
 typedef int   (*fclose_fn)(void *);
 
-#define ORIG_RESLOAD   ((resload_fn)(uintptr_t)0x000111BAu)
-#define ORIG_RLE       ((rle_fn)    (uintptr_t)0x0004E98Du)
-#define ORIG_SCROLL    ((h1v_fn)    (uintptr_t)0x00024D22u)
-#define ORIG_FIXREC    ((h1v_fn)    (uintptr_t)0x0004DF4Cu)
-#define ORIG_ENTRYDATA ((entry_fn)  (uintptr_t)0x00011019u)
-#define ORIG_METRICS   ((h1v_fn)    (uintptr_t)0x0001B750u)
-#define ORIG_BUILD     ((h1v_fn)    (uintptr_t)0x00010B4Eu)
-#define ORIG_FOPEN     ((fopen_fn)  (uintptr_t)0x00037324u)
-#define ORIG_FCLOSE    ((fclose_fn) (uintptr_t)0x0003759Cu)
 
 /* --- globals ----------------------------------------------------------- */
 
@@ -49,7 +42,7 @@ void world_load_tiles(void)
 
     switch (dword_53C03) {
     case 9: case 24: case 25:
-        dword_53AFF = ORIG_RESLOAD(
+        dword_53AFF = res_load(
             "FDOTHER.DAT", (void *)(uintptr_t)dword_53AFF, 15);
         dword_53B03 = guest_malloc(0xFA00u);
         break;
@@ -58,29 +51,29 @@ void world_load_tiles(void)
         else if (dword_53C03 == 22) { w = 408; h = 256; tbl = 40; }
         else if (dword_53C03 == 27) { h = 244; tbl = 46; }
         dword_53AFF = guest_malloc((size_t)h * (size_t)w);
-        dword_53B03 = ORIG_RESLOAD(
+        dword_53B03 = res_load(
             "FDOTHER.DAT", (void *)(uintptr_t)dword_53B03, tbl);
-        ORIG_RLE((const int16_t *)(uintptr_t)dword_53B03, 0, 0,
+        rle_decode((const int16_t *)(uintptr_t)dword_53B03, 0, 0,
                  (void *)(uintptr_t)dword_53AFF, w, -1);
-        dword_53B03 = ORIG_RESLOAD(
+        dword_53B03 = res_load(
             "FDOTHER.DAT", (void *)(uintptr_t)dword_53B03, tbl + 1);
-        ORIG_RLE((const int16_t *)(uintptr_t)dword_53B03, 0, h / 2,
+        rle_decode((const int16_t *)(uintptr_t)dword_53B03, 0, h / 2,
                  (void *)(uintptr_t)dword_53AFF, w, -1);
         guest_free((void *)(uintptr_t)dword_53B03);
         dword_53B03 = 0;
         break;
     case 23:
         dword_53AFF = guest_malloc(0xEA00u);
-        dword_53B03 = ORIG_RESLOAD(
+        dword_53B03 = res_load(
             "FDOTHER.DAT", (void *)(uintptr_t)dword_53B03, 42);
-        ORIG_RLE((const int16_t *)(uintptr_t)dword_53B03, 0, 0,
+        rle_decode((const int16_t *)(uintptr_t)dword_53B03, 0, 0,
                  (void *)(uintptr_t)dword_53AFF, 312, -1);
         guest_free((void *)(uintptr_t)dword_53B03);
         dword_53B03 = 0;
-        ORIG_SCROLL(0);
+        map_scroll_lines(0);
         break;
     case 28: case 29:
-        dword_53AFF = ORIG_RESLOAD(
+        dword_53AFF = res_load(
             "FDOTHER.DAT", (void *)(uintptr_t)dword_53AFF, 55);
         dword_53B03 = guest_malloc(0xFA00u);
         break;
@@ -92,27 +85,28 @@ void world_load_tiles(void)
 /* 0x1088D */
 void world_load_party(int slot)
 {
-    uint8_t *fp, *dst, *src;
+    FILE *fp;
+    uint8_t *dst, *src;
     int i, n = 0;
 
     world_load_tiles();
 
-    dword_53A79 = ORIG_RESLOAD(
+    dword_53A79 = res_load(
         "FDTXT.DAT", (void *)(uintptr_t)dword_53A79, slot + 1);
-    dword_53A59 = ORIG_RESLOAD(
+    dword_53A59 = res_load(
         "FDFIELD.DAT", (void *)(uintptr_t)dword_53A59, 3 * slot + 2);
-    p = (uint32_t)(uintptr_t)ORIG_RESLOAD(
+    p = (uint32_t)(uintptr_t)res_load(
         "FDFIELD.DAT", (void *)(uintptr_t)p, 3 * slot + 1);
-    dword_53A51 = ORIG_RESLOAD(
+    dword_53A51 = res_load(
         "FDFIELD.DAT", (void *)(uintptr_t)dword_53A51, 3 * slot);
     dword_53AC1 = *(int16_t *)(uintptr_t)dword_53A51;
     dword_53AC5 = *((int16_t *)(uintptr_t)dword_53A51 + 1);
-    dword_53A5D = ORIG_RESLOAD(
+    dword_53A5D = res_load(
         "FDSHAP.DAT", (void *)(uintptr_t)dword_53A5D, 2 * *(uint8_t *)(uintptr_t)p);
-    dword_53A69 = ORIG_RESLOAD(
+    dword_53A69 = res_load(
         "FDSHAP.DAT", (void *)(uintptr_t)dword_53A69,
         2 * *(uint8_t *)(uintptr_t)p + 1);
-    ORIG_FIXREC((int)(uintptr_t)dword_53A51);
+    util_fix_records(dword_53A51);
     dword_53BE7 = *((uint8_t *)(uintptr_t)p + 1);
     dword_53BE3 = *((uint8_t *)(uintptr_t)p + 2);
     dword_53BEB = dword_53BE7;
@@ -123,7 +117,7 @@ void world_load_party(int slot)
     if (dword_53A45 == 0)
         return;
     dword_53BDF = 0;
-    fp = (uint8_t *)ORIG_FOPEN("FDICON.B24", "rb");
+    fp = fopen("FDICON.B24", "rb");
     if (fp == NULL)
         return;
 
@@ -140,13 +134,13 @@ void world_load_party(int slot)
             dst[0] = v24;
             dst[1] = v25;
             src += 6;
-            dst[2] = (uint8_t)ORIG_ENTRYDATA(dst[7], fp);
+            dst[2] = (uint8_t)unit_entry_data(dst[7], fp);
             dst[3] = 0;
             dst[4] = 0;
             dst[6] = 2;
             dst[49] = 0xFF;
             memset(dst + 34, 0, 6);
-            ORIG_METRICS(i);
+            unit_metrics(i);
             n++;
         } else {
             memset(dst, 0, 80);
@@ -154,8 +148,8 @@ void world_load_party(int slot)
         }
         dst += 80;
     }
-    ORIG_FCLOSE(fp);
+    fclose(fp);
     guest_free((void *)(uintptr_t)dword_53A59);
     dword_53A59 = 0;
-    ORIG_BUILD(0);
+    unit_sprites_build(0);
 }

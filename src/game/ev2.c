@@ -10,6 +10,7 @@
 #include "ev2.h"
 
 #include <stdint.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 /* --- service entry points (called at their original addresses) --------- */
@@ -24,15 +25,6 @@ typedef void     (*clear_fn)(int from);      /* 0x35F10 (clear records)      */
 typedef void     (*view_fn)(int mode);       /* 0x11CAC (map view update)    */
 typedef void     (*flush_fn)(void);          /* 0x4E381 (keyboard flush)     */
 
-#define ORIG_VM_RUN     ((vm_fn)         (uintptr_t)0x00015F84u)
-#define ORIG_STATUS     ((status_fn)     (uintptr_t)0x000344F2u)
-#define ORIG_UNIT_ADD   ((unit_add_fn)   (uintptr_t)0x000112A5u)
-#define ORIG_LOAD       ((load_fn)       (uintptr_t)0x00010B4Eu)
-#define ORIG_WAIT       ((wait_fn)       (uintptr_t)0x00017AA9u)
-#define ORIG_SEQ        ((seq_fn)        (uintptr_t)0x00035B78u)
-#define ORIG_CLEAR      ((clear_fn)      (uintptr_t)0x00035F10u)
-#define ORIG_VIEW       ((view_fn)       (uintptr_t)0x00011CACu)
-#define ORIG_FLUSH      ((flush_fn)      (uintptr_t)0x0004E381u)
 
 /* --- original data-segment globals ------------------------------------- */
 
@@ -42,7 +34,7 @@ typedef void     (*flush_fn)(void);          /* 0x4E381 (keyboard flush)     */
 /* Every vm_run call in this batch passes the same eight tail arguments. */
 static void ev2_vm_run(int sub)
 {
-    ORIG_VM_RUN((void *)(uintptr_t)dword_53A79, sub, VGA_BASE, 320,
+    vm_run((void *)(uintptr_t)dword_53A79, sub, VGA_BASE, 320,
                 205, 76, 74, 19, 1);
 }
 
@@ -54,14 +46,14 @@ void ev2_135DD(int x, int y)
     while (x != (int)dword_53AA9) {
         if (x >= (int)dword_53AA9) { dword_53AB1 += 1; dword_53AA9 += 1; }
         else                  { dword_53AB1 -= 1; dword_53AA9 -= 1; }
-        ORIG_VIEW(0);
-        ORIG_FLUSH();
+        map_view_update(0);
+        kbd_flush();
     }
     while (y != (int)dword_53AAD) {
         if (y >= (int)dword_53AAD) { dword_53AB5 += 1; dword_53AAD += 1; }
         else                  { dword_53AB5 -= 1; dword_53AAD -= 1; }
-        ORIG_VIEW(0);
-        ORIG_FLUSH();
+        map_view_update(0);
+        kbd_flush();
     }
 }
 
@@ -69,7 +61,7 @@ void ev2_135DD(int x, int y)
 void ev2_35298(int arg)
 {
     (void)arg;
-    ORIG_LOAD(1);
+    unit_sprites_build(1);
     ev2_vm_run(0x0A);
 }
 
@@ -77,7 +69,7 @@ void ev2_35298(int arg)
 void ev2_35321(int arg)
 {
     (void)arg;
-    ORIG_LOAD(2);
+    unit_sprites_build(2);
     ev2_135DD(0x11, 0x25);
     ev2_vm_run(1);
 }
@@ -86,7 +78,7 @@ void ev2_35321(int arg)
 void ev2_353B5(int arg)
 {
     (void)arg;
-    ORIG_LOAD(1);
+    unit_sprites_build(1);
     ev2_vm_run(6);
 }
 
@@ -94,49 +86,49 @@ void ev2_353B5(int arg)
 void ev2_353E7(int arg)
 {
     (void)arg;
-    ORIG_STATUS(0x10, 0x10, 3);
+    rec_status_set(0x10, 0x10, 3);
 }
 
 /* 0x353FA */
 void ev2_353FA(int arg)
 {
     (void)arg;
-    ORIG_STATUS(0x1D, 0x3B, 3);
+    rec_status_set(0x1D, 0x3B, 3);
 }
 
 /* 0x3540F */
 void ev2_3540F(int arg)
 {
     (void)arg;
-    ORIG_STATUS(0x10, 0x1F, 3);
+    rec_status_set(0x10, 0x1F, 3);
 }
 
 /* 0x35422 */
 void ev2_35422(int arg)
 {
     (void)arg;
-    ORIG_LOAD(1);
+    unit_sprites_build(1);
     ev2_vm_run(1);
-    ORIG_UNIT_ADD(27);
+    unit_add(27);
 }
 
 /* 0x3551C */
 void ev2_3551C(int arg)
 {
     (void)arg;
-    ORIG_STATUS(0x23, 0x2A, 3);
-    ORIG_STATUS(0x43, 0x4A, 3);
+    rec_status_set(0x23, 0x2A, 3);
+    rec_status_set(0x43, 0x4A, 3);
 }
 
 /* 0x3553F */
 void ev2_3553F(int arg)
 {
     (void)arg;
-    ORIG_LOAD(dword_53BEF / 2);
+    unit_sprites_build(dword_53BEF / 2);
     ev2_135DD(0x20, 0x23);
-    ORIG_WAIT(8);
+    svc_wait_ticks(8);
     ev2_135DD(0, 0x23);
-    ORIG_WAIT(8);
+    svc_wait_ticks(8);
     if (dword_53BEF == 3)
         ev2_vm_run(1);
 }
@@ -145,10 +137,10 @@ void ev2_3553F(int arg)
 void ev2_355B7(int arg)
 {
     (void)arg;
-    ORIG_LOAD(2);
+    unit_sprites_build(2);
     ev2_135DD(0x10, 0x2A);
-    ORIG_WAIT(8);
-    ORIG_UNIT_ADD(20);
+    svc_wait_ticks(8);
+    unit_add(20);
     ev2_vm_run(2);
 }
 
@@ -160,8 +152,8 @@ void ev2_35638(int arg)
     (void)arg;
     t = (uint8_t)((uint8_t)dword_53BEF - 0x0E);
     t = (uint8_t)(t + t);
-    ORIG_SEQ(2, 0x0B, t);
-    ORIG_SEQ(0x1A, 0x0B, (uint8_t)(t + 1));
+    ev3_35B78(2, 0x0B, t);
+    ev3_35B78(0x1A, 0x0B, (uint8_t)(t + 1));
 }
 
 /* 0x35677 */
@@ -169,22 +161,22 @@ void ev2_35677(int arg)
 {
     (void)arg;
     ev2_vm_run(5);
-    ORIG_CLEAR(0x12);
+    ev3_35F10(0x12);
 }
 
 /* 0x35997 - status(39,44,0) when record `arg` has byte +6 set. */
 void ev2_35997(int arg)
 {
     if (*(uint8_t *)(uintptr_t)(dword_53A45 + REC_STRIDE * arg + 6) != 0)
-        ORIG_STATUS(0x27, 0x2C, 0);
+        rec_status_set(0x27, 0x2C, 0);
 }
 
 /* 0x359CB - two status writes when record `arg` has byte +6 set. */
 void ev2_359CB(int arg)
 {
     if (*(uint8_t *)(uintptr_t)(dword_53A45 + REC_STRIDE * arg + 6) != 0) {
-        ORIG_STATUS(0x17, 0x18, 0);
-        ORIG_STATUS(0x35, 0x38, 0);
+        rec_status_set(0x17, 0x18, 0);
+        rec_status_set(0x35, 0x38, 0);
     }
 }
 
@@ -202,8 +194,8 @@ void ev2_35BEE(int arg)
 void ev2_35C1D(int arg)
 {
     (void)arg;
-    ORIG_SEQ(3, 0x1B, 1);
-    ORIG_SEQ(0x0F, 0x1B, 2);
+    ev3_35B78(3, 0x1B, 1);
+    ev3_35B78(0x0F, 0x1B, 2);
 }
 
 /* 0x35D85 */
@@ -238,7 +230,7 @@ void ev2_36228(int arg)
 void ev2_362B0(int arg)
 {
     (void)arg;
-    ORIG_STATUS(0x14, 0x14, 0x0B);
+    rec_status_set(0x14, 0x14, 0x0B);
 }
 
 /* 0x362C5 */
@@ -254,14 +246,14 @@ void ev2_363DE(int arg)
 {
     (void)arg;
     ev2_vm_run(8);
-    ORIG_CLEAR(0x14);
+    ev3_35F10(0x14);
 }
 
 /* 0x36416 */
 void ev2_36416(int arg)
 {
     (void)arg;
-    ORIG_STATUS(0x10, dword_53BEB - 1, 0);
+    rec_status_set(0x10, dword_53BEB - 1, 0);
 }
 
 /* 0x3642E / 0x36439 / 0x36440 / 0x36447 / 0x3644E - the dispatcher's no-op

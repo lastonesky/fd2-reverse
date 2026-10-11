@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 /* --- game CRT entry points --------------------------------------------- */
@@ -31,11 +32,6 @@ typedef unsigned (*fread_fn)(void *buf, unsigned sz, unsigned n, void *fp);
 typedef unsigned (*fwrite_fn)(const void *buf, unsigned sz, unsigned n, void *fp);
 typedef int   (*fclose_fn)(void *fp);
 
-#define ORIG_FOPEN  ((fopen_fn) (uintptr_t)0x00037324u)
-#define ORIG_FSEEK  ((fseek_fn) (uintptr_t)0x00037940u)
-#define ORIG_FREAD  ((fread_fn) (uintptr_t)0x000373CAu)
-#define ORIG_FWRITE ((fwrite_fn)(uintptr_t)0x000377A3u)
-#define ORIG_FCLOSE ((fclose_fn)(uintptr_t)0x0003759Cu)
 
 /* --- services that stay in machine code / other modules ---------------- */
 typedef void *(*res_load_fn)(const char *f, void *old, int idx);   /* 0x111BA */
@@ -52,22 +48,6 @@ typedef int  (*sfx_fn)(const void *bank, int index, int loops);    /* 0x25A96 */
 typedef int  (*wait_fn)(int ticks);                                /* 0x17AA9 */
 typedef void (*mark_cell_fn)(int x, int y);                        /* 0x146A7 */
 
-#define ORIG_RES_LOAD   ((res_load_fn)   (uintptr_t)0x000111BAu)
-#define ORIG_FIX_REC    ((fix_records_fn)(uintptr_t)0x0004DF4Cu)
-#define ORIG_T_4E821    ((tbl_fn)        (uintptr_t)0x0004E821u)
-#define ORIG_T_4E838    ((tbl_fn)        (uintptr_t)0x0004E838u)
-#define ORIG_T_4E84F    ((tbl_fn)        (uintptr_t)0x0004E84Fu)
-#define ORIG_T_4E8BC    ((tbl_fn)        (uintptr_t)0x0004E8BCu)
-#define ORIG_RLE2_TRANS ((rle2_trans_fn) (uintptr_t)0x0004EBABu)
-#define ORIG_BLIT_ROWS  ((blit_rows_fn)  (uintptr_t)0x00011EB0u)
-#define ORIG_MAP_VIEW   ((map_view_fn)   (uintptr_t)0x00011EEEu)
-#define ORIG_127E0      ((i1_fn)         (uintptr_t)0x000127E0u)
-#define ORIG_129EC      ((i1_fn)         (uintptr_t)0x000129ECu)
-#define ORIG_127A9      ((v0_fn)         (uintptr_t)0x000127A9u)
-#define ORIG_FLUSH      ((v0_fn)         (uintptr_t)0x0004E381u)
-#define ORIG_SFX        ((sfx_fn)        (uintptr_t)0x00025A96u)
-#define ORIG_WAIT       ((wait_fn)       (uintptr_t)0x00017AA9u)
-#define ORIG_MARK_CELL  ((mark_cell_fn)  (uintptr_t)0x000146A7u)
 
 /* --- game data-segment globals (original addresses) -------------------- */
 
@@ -76,10 +56,10 @@ typedef void (*mark_cell_fn)(int x, int y);                        /* 0x146A7 */
 #define ATLAS_SIZE  0x32A00
 
 /* 0x4E838 / 0x4E821 / 0x4E84F / 0x4E8BC return guest data pointers. */
-static const uint8_t *tbl_4E838(int i) { return (const uint8_t *)ORIG_T_4E838(i); }
-static const uint8_t *tbl_4E821(int i) { return (const uint8_t *)ORIG_T_4E821(i); }
-static const uint8_t *tbl_4E84F(int i) { return (const uint8_t *)ORIG_T_4E84F(i); }
-static const uint8_t *tbl_4E8BC(int i) { return (const uint8_t *)ORIG_T_4E8BC(i); }
+static const uint8_t *tbl_4E838(int i) { return (const uint8_t *)tbl_ptr(&fd2_data2[0x1DA1], 24, i, 0); }
+static const uint8_t *tbl_4E821(int i) { return (const uint8_t *)tbl_ptr(&fd2_data2[0x20A1], 11, i, 0); }
+static const uint8_t *tbl_4E84F(int i) { return (const uint8_t *)tbl_ptr(&fd2_data2[0x1AF9], 10, i, 0); }
+static const uint8_t *tbl_4E8BC(int i) { return (const uint8_t *)tbl_ptr(&fd2_data2[0x02AD], 23, i, 0); }
 
 /* 0x145CD - flip the reveal bit of every record on one side of dword_53BEF. */
 void unit_mark_nearby(int mode)
@@ -98,13 +78,13 @@ void unit_mark_nearby(int mode)
 void unit_reveal_around(int x, int y)
 {
     if (x != 0)
-        ORIG_MARK_CELL(x - 1, y);
+        ev5_146A7(x - 1, y);
     if (y != 0)
-        ORIG_MARK_CELL(x, y - 1);
+        ev5_146A7(x, y - 1);
     if (x < (int)dword_53AC1 - 1)
-        ORIG_MARK_CELL(x + 1, y);
+        ev5_146A7(x + 1, y);
     if (y < (int)dword_53AC5 - 1)
-        ORIG_MARK_CELL(x, y + 1);
+        ev5_146A7(x, y + 1);
     *(uint8_t *)(uintptr_t)(dword_53A51 + 4 * (x + (int)dword_53AC1 * y) + 6) |= 0x40;
 }
 
@@ -148,8 +128,8 @@ int unit_entry_data(int idx, void *fh)
     uint8_t *buf = (uint8_t *)guest_malloc(6720);
     int      len, i;
 
-    ORIG_FSEEK(fh, 6, 0);
-    ORIG_FREAD(buf, 1, 6720, fh);
+    fseek(fh, 6, 0);
+    fread(buf, 1, 6720, fh);
     for (i = 0; i < 13; i++)
         tbl[i] = *(uint32_t *)(void *)(buf + 48 * idx + 4 * i);
     len = (int)(tbl[12] - tbl[0]);
@@ -161,8 +141,8 @@ int unit_entry_data(int idx, void *fh)
             if ((int)dword_53B17[j] == idx)
                 return (int)j;
         dword_53B17[j] = (uint32_t)idx;
-        ORIG_FSEEK(fh, (long)tbl[0], 0);
-        ORIG_FREAD((uint8_t *)(uintptr_t)(dword_53A61 + dword_539EC),
+        fseek(fh, (long)tbl[0], 0);
+        fread((uint8_t *)(uintptr_t)(dword_53A61 + dword_539EC),
                    1, (unsigned)len, fh);
         for (i = 0; i < 12; i++)
             *(uint32_t *)(uintptr_t)(dword_53A61 + 4 * (i + 12 * dword_53BDF)) =
@@ -173,8 +153,8 @@ int unit_entry_data(int idx, void *fh)
 
     dword_53B17[0] = (uint32_t)idx;
     dword_53A61 = guest_malloc(ATLAS_SIZE);
-    ORIG_FSEEK(fh, (long)tbl[0], 0);
-    ORIG_FREAD((uint8_t *)(uintptr_t)(dword_53A61 + 1920), 1, (unsigned)len, fh);
+    fseek(fh, (long)tbl[0], 0);
+    fread((uint8_t *)(uintptr_t)(dword_53A61 + 1920), 1, (unsigned)len, fh);
     for (i = 0; i < 12; i++)
         *(uint32_t *)(uintptr_t)(dword_53A61 + 4 * i) =
             tbl[i] - tbl[0] + 1920;
@@ -220,7 +200,7 @@ void unit_entry_build(int idx, void *fh)
         }
     }
 
-    ORIG_FIX_REC((void *)(uintptr_t)dword_53A51);
+    util_fix_records((void *)(uintptr_t)dword_53A51);
 
     v25 = st[0];
     v24 = st[1];
@@ -300,32 +280,32 @@ int unit_sprites_build(int idx)
     uint32_t i;
     void  *tmp;
 
-    fh = ORIG_FOPEN("FDICON.B24", "rb");
+    fh = fopen("FDICON.B24", "rb");
     if (fh == NULL) {
         printf("File 'FDICON.B24' error !!\n");
         exit(1);
     }
     dword_53A59 = 
-        ORIG_RES_LOAD("FDFIELD.DAT", (void *)(uintptr_t)dword_53A59,
+        res_load("FDFIELD.DAT", (void *)(uintptr_t)dword_53A59,
                       3 * (int)dword_53C03 + 2);
     for (i = 0; i < dword_53BE3; i++) {
         if (*(uint8_t *)(uintptr_t)(dword_53A55 + 26 * i + 152) == (uint8_t)idx)
             unit_entry_build((int)i, fh);
     }
-    ORIG_FCLOSE(fh);
+    fclose(fh);
     guest_free((void *)(uintptr_t)dword_53A59);
     dword_53A59 = 0;
 
-    tmp = ORIG_FOPEN("FD2.TMP", "wb");
-    ORIG_FWRITE((const void *)(uintptr_t)dword_53A61, 1, ATLAS_SIZE, tmp);
-    return ORIG_FCLOSE(tmp);
+    tmp = fopen("FD2.TMP", "wb");
+    fwrite((const void *)(uintptr_t)dword_53A61, 1, ATLAS_SIZE, tmp);
+    return fclose(tmp);
 }
 
 /* 0x32999 - the 12-step unit reveal cut-scene. */
 void unit_map_render(int idx)
 {
-    uint8_t *v25 = (uint8_t *)ORIG_RES_LOAD("FDOTHER.DAT", NULL, 95);
-    uint8_t *v26 = (uint8_t *)ORIG_RES_LOAD("FDOTHER.DAT", NULL, 9);
+    uint8_t *v25 = (uint8_t *)res_load("FDOTHER.DAT", NULL, 95);
+    uint8_t *v26 = (uint8_t *)res_load("FDOTHER.DAT", NULL, 9);
     uint8_t *snap = (uint8_t *)guest_malloc(FB_SIZE);
     uint32_t first = dword_53BEB;
     int step;
@@ -338,7 +318,7 @@ void unit_map_render(int idx)
         uint32_t r;
 
         if (step == 1)
-            ORIG_SFX(v25, 0, 1);
+            svc_play_sfx(v25, 0, 1);
         memmove((void *)(uintptr_t)dword_53A49, snap, FB_SIZE);
 
         src = v26 + *(uint32_t *)(v26 + 4 * step + 6);
@@ -350,10 +330,10 @@ void unit_map_render(int idx)
                 uint8_t *dst = (uint8_t *)(uintptr_t)
                     (dword_53A49 + 32904 + 24 * (x - (int)dword_53AA9 - 1) +
                      10944 * (y - (int)dword_53AAD) - 2736);
-                ORIG_RLE2_TRANS(dst, src, 456);
+                rle2_blit_trans(dst, src, 456);
             }
         }
-        ORIG_BLIT_ROWS((void *)(uintptr_t)0xA0504u, 320,
+        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
                        (const void *)(uintptr_t)(dword_53A49 + 32904),
                        456, 312, 192);
 
@@ -361,36 +341,36 @@ void unit_map_render(int idx)
             memmove((void *)(uintptr_t)dword_53A49, snap, FB_SIZE);
             for (r = 0; r < first; r++)
                 if ((*(uint8_t *)(uintptr_t)(dword_53A45 + REC * r + 5) & 1) == 0)
-                    ORIG_127E0((int)r);
+                    dlg_portrait_draw((int)r);
             dword_53A49 -= 3648;
             for (; r < dword_53BEB; r++)
                 if ((*(uint8_t *)(uintptr_t)(dword_53A45 + REC * r + 5) & 1) == 0)
-                    ORIG_127E0((int)r);
+                    dlg_portrait_draw((int)r);
             dword_53A49 += 3648;
-            ORIG_129EC(0);
+            map_refresh_records();
             memmove(snap, (void *)(uintptr_t)dword_53A49, FB_SIZE);
         } else if (step == 7) {
-            ORIG_MAP_VIEW((void *)(uintptr_t)(dword_53A49 + 32904), 456, 13, 8,
+            map_render_view((void *)(uintptr_t)(dword_53A49 + 32904), 456, 13, 8,
                           (int)dword_53AA9, (int)dword_53AAD);
             for (r = 0; r < first; r++)
                 if ((*(uint8_t *)(uintptr_t)(dword_53A45 + REC * r + 5) & 1) == 0)
-                    ORIG_127E0((int)r);
+                    dlg_portrait_draw((int)r);
             dword_53A49 -= 2280;
             for (; r < dword_53BEB; r++)
                 if ((*(uint8_t *)(uintptr_t)(dword_53A45 + REC * r + 5) & 1) == 0)
-                    ORIG_127E0((int)r);
+                    dlg_portrait_draw((int)r);
             dword_53A49 += 2280;
-            ORIG_129EC(0);
+            map_refresh_records();
             memmove(snap, (void *)(uintptr_t)dword_53A49, FB_SIZE);
         } else if (step == 8) {
-            ORIG_MAP_VIEW((void *)(uintptr_t)(dword_53A49 + 32904), 456, 13, 8,
+            map_render_view((void *)(uintptr_t)(dword_53A49 + 32904), 456, 13, 8,
                           (int)dword_53AA9, (int)dword_53AAD);
-            ORIG_127A9();
+            dlg_portraits_refresh();
             memmove(snap, (void *)(uintptr_t)dword_53A49, FB_SIZE);
         }
 
-        ORIG_FLUSH();
-        ORIG_WAIT(1);
+        kbd_flush();
+        svc_wait_ticks(1);
     }
 
     guest_free(v26);

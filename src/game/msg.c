@@ -42,6 +42,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 /* --- service entry points (called at their original addresses) --------- */
@@ -51,10 +52,6 @@ typedef void *(*res_load_fn)(const char *name, void *old_buffer, int index);
 typedef void  (*rle2_mirror_fn)(void *dst, const void *src, int stride);
 typedef void  (*blit_band_fn)(int y, void *dst, void *src);
 
-#define BOX_STAGE   ((box_stage_fn) (uintptr_t)0x000168B6u)   /* 0x168B6 */
-#define RES_LOAD    ((res_load_fn)  (uintptr_t)0x000111BAu)   /* 0x111BA */
-#define RLE2_MIRROR ((rle2_mirror_fn)(uintptr_t)0x0004EC31u)  /* 0x4EC31 */
-#define BLIT_BAND   ((blit_band_fn) (uintptr_t)0x0001974Cu)   /* 0x1974C */
 
 /* --- original data-segment globals ------------------------------------- */
 
@@ -76,7 +73,7 @@ void msg_open_portrait(int id)
             (const void *)(uintptr_t)dword_53C5F, SCREEN_BYTES);
 
     /* box frame: 19 columns x 5 lines of 16px tiles at (5,112) */
-    BOX_STAGE((void *)(uintptr_t)dword_53C63, 320, 5, 112, 19, 5);
+    dlg_box_stage((void *)(uintptr_t)dword_53C63, 320, 5, 112, 19, 5);
 
     /* portrait id -> DATO sub-image offset (immediates, not a table) */
     switch (id) {
@@ -89,11 +86,11 @@ void msg_open_portrait(int id)
     }
 
     dword_53A85 = 
-        RES_LOAD("DATO.DAT", (void *)(uintptr_t)dword_53A85, id);
+        res_load("DATO.DAT", (void *)(uintptr_t)dword_53A85, id);
 
     /* the resource's first byte is the header length; the decode stream
      * starts right after it (movzx ebx,byte[eax]; add eax,ebx) */
-    RLE2_MIRROR((void *)(uintptr_t)(dword_53C63 + dword_53C67),
+    rle2_blit_mirror((void *)(uintptr_t)(dword_53C63 + dword_53C67),
                 (const void *)(uintptr_t)
                     (dword_53A85 + *(const uint8_t *)(uintptr_t)dword_53A85),
                 320);
@@ -102,7 +99,7 @@ void msg_open_portrait(int id)
     {
         int i;
         for (i = 5; i >= 0; --i)
-            BLIT_BAND(13 * i + 112,
+            msg_blit_band(13 * i + 112,
                       (void *)(uintptr_t)dword_53C5B,
                       (void *)(uintptr_t)dword_53C63);
     }
@@ -133,7 +130,7 @@ void msg_close_portrait(void)
 
     /* rows 1..5 only: row 0 was already composed by open */
     for (i = 1; i < 6; ++i)
-        BLIT_BAND(13 * i + 112,
+        msg_blit_band(13 * i + 112,
                   (void *)(uintptr_t)dword_53C5B,
                   (void *)(uintptr_t)dword_53C63);
 
@@ -151,25 +148,19 @@ typedef int  (*vm_fn)(void *, int, int, int, int, int, int, int, int);
 typedef void (*h0v_fn)(void);
 typedef void (*h1v_fn)(int);
 
-#define ORIG_VM_PAGE  ((vm_fn)  (uintptr_t)0x00015F84u)
-#define ORIG_4E381    ((h0v_fn)(uintptr_t)0x0004E381u)
-#define ORIG_16E24    ((h0v_fn)(uintptr_t)0x00016E24u)
-#define ORIG_1956B    ((h1v_fn)(uintptr_t)0x0001956Bu)
-#define ORIG_16559    ((h1v_fn)(uintptr_t)0x00016559u)
-#define ORIG_16C57    ((h1v_fn)(uintptr_t)0x00016C57u)
 
 /* 0x31BDF */
 void msg_show_lines(int id, int sub)
 {
-    ORIG_4E381();
-    ORIG_1956B(id);
-    ORIG_4E381();
-    ORIG_VM_PAGE((void *)(uintptr_t)dword_53A79, sub, 0xA9514,
+    kbd_flush();
+    msg_open_portrait(id);
+    kbd_flush();
+    vm_run((void *)(uintptr_t)dword_53A79, sub, 0xA9514,
                  320, 205, 76, 74, 19, 1);
-    ORIG_16559(0);
-    ORIG_16C57(0);
+    dlg_blit_dato(dword_53A85, dword_53C67, 0);
+    dlg_wait_key(0);
     msg_close_portrait();
-    ORIG_4E381();
+    kbd_flush();
 }
 
 /* 0x1E529 */
@@ -179,10 +170,10 @@ int msg_show_page(uint16_t *counter, const uint8_t *range, int sub, int page)
     if (dword_53AE1 != 0) {
         if (page == 3) {
             page = 2;
-            ORIG_16E24();
+            dlg_scroll_text(dword_53C67);
         }
-        ORIG_4E381();
-        ORIG_VM_PAGE((void *)(uintptr_t)dword_53A7D, sub,
+        kbd_flush();
+        vm_run((void *)(uintptr_t)dword_53A7D, sub,
                      page * 6080 + 0xA951F, 320, 205, 76, 74, 19, 1);
         *counter += (uint16_t)dword_53AE1;
         page++;

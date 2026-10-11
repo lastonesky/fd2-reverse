@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "guest_mem.h"
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 /* --- services ---------------------------------------------------------- */
@@ -34,25 +35,6 @@ typedef int      (*wait_fn)(int n);                 /* 0x17AA9 */
 extern uint32_t dos_lowmem_base;
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(dos_lowmem_base + (off)))
 
-#define ORIG_VM_RUN     ((vm_fn)          (uintptr_t)0x00015F84u)
-#define ORIG_VIEW       ((view_fn)        (uintptr_t)0x00011CACu)
-#define ORIG_PAL_RANGE  ((pal_range_fn)   (uintptr_t)0x00011D40u)
-#define ORIG_GFX_ROWS   ((gfx_rows_fn)    (uintptr_t)0x00011EB0u)
-#define ORIG_MAP_RENDER ((map_render_fn)  (uintptr_t)0x00011EEEu)
-#define ORIG_PORTRAIT   ((portrait_draw_fn)(uintptr_t)0x000127E0u)
-#define ORIG_MAP_REFRH  ((map_refresh_fn) (uintptr_t)0x000129ECu)
-#define ORIG_ANIM_STEP  ((anim_step_fn)   (uintptr_t)0x0001297Du)
-#define ORIG_PORT_REFR  ((portraits_refresh_fn)(uintptr_t)0x000127A9u)
-#define ORIG_MAP_PING   ((map_ping_fn)    (uintptr_t)0x00032230u)
-#define ORIG_FLUSH      ((flush_fn)       (uintptr_t)0x0004E381u)
-#define ORIG_KBD_PEND   ((kbd_pending_fn) (uintptr_t)0x00010620u)
-#define ORIG_PAL_ANIM   ((pal_anim_fn)    (uintptr_t)0x0004E31Cu)
-#define ORIG_INT386     ((int386_fn)      (uintptr_t)0x000370F0u)
-#define ORIG_MSG_BAND   ((msg_band_fn)    (uintptr_t)0x0001974Cu)
-#define ORIG_DELAY      ((delay_fn)       (uintptr_t)0x0003790Au)
-#define ORIG_TBL        ((tbl_fn)         (uintptr_t)0x0004EB48u)
-#define ORIG_MAP_CELL   ((map_cell_fn)    (uintptr_t)0x00012E38u)
-#define ORIG_WAIT       ((wait_fn)        (uintptr_t)0x00017AA9u)
 
 /* --- globals ----------------------------------------------------------- */
 
@@ -66,7 +48,7 @@ extern uint32_t dos_lowmem_base;
 void ev4_1366A(int sel)
 {
     uint8_t  v17[32], v16[32];
-    uint8_t *p = (uint8_t *)ORIG_TBL(sel);
+    uint8_t *p = (uint8_t *)tbl_off627D8(sel);
     uint8_t  n = *p, v24;
     const uint8_t *q = p + 1;
 
@@ -82,21 +64,21 @@ void ev4_1366A(int sel)
         if ((v23 & 0x80u) == 0) {
             for (i = 0; i < v23; i++) {
                 for (j = 1; j < 7; j++) {
-                    ORIG_MAP_PING(v17[0]);
+                    map_unit_ping(v17[0]);
                     for (k = 0; k < v19; k++) {
                         uint8_t *r = (uint8_t *)(uintptr_t)(dword_53A45 + REC_STRIDE * v17[k]);
                         r[3] = v16[k];
                         r[4] = j;
                     }
                     if (dword_53AFB == 0 || dword_53AFB == 0x40) {
-                        ORIG_VIEW(0);
+                        map_view_update(0);
                     } else {
                         ++dword_53AFB;
-                        ORIG_VIEW(1);
-                        ORIG_PAL_RANGE(0, 0xFF, (int)dword_53AFB);
+                        map_view_update(1);
+                        pal_fade_range(0, 0xFF, (int)dword_53AFB);
                     }
-                    ORIG_WAIT(1);
-                    ORIG_FLUSH();
+                    svc_wait_ticks(1);
+                    kbd_flush();
                 }
                 for (k = 0; k < v19; k++) {
                     uint8_t *r = (uint8_t *)(uintptr_t)(dword_53A45 + REC_STRIDE * v17[k]);
@@ -117,14 +99,14 @@ void ev4_1366A(int sel)
                 for (k = 0; k < v19; k++)
                     *(uint8_t *)(uintptr_t)(dword_53A45 + REC_STRIDE * v17[k] + 3) = v16[k];
                 for (k = 0; k < v23; k++) {
-                    ORIG_VIEW(0);
-                    ORIG_WAIT(1);
-                    ORIG_FLUSH();
+                    map_view_update(0);
+                    svc_wait_ticks(1);
+                    kbd_flush();
                 }
             } else {
                 uint8_t *save;
-                ORIG_WAIT(1);
-                ORIG_MAP_RENDER((uint8_t *)(uintptr_t)MAP_BASE, 456, 13, 8,
+                svc_wait_ticks(1);
+                map_render_view((uint8_t *)(uintptr_t)MAP_BASE, 456, 13, 8,
                                 (int)dword_53AA9, (int)dword_53AAD);
                 save = dword_53A49;
                 for (mm = 0; mm < (int)dword_53BEB; mm++) {
@@ -136,35 +118,35 @@ void ev4_1366A(int sel)
                         }
                     }
                     if ((r[5] & 1) == 0)
-                        ORIG_PORTRAIT(mm);
+                        dlg_portrait_draw(mm);
                     dword_53A49 = save;
                 }
-                ORIG_MAP_REFRH();
-                ORIG_GFX_ROWS((void *)(uintptr_t)0xA0504u, 320,
+                map_refresh_records();
+                gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
                               (const void *)(uintptr_t)MAP_BASE, 456, 312, 192);
-                ORIG_WAIT(2);
-                ORIG_VIEW(0);
-                ORIG_FLUSH();
+                svc_wait_ticks(2);
+                map_view_update(0);
+                kbd_flush();
             }
         }
     }
-    ORIG_VIEW(1);
+    map_view_update(1);
 }
 
 /* 0x11AA8 - idle until a key is pending, animating the palette/map, then
  * read the key through BIOS INT 16h and normalise two aliases. */
 int ev4_11AA8(void)
 {
-    while (!ORIG_KBD_PEND()) {
-        ORIG_PAL_ANIM();
+    while (!kbd_pending()) {
+        pal_anim_step();
         word_539F0 = BDA_W(0x46C);
         if ((int16_t)word_539F0 != (int16_t)word_539F2) {
-            ORIG_VIEW(0);
+            map_view_update(0);
             word_539F2 = (uint16_t)BDA_W(0x46C);
         }
     }
     *(uint8_t *)(uintptr_t)((uintptr_t)&word_53A8D + 1) = 0x10;
-    ORIG_INT386(0x16, &word_53A8D, &word_53A8D);
+    int386(0x16, &word_53A8D, &word_53A8D);
     {
         uint8_t k = *(uint8_t *)(uintptr_t)((uintptr_t)&word_53A8D + 1);
         if (k == 0xE0 || k == 0x52)
@@ -188,7 +170,7 @@ void ev4_11B48(void)
                 return;
         }
     }
-    ORIG_VIEW(0);
+    map_view_update(0);
 }
 
 /* 0x11B9B */
@@ -203,7 +185,7 @@ void ev4_11B9B(void)
             ++dword_53AB5; ++dword_53AAD;
         }
     }
-    ORIG_VIEW(0);
+    map_view_update(0);
 }
 
 /* 0x11BFA */
@@ -218,7 +200,7 @@ void ev4_11BFA(void)
             dword_53AB1 += 1; ++dword_53AA9;
         }
     }
-    ORIG_VIEW(0);
+    map_view_update(0);
 }
 
 /* 0x11C59 */
@@ -233,7 +215,7 @@ void ev4_11C59(void)
                 return;
         }
     }
-    ORIG_VIEW(0);
+    map_view_update(0);
 }
 
 /* 0x12263 - for every map cell of type 0x20 whose status byte is set, bump
@@ -246,7 +228,7 @@ void ev4_12263(void)
             uint8_t  out[8];
             uint16_t idx;
             uint8_t *cell;
-            ORIG_MAP_CELL(j, i, out);
+            map_cell_info(j, i, out);
             idx = *(uint16_t *)(void *)(out + 2);
             if ((out[4] & 0x60) != 0x20)
                 continue;
@@ -286,13 +268,13 @@ void ev4_1E1DC(int rec)
 void ev4_24B4D(int frames)
 {
     int i;
-    ORIG_MAP_RENDER((uint8_t *)(uintptr_t)MAP_BASE, 456, 13, 9,
+    map_render_view((uint8_t *)(uintptr_t)MAP_BASE, 456, 13, 9,
                     (int)dword_53AA9, (int)dword_53AAD);
-    ORIG_VIEW(0);
+    map_view_update(0);
     for (i = 0; i < frames; i++) {
-        ORIG_GFX_ROWS((void *)(uintptr_t)0xA0504u, 320,
+        gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320,
                       (const void *)(uintptr_t)(456 * (i & 1) + MAP_BASE), 456, 312, 192);
-        ORIG_DELAY(20);
+        delay(20);
     }
 }
 
@@ -302,11 +284,11 @@ void ev4_196CB(void)
 {
     int i;
     for (i = 1; i < 6; i++)
-        ORIG_MSG_BAND(13 * i + 112, (void *)(uintptr_t)dword_53C5B,
+        msg_blit_band(13 * i + 112, (void *)(uintptr_t)dword_53C5B,
                       (void *)(uintptr_t)dword_53C63);
     memmove((void *)(uintptr_t)SCR_BASE, (const void *)(uintptr_t)dword_53C5F, 64000);
     guest_free((void *)(uintptr_t)dword_53C5B);
     guest_free((void *)(uintptr_t)dword_53C5F);
     guest_free((void *)(uintptr_t)dword_53C63);
-    ORIG_VIEW(0);
+    map_view_update(0);
 }

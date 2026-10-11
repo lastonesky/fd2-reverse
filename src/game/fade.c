@@ -25,33 +25,32 @@
 #include "svc.h"         /* 0x1D6C8 plays the select click through svc_play_sfx */
 
 #include <stdint.h>
+#include "fd2_game.h"   /* de-guest C4: restored cross-module decls */
 #include "../include/fd2_globals.h"
 
 
 /* Palette animation state (game data segment). The 16 RGB triples live in
  * the object at 0x60003; byte_60002 is the current frame 0..15 and
  * word_60000 remembers the tick at which the DAC was last written. */
-#define pal_anim_data ((const uint8_t *)(uintptr_t)0x00060003u)
+#define pal_anim_data ((const uint8_t *)&fd2_data2[0x0003])
 
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(DOS_LOWMEM_BASE + (off)))
 
 typedef int  (*outp_fn)(unsigned port, int value);
 typedef void (*delay_fn)(unsigned ms);
 
-#define OUTP  ((outp_fn) (uintptr_t)0x00037AE5u)
-#define DELAY ((delay_fn)(uintptr_t)0x0003790Au)
 
 void pal_fade_range(int start, int end, int sub)
 {
     while (start <= end) {
         int k;
 
-        OUTP(0x3C8, start);
+        outp(0x3C8, start);
         for (k = 0; k < 3; k++) {
             int v = dword_53A65[start * 3 + k] - sub;
             if (v < 0)
                 v = 0;
-            OUTP(0x3C9, v);
+            outp(0x3C9, v);
         }
         start++;
     }
@@ -63,7 +62,7 @@ void pal_fade_out(void)
 
     for (i = 0; i < 64; i++) {
         pal_fade_range(0, 255, i);   /* subtract more and more -> black */
-        DELAY(2);
+        delay(2);
     }
 }
 
@@ -73,7 +72,7 @@ void pal_fade_in(void)
 
     for (i = 64; i >= 0; i--) {
         pal_fade_range(0, 255, i);   /* subtract less and less -> normal */
-        DELAY(2);
+        delay(2);
     }
 }
 
@@ -84,12 +83,12 @@ void pal_fade_add(int start, int end, int add)
     while (start <= end) {
         int k;
 
-        OUTP(0x3C8, start);
+        outp(0x3C8, start);
         for (k = 0; k < 3; k++) {
             int v = dword_53A65[start * 3 + k] + add;
             if (v > 63)
                 v = 63;
-            OUTP(0x3C9, v);
+            outp(0x3C9, v);
         }
         start++;
     }
@@ -122,10 +121,10 @@ void pal_anim_step(void)
             byte_60002 = 0;
         p = pal_anim_data + 3 * byte_60002;
         for (i = 0; i < 16; i++, idx++) {
-            OUTP(0x3C8, idx);
-            OUTP(0x3C9, *p++);
-            OUTP(0x3C9, *p++);
-            OUTP(0x3C9, *p++);
+            outp(0x3C8, idx);
+            outp(0x3C9, *p++);
+            outp(0x3C9, *p++);
+            outp(0x3C9, *p++);
         }
         word_60000 = pal_tick_word();
     }
@@ -143,15 +142,15 @@ void pal_flash_entry(int index)
 
     svc_play_sfx((const void *)(uintptr_t)dword_53B13, 0, 1);
     for (i = 0; i < 4; i++) {
-        OUTP(0x3C8, 0);
-        OUTP(0x3C9, byte_51AAD[index]);
-        OUTP(0x3C9, byte_51AD1[index]);
-        OUTP(0x3C9, byte_51AF5[index]);
+        outp(0x3C8, 0);
+        outp(0x3C9, byte_51AAD[index]);
+        outp(0x3C9, byte_51AD1[index]);
+        outp(0x3C9, byte_51AF5[index]);
         svc_wait_ticks(1);
-        OUTP(0x3C8, 0);
-        OUTP(0x3C9, 0);
-        OUTP(0x3C9, 0);
-        OUTP(0x3C9, 0);
+        outp(0x3C8, 0);
+        outp(0x3C9, 0);
+        outp(0x3C9, 0);
+        outp(0x3C9, 0);
         svc_wait_ticks(1);
     }
 }

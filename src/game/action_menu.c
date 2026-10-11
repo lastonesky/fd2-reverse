@@ -284,7 +284,7 @@ int action_menu_run(int rec)
 
     step = map_collect_scripts(scripts);
     map_units_animate();
-    ev_script_run(rec, step, (int)(intptr_t)scripts);
+    ev_script_run(rec, step, scripts);
     dword_51A83 = 1;
     return 1;
 }

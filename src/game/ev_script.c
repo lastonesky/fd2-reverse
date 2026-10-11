@@ -29,7 +29,7 @@
 #include <stdint.h>
 
 /* 0x1AA1D */
-void ev_script_run(int rec_index, int steps, int script)
+void ev_script_run(int rec_index, int steps, const void *script)
 {
     uint8_t *rec = (uint8_t *)(uintptr_t)dword_53A45
                  + 80u * (uint32_t)rec_index;
