@@ -67,14 +67,15 @@ free.sort(key=lambda r:-int(r["usage"] or 0))
   findings) and update the `验证与台账` counts for 待还原 / 已还原未验证.
 - Commit: `git add -A && git commit -m "P1 batch N: restore <cluster> (<addrs>)"`.
 
-## Constraints / STOP
+## Constraints / HALT
 - One writer; no parallel git. Do not modify verified existing modules beyond the umbrella include.
 - Do not hand-edit `function-map.csv` or generated headers.
 - If compile cannot go green after honest fixes, or semantics stay ambiguous after decomp+disasm, or
   you would have to guess ABI/constants: revert uncommitted changes (`git checkout -- .`; delete new
-  files) and end with a line starting `STOP:`.
+  files) and end with a line starting `HALT: <reason>`.
 
 ## Final report (concise)
 `BATCH`; `COMMIT` (hash or none); `NEW_PENDING` (count); `NOTES` (traps, decompiler artifacts, asset
-gaps, false callees); `NEXT` (recommended cluster); and `STOP:` only if halted. If nothing is left to
-restore, print `ALL_DONE`.
+gaps, false callees); `NEXT` (recommended cluster). Use the reserved word `HALT:` (line start) ONLY
+when you actually halted as described above — never in a normal completion report, and never write a
+bare `STOP:` line. If nothing is left to restore, print `ALL_DONE`.
