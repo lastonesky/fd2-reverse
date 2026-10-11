@@ -1870,10 +1870,46 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - **台账缺口（新记）**：`0x21BD0`（481B，烟柱动画，`push 0x13c; call 0x3702F` 前言）是真实函数，却不在
   `function-map.csv` 中（IDA 未登记）；本轮未纳入（非 pending），留记待台账修复后补入。
 
+### 74) toollib 叶助手补登台账 `0x4E42C/4E4BE/4E5CC/4E680/4E703/4E71F/4E751`、`0x4EC66`、`0x4ECA4/4ECF0/4ED4F`（本轮，11 函数，仅台账登记，无源码改动）
+
+§73 遗留的闭包就绪游戏内容项（`0x4E4BE/4E703/4E71F/4E751/4EC66/4ECA4/4ECF0/4ED4F`）经核对
+**早已随 §0-G 迁入的 `path.c`/`rle2.c`/`gfx.c` 一并源码化**，只是作为 `static` 助手未登记入
+`src/restored_manifest.txt`，故 `function-map.csv` 仍标“待还原”。本批按 §26 `0x2BF83` 的台账修复先例，
+**只补登 manifest 并重跑生成器**，不改任何模块源（本批 >6 函数，属“同模块登记”而非翻译，故不适用
+1..6 翻译簇上限）。逐项对照离线反汇编确证实现一致：
+
+| 原址 | 现有实现 | 说明 |
+|---|---|---|
+| `0x4E42C` | `path.c: rec1` | 一趟 DFS 递归（右/左/下/上） |
+| `0x4E4BE` | `path.c: check1` | 一趟可达性/剩余点数更新 |
+| `0x4E5CC` | `path.c: rec2` | 二趟递归（记录方向+深度） |
+| `0x4E680` | `path.c: check2` | 二趟检查（转向数平局） |
+| `0x4E703` | `path.c: mark_target` | 模式 2 标目标 |
+| `0x4E71F` | `path.c: count_dirs` | 转向计数 |
+| `0x4E751` | `path.c: commit_path` | 提交最佳路径 |
+| `0x4EC66` | `rle2.c: rle2_next` | 0xC0 段 RLE 记号解码器 |
+| `0x4ECA4` | `gfx.c: gfx_restore_rect`（内联循环） | 紧凑记录→带步幅写回 |
+| `0x4ECF0` | `gfx.c: gfx_save_rect`（内联循环） | 带步幅读入→紧凑记录 |
+| `0x4ED4F` | `gfx.c: gfx_blit_transparent`（内联循环） | 0 透明 blit |
+
+**陷阱 / 伪代码伪影**：
+- **usercall 寄存器传参**：这些叶函数在机器里经寄存器（`ebx`/`esi`/`edi`/`cl`/`dx`/`ebp`）取参，
+  Hex-Rays 伪代码把未初始化寄存器渲染成局部变量（如 `4E4BE` 的 `v1=ebx`、`4ECF0` 的 `v1=edi`）；
+  现实现已按 `path.h`/`gfx.h` 文档的 ABI 化为普通形参，语义逐指令核对一致。
+- **`0x4EC66` 为 0 参 usercall**（state 在 AH/AL + ESI 游标），现实现收敛为 `struct rle2_state`；
+  `0x4ECA4/4ECF0/4ED4F` 原是无独立函数头的折叠助手（`path.c`/`gfx.c` 已注明“folded”）。
+- **登记条目指向模块头**（`game/path.h`/`game/rle2.h`/`game/gfx.h`）；这三者本就是 `static` 助手、
+  无外部原型，故不需改头文件。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **68 → 67**（本轮 §73 −1），已还原未验证 **255 → 256**（本轮 +1）。
+- `function-map.csv`：待还原 **67 → 56**（本轮 §74 −11），已还原未验证 **256 → 267**（本轮 +11）。
+- **闭包就绪游戏内容项已清零**：本轮后 `function-map.csv` 的闭包就绪待还原仅剩 CRT/库包装
+  （`0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`/`0x365AB`，既定策略跳过）、伪函数条目
+  （`0x10000`/`0x36B00`），及超 1500B 的 `0x1F894`(1765B)/`0x2EBE1`(2291B)；下批可依 §5
+  “大单函数”条款取其一（真闭包＝自身）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 

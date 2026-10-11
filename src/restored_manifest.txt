@@ -778,3 +778,19 @@
 # a 1..8 sub-image selector for a particle slot.  True closure = itself (cos/sin
 # are the AIL boundary, util_rand is restored); no differential harness.
 0x21DB2 sub_21DB2 game/particle.h
+
+# toollib leaf helpers of the already-restored path/rle2/gfx modules.  They were
+# translated as static helpers inside path.c/gfx.c/rle2.c but never logged, so
+# function-map still showed them as 待还原.  Registration only, no source change
+# (mirrors the 0x2BF83 ledger fix).
+0x4E42C sub_4E42C game/path.h
+0x4E4BE sub_4E4BE game/path.h
+0x4E5CC sub_4E5CC game/path.h
+0x4E680 sub_4E680 game/path.h
+0x4E703 sub_4E703 game/path.h
+0x4E71F sub_4E71F game/path.h
+0x4E751 sub_4E751 game/path.h
+0x4EC66 sub_4EC66 game/rle2.h
+0x4ECA4 sub_4ECA4 game/gfx.h
+0x4ECF0 sub_4ECF0 game/gfx.h
+0x4ED4F sub_4ED4F game/gfx.h
