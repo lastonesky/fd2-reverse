@@ -429,7 +429,8 @@
 0x13488 sub_13488 game/map_scroll.h
 0x13A44 sub_13A44 game/map_scroll.h
 
-# opening / continue-screen helpers (0x1F894 orchestrator still pending)
+# opening / continue screen: logo scroll + continue-prompt (0x1F894) and its helpers
+0x1F894 sub_1F894 game/title_screen.h
 0x1F73F sub_1F73F game/title_screen.h
 0x1F81E sub_1F81E game/title_screen.h
 0x1FF79 sub_1FF79 game/title_screen.h

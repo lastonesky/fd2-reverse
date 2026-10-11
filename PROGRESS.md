@@ -1902,14 +1902,50 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
   无外部原型，故不需改头文件。
 - 无对拍器，标“已还原未验证”。
 
+### 75) 开场/继续游戏屏 `0x1F894` → `title_screen_run`（本轮，1 函数，§5 大单函数条款）→ `src/game/title_screen.c/.h`（追加）
+
+闭包就绪列表中已无 in-budget 游戏内容项（余下仅 CRT/库包装与伪函数条目），故按 §5 取一个
+超预算单函数 `0x1F894`（1765B，≤2500B）：其**真闭包＝自身**（所有真 callee 均已还原/已验证，
+见下），并逐指令核过离线反汇编 `1f894..1f78`。这是 `scenario_menu`（0x25EBB，已还原）唯一
+调用点，返回值即主菜单选择，其全部 helper 在 §14/§69 已就绪（`title_screen` 家族至此闭合）。
+
+| 项 | 要点 |
+|---|---|
+| 返回值 | `int`（ebp）：0=新游戏、1=读档、其余=存档，供 `scenario_menu` 分支 |
+| 定场 | res_load FDOTHER 77(音效库)/76(调色板)/74(logo)；`rle_decode(74)` → `pal_fade_in` → 等 1+30 tick → `pal_fade_out`；FDOTHER 99 + `pal_fade_range(0,255,0)` + `ani_play(3,90,1)` |
+| logo 缓冲 | `guest_malloc(0x396C0)`（735 行×320）零填充；5 个子图 FDOTHER 69..73 `rle_decode(...,147*i,...,320,-1)` 拼入；`kbd_flush`；旧 `dword_53A45` 释放后 `guest_malloc(0xA0)` |
+| 滚动主环 | `j=535..0`：每帧 `gfx_copy_rows(VGA,320,strip+320*j,320,320,200)`（j==535 时 `pal_fade_in`） |
+| 定时插帧 | j==25/110/210/330 → `title_ani_play`（(0,15,0)/(8,90,99)/(6,90,99)+(7,50,0)/(4,90,99)+(5,50,0)）；j==10/450 → `title_frame_show(75,76,strip,10)`/`(100,99,strip,450)`；随后共享尾：再 copy_rows + `res_load(101)` + `pal_fade_in` |
+| 步进表 | `0x5204E` 的 15×dword `{520,430,410,340,310,300,240,180,150,130,110,87,64,22,1000}`；`j==table[mark]` 时 `frame=0`+`svc_play_sfx(snd,0,1)`+`res_load(102)`+`pal_fade_range(0,255,0)`+`++mark`；`frame==11` 时重载 FDOTHER 101；每帧 `++frame`、`j___delay(30)`、j==0 再 `j___delay(1000)`；`kbd_pending()` 非 0 跳出 |
+| 收场 | 41 帧 `pal_blend_to(0,255,k,63,0,0)` 渐黑 → `j___delay(100)` → `kbd_flush` → 释放 strip/logo → 重载 FDOTHER 7/8 → 清屏+`pal_fade_range` → `ani_play(1,15,1)` → `svc_play_sfx2(snd,3,1)` → `pal_fade_add(0,255,64)` → `res_blit6(VGA,320,img,0)` → 41 帧 `pal_blend_to(0,255,m,56,60,63)` → `kbd_flush` |
+| 继续询问 | `fopen("FD2.SAV","rb")`：有存档则 `guest_malloc(0x59CB)` + `fread` + `fclose` + `util_deobfuscate(...,22987)`；`util_sum_tail4(...,22987)==*(u32*)(save+0x59C7)` 时 count=2，且 `save[0x30C5]!=0xFF` 时 count=3；`guest_free` |
+| 选项环 | `title_options_draw(img,0,count)` → `while(!done)`：画 `(img,choice,count)` → INT 16h（全局 REGS `word_53A8D`，扫描码 `byte_53A8E`）：0x48 上/0x50 下（各 `svc_play_sfx(snd,2,1)`，环绕 0..count-1）、0x0D/0x20/0xE0/0x52 确认（`svc_play_sfx(snd,1,1)`）→ 4×（画 -1 + `j___delay(80)` + 画 choice + `j___delay(80)`）→ `pal_fade_out` → 清屏 → 释放 img → `svc_play_sfx(snd,-1,1)` → 释放 snd → `return choice` |
+
+**陷阱 / 伪代码伪影**：
+- **0 参 ABI**：`fd2_funcs.h` 的 `sub_1F894(void)` 正确；Hex-Rays 的 `int __cdecl(int a1)` 及
+  `analysis/decomp/1F894_sub_1F894.c` 里 `[esp+4]` 的读取是误判（函数内 `xor ebp,ebp`，ebp 不是帧指针，
+  故 Hex-Rays 把 esp 局部错标为 `[ebp+0x40..0x58]` 形参）；调用点 `0x25EC8` 无压栈、无 `add esp`。
+- **伪 callee（共享尾声）**：尾 `jmp 0x13994`（`mov eax,ebp` 后）落在 `sub_1366A` 体内
+  （0x1366A+818 尾段）⇒ 普通 `return`；`function-map` 因此误列 `sub_1366A`（及其 callee），真依赖不含它。
+- **`*(&retaddr + v27)`**：Hex-Rays 把栈上 15×dword 表 `0x5204E` 误标成 `retaddr` 邻域；机器是
+  `movzx eax,[esp+0x58]; cmp esi,[esp+eax*4]` ⇒ 即 `marks[mark]==j`。
+- **`&loc_396C0`** 是 `malloc(0x396C0)`/`memset(...,0x396C0)` 的立即数（非地址）；`0x1F400`(0xFA00)、
+  `0x59CB`、`0x59C7`、`0x30C5` 均为立即数，已逐条核对。
+- **堆缝**：`0x3706E`/`0x3776E` → `guest_malloc`/`guest_free`（logo 缓冲、记录表、FD2.SAV 缓冲）；
+  CRT `fopen` 0x37324 / `fread` 0x373CA / `fclose` 0x3759C 用 libc（同 scene_core）。
+- **`dword_53A65` 复用**：调色板指针被 `res_load` 反复改写（同 scene_core 既有约定）；
+  INT 16h 用的是**全局** REGS 块 `word_53A8D`（in/out 同址），非 password.c 的局部块。
+- **`svc_play_sfx`/`svc_play_sfx2` 的 bank 是 FDOTHER 77**（本函数自持 `snd`），非 main 的 dword_53EEC。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **67 → 56**（本轮 §74 −11），已还原未验证 **256 → 267**（本轮 +11）。
-- **闭包就绪游戏内容项已清零**：本轮后 `function-map.csv` 的闭包就绪待还原仅剩 CRT/库包装
+- `function-map.csv`：待还原 **56 → 55**（本轮 §75 −1），已还原未验证 **267 → 268**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §75 取走 `0x1F894`(1765B) 后，闭包就绪待还原仅剩 CRT/库包装
   （`0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`/`0x365AB`，既定策略跳过）、伪函数条目
-  （`0x10000`/`0x36B00`），及超 1500B 的 `0x1F894`(1765B)/`0x2EBE1`(2291B)；下批可依 §5
-  “大单函数”条款取其一（真闭包＝自身）。
+  （`0x10000`/`0x36B00`），及超 1500B 的 `0x2EBE1`(2291B，真闭包＝自身)；下批依 §5
+  “大单函数”条款取 `0x2EBE1`。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
