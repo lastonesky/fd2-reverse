@@ -870,6 +870,18 @@
 # differential harness.
 0x29620 sub_29620 game/place_screen.h
 
+# 0x29DAA - the place-type-4 option screen (0x2670E dispatches place type 4
+# here): load FDOTHER entry 14, draw the money readout onto the frame and the
+# dword_53C5F scratch, and loop the four-slot menu_choice4 under the
+# screen_curtain wipe, dispatching slot 0 -> 0x29620 (place_member_actions_run),
+# 1 -> shop_give_run, 2 -> shop_buy_run, else item_menu_run; every accepted slot
+# closes with the 586 word stream.  On cancel reblit FDOTHER 14, play the
+# 11-step place_zoom_blit zoom-out and free the buffer.  True closure = itself
+# (all callees in the manifest); the exit `jmp 0x295FF` is 0x29300's shared tail
+# (free dword_53F66 / clear / EAX=0), 0x3702F is the Watcom stack probe, both
+# dropped as callees.  No differential harness.
+0x29DAA sub_29DAA game/place_screen.h
+
 # 0x279BC - the place menu driver: stage the place's FDOTHER sub-image, draw the
 # money readouts, and loop menu_choice4 over the four options dispatching to
 # shop_place_buy_run (0x2872B) / shop_sell_run (0x28CBD) / shop_box_run (0x28EFE)

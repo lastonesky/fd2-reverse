@@ -113,3 +113,87 @@ int place_screen_run(void *src)
     dword_53F66 = 0;
     return 0;
 }
+
+/* 0x29DAA */
+int place_screen4_run(void *src)
+{
+    const uint8_t *ent;
+    const void    *panel;
+    uint8_t        v5;
+    uint8_t        v6;
+    int            v2 = 0;
+    int            i;
+
+    /* 0x4E809 = table accessor: base 0x6238D, stride 31, offset -31 (tables.h). */
+    ent = (const uint8_t *)tbl_ptr((void *)&fd2_data2[0x238D], 31,
+                                   (int)dword_53C03, -31);
+    v5 = ent[0];
+
+    dword_53F66 = (uint32_t)(uintptr_t)res_load(aFdotherDat,
+                    (void *)(uintptr_t)dword_53F66, 14);
+    res_blit6((void *)(uintptr_t)0xA0000u, 320,
+              (void *)(uintptr_t)dword_53F66, 0);
+    pal_fade_in();
+    j___delay(200);
+    msg_open_portrait(byte_5238B);
+
+    /* money readouts onto the frame and the dword_53C5F scratch, exactly as
+       place_menu_run (0x279BC) does (panel at dword_53F66+[dword_53F66+10]). */
+    panel = (const void *)(uintptr_t)
+        (dword_53F66 +
+         *(const uint32_t *)(uintptr_t)(dword_53F66 + 10u));
+    rle2_blit((void *)(uintptr_t)0xA76C5u, panel, 320);
+    dlg_draw_number((void *)(uintptr_t)0xA7BD0u, 320, (int)dword_53BF3, 31, 8);
+    rle2_blit((void *)(uintptr_t)(dword_53C5F + 30405u), panel, 320);
+    dlg_draw_number((void *)(uintptr_t)(dword_53C5F + 31696u), 320,
+                    (int)dword_53BF3, 31, 8);
+
+    vm_run(dword_53A7D, 585, 0xA94CC, 320, 205, 76, 74, 19, 1);
+    dlg_blit_dato(dword_53A85, dword_53C67, 0);
+
+    for (;;) {
+        dword_53C57 = (uint32_t)v2;
+        screen_curtain(0);
+        v6 = (uint8_t)menu_choice4();
+        if (v6 == 1)
+            v2 = (int)dword_53C57;               /* keep the chosen slot */
+        screen_curtain(1);
+        msg_close_portrait();
+        if (v6 != 1)
+            break;
+
+        if (dword_53C57 == 0) {
+            place_member_actions_run();
+        } else if (dword_53C57 == 1) {
+            shop_give_run();
+        } else if (dword_53C57 == 2) {
+            shop_buy_run();
+        } else if (dword_53C57 == 3) {
+            item_menu_run();
+        }
+
+        msg_open_portrait(byte_5238B);
+        vm_run(dword_53A7D, 586, 0xA94CC, 320, 205, 76, 74, 19, 1);
+        dlg_blit_dato(dword_53A85, dword_53C67, 0);
+    }
+
+    res_blit6((void *)(uintptr_t)0xA0000u, 320,
+              (void *)(uintptr_t)dword_53F66, 0);
+    j___delay(200);
+    pal_fade_out();
+
+    for (i = 10; i >= 0; --i) {
+        place_zoom_blit(
+            ((i * ((int)byte_52363[6 * v5 + dword_53F4A] - 150) / 10) * 128)
+                + 20480,
+            ((i * ((int)byte_52375[6 * v5 + dword_53F4A] - 100) / 10) * 128)
+                + 12800,
+            (const char *)src, 128 - 9 * i);
+        memmove((void *)(uintptr_t)0xA0000u, dword_53A49, 0xFA00u);
+        pal_fade_range(0, 255, 4 * i);
+    }
+
+    guest_free((void *)(uintptr_t)dword_53F66);
+    dword_53F66 = 0;
+    return 0;
+}

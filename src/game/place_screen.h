@@ -1,5 +1,5 @@
-/* place_screen.h - the place menu's in-game option screen and its member
- * action list (original 0x29300 / 0x29620).
+/* place_screen.h - the place menu's in-game option screens and the member
+ * action list (original 0x29300 / 0x29DAA / 0x29620).
  *
  * dword_53F4A selects the current place; the place menu driver 0x2670E
  * dispatches to one screen per place type and hands it a private 0xFA00 copy of
@@ -27,6 +27,22 @@
  *            via action_menu_open (0x17AED), restore dword_53C67 and reload the
  *            DATO.DAT sub-image with res_load.  No differential harness yet.
  *
+ *   0x29DAA  place_screen4_run   the place-type-4 screen (0x2670E dispatches
+ *            type 4 here).  Same staged-screen shell as place_screen_run but it
+ *            loads FDOTHER entry 14, fixes the portrait to byte_5238B and draws
+ *            the money readout onto both the frame and the dword_53C5F scratch
+ *            (panel sub-image at dword_53F66+[dword_53F66+10], as place_menu_run
+ *            does).  Its four menu_choice4 slots dispatch to the member action
+ *            list (place_member_actions_run, 0), the item-give screen
+ *            (shop_give_run, 1), the buy screen (shop_buy_run, 2) and the
+ *            item-use screen (item_menu_run, 3); every accepted slot closes
+ *            with the 586 word stream (0x249/0x24A bracket the screen).  On
+ *            cancel it reblits FDOTHER 14 and plays the same 11-step zoom-out
+ *            as place_screen_run, then frees the resource.  The
+ *            machine exits through the 0x295FF shared tail (free dword_53F66,
+ *            clear it, EAX = 0), so it always returns 0.  No differential
+ *            harness yet.
+ *
  * ABI = cdecl.  0x29300 takes the saved-frame pointer (`src`) and returns 1 when
  * the text-window option was accepted, else 0; 0x29620's EAX leftover is unused
  * and it is void.  The Watcom stack probe (`push size; call 0x3702F`) is
@@ -48,5 +64,9 @@ int place_screen_run(void *src);
 /* 0x29620 - loop the party-member selector and open each chosen member's action
  * box (reloading DATO.DAT afterwards); returns on cancel. */
 void place_member_actions_run(void);
+
+/* 0x29DAA - run the place-type-4 option screen; `src` is the caller's saved
+ * 0xFA00 frame used as the zoom-out source.  Always returns 0. */
+int place_screen4_run(void *src);
 
 #endif /* GAME_PLACE_SCREEN_H */
