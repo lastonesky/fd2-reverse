@@ -490,3 +490,151 @@ int map_action_heal_list(int a1, int count, const uint8_t *list, int amount)
     map_draw_status_popups();
     return 0;
 }
+
+/* 0x20C6F - the map action router the whole map-action family hangs off.
+ *
+ * rec_field_byte(actor, slot) selects an item entry through the 0x4E8BC
+ * accessor (base 0x602AD, stride 23); its byte +13 is the action code and the
+ * uint16 at +14 is the shape bank.  The action code picks the effect to run
+ * over the `count` records named by `list`: healing (5/13), item_apply (6/7),
+ * the field/flag writers 8/9/10/17/18/19, the restore-mp pass (11), the growth
+ * writers 12/15/16, the damage passes 14/20/24/22, the record-layer resolve
+ * (21) and the unit deploy (23).  Actions 5/6/7/11 then drop the router's
+ * `slot` from the actor's equipment list (rec_slot_remove); every path ends on
+ * the shared tail: zero dword_53EC8, release the FDOTHER effect bank
+ * (menu_stop_and_free_music), collect the party's +49 script entries
+ * (map_collect_scripts), blink the units (map_units_animate) and run the
+ * scripts through the event-script interpreter (ev_script_run).
+ *
+ * The offline disassembly is authoritative: the Watcom stack probe
+ * (`push 0x9C; call 0x3702F`) is dropped; rec_field_byte's second argument is
+ * the caller's `slot` and the tail's 14 IDA arguments to menu_stop_and_free_music
+ * are a decompiler artifact of the uninitialised 0x64-byte script buffer (the
+ * machine pushes nothing).  Both callers (0x152F0, 0x1BE45) ignore the result,
+ * so returning 0 keeps the void ev_script_run tail. */
+int map_action_router(int actor, int slot, int count, const uint8_t *list)
+{
+    uint8_t        scripts[100];   /* 25 x 4-byte script-entry slots */
+    int            steps;
+    const uint8_t *entry;
+    int            action;
+    int            bank;
+    int            i;
+
+    ev5_1D4CB();
+    dword_53EC4 = 0;
+
+    entry  = (const uint8_t *)tbl_ptr((void *)&fd2_data2[0x2AD], 23,
+                                      rec_field_byte(actor, slot), 0);
+    bank   = (int)(uint16_t)(entry[14] | (entry[15] << 8));
+    action = entry[13];
+
+    if (action == 5 || action == 13) {
+        map_action_heal_list(actor, count, list, bank);
+        if (action == 5)
+            goto remove_slot;
+        goto tail;
+    }
+
+    switch (action) {
+    case 6:
+        item_apply(actor, 20, count, list, 37);
+        if (dword_53EC4 != 0)
+            map_draw_status_popups();
+        goto remove_slot;
+    case 7:
+        item_apply(actor, 21, count, list, 38);
+        if (dword_53EC4 != 0)
+            map_draw_status_popups();
+        goto remove_slot;
+    case 8:
+        map_action_add_field(actor, bank, 55, slot, count, list, 17);
+        goto tail;
+    case 9:
+        map_action_add_field(actor, bank, 57, slot, count, list, 18);
+        goto tail;
+    case 10:
+        map_action_add_field(actor, bank, 62, slot, count, list, 19);
+        goto tail;
+    case 11:
+        map_draw_party_icons_anim(actor, 13, count, list);
+        map_draw_party_icons(actor, 13, count, list);
+        for (i = 0; i < count; ++i) {
+            uint8_t *rec = (uint8_t *)dword_53A45 + REC_STRIDE * list[i];
+
+            if (*(uint16_t *)(void *)(rec + 70) != 0)
+                map_enqueue_status(unit_restore_mp(list[i], bank), 105,
+                                   list[i]);
+            else
+                ev4_1E1DC(list[i]);
+        }
+        map_view_update(0);
+        map_draw_status_popups();
+        goto remove_slot;
+    case 12:
+        map_action_widen(actor, count, list);
+        goto tail;
+    case 14:
+        map_action_damage_records(actor, 27, count, list, 38);
+        goto tail;
+    case 15:
+        map_action_grow_y(actor, count, list);
+        goto tail;
+    case 16:
+        map_action_grow_x(actor, count, list);
+        goto tail;
+    case 17:
+        map_action_add_field(actor, bank, 66, slot, count, list, 13);
+        goto tail;
+    case 18:
+        map_action_add_field(actor, bank, 70, slot, count, list, 13);
+        goto tail;
+    case 19: {
+        uint8_t *rec   = (uint8_t *)dword_53A45 + REC_STRIDE * list[0];
+        uint8_t  saved = rec[60];
+
+        /* rec[60] is saved and restored around the effect (the effect draws
+         * the icon and the byte is masked out for its duration). */
+        map_action_add_field(actor, bank, 59, slot, count, list, 19);
+        rec[60] = saved;
+        goto tail;
+    }
+    case 20:
+    case 24:
+        map_draw_party_icons_anim(actor, bank, count, list);
+        map_blink_units(actor, bank, count, list);
+        for (i = 0; i < count; ++i) {
+            int dmg = unit_action_damage(list[i], bank);
+
+            if (dmg != 0)
+                map_enqueue_status(dmg, 94, list[i]);
+            else
+                ev4_1E1DC(list[i]);
+        }
+        map_view_update(0);
+        map_draw_status_popups();
+        goto tail;
+    case 21:
+        map_action_anim_resolve(actor, count, list, bank);
+        goto tail;
+    case 22:
+        map_action_damage_records(actor, 22, count, list, 39);
+        goto tail;
+    case 23:
+        map_units_move_deploy(actor, count, list);
+        goto tail;
+    default:
+        goto tail;
+    }
+
+remove_slot:
+    rec_slot_remove(actor, slot);
+
+tail:
+    dword_53EC8 = 0;
+    menu_stop_and_free_music();
+    steps = map_collect_scripts(scripts);
+    map_units_animate();
+    ev_script_run(actor, steps, (int)(intptr_t)scripts);
+    return 0;
+}

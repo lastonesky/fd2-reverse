@@ -1361,10 +1361,38 @@ closure-ready 游戏头名 `0x22D1B`(u5)；离线反汇编证实其真闭包＝�
   dispatch 经调用点直调不读，C 侧返回 0（与 §51 同风格）。
 - 无对拍器，标“已还原未验证”。
 
+### 53) 地图动作路由器 `0x20C6F` → `map_action_router`（本轮，1 函数）→ `src/game/map_action.c/.h`（追加）
+
+拉出 P1 头号游戏闭包就绪项（usage 2，1043B）：整个地图动作族的**路由器**（`map_action.c` 的
+0x21082..0x22E41 效果、以及 §43/49/50/51/52 各条，均由它按 action 码分派）。§52 补入
+`0x2111A`/`0x211A4` 后其待还原 callee 归零，本轮闭合。
+
+**行为**：`rec_field_byte(actor, slot)`（0x1B722）经 0x4E8BC（base 0x602AD/stride 23）选出 item 条目；
+条目 byte +13 = action 码、+14 word = 图标 shape bank。按 action 码分派：
+- 5/13 → `map_action_heal_list`；action==5 再 `rec_slot_remove(actor,slot)`
+- 6/7 → `item_apply(actor,20/21,count,list,37/38)`，`dword_53EC4!=0` 时 `map_draw_status_popups`
+- 8/9/10/17/18/19 → `map_action_add_field`（field 55/57/62/66/70/59，table_idx 17/18/19/13/13/19；
+  19 存档/恢复 rec[60]）
+- 11 → 固定 bank 13 两遍图标 + 逐记录 `unit_restore_mp`/`ev4_1E1DC`
+- 12/15/16 → `map_action_widen`/`map_action_grow_y`/`map_action_grow_x`
+- 14/22 → `map_action_damage_records`（table 27/22，field 38/39）
+- 20/24 → `map_draw_party_icons_anim`+`map_blink_units`+`unit_action_damage`
+- 21 → `map_action_anim_resolve`；23 → `map_units_move_deploy`
+所有路径汇入共享尾：`dword_53EC8=0; menu_stop_and_free_music(); steps=map_collect_scripts(buf);
+map_units_animate(); ev_script_run(actor,steps,buf)`。
+
+**陷阱 / 伪代码伪影**：
+- **chkstk**：`push 0x9C; call 0x3702F`（丢弃）。
+- **伪参数**：IDA 给尾部的 `menu_stop_and_free_music`（0x1D4F6）编出 14 个 `v18[i]` 实参，实为**未初始化的
+  0x64 字节脚本缓冲区**的栈偏移假象；机器码 `call 0x1d4f6` 不压栈（0 参）。
+- **返回值**：`ev_script_run` 为 void，两调用点（0x152F0/0x1BE45）均不读返回值，C 侧返回 0。
+- ABI cdecl `(actor, slot, count, list)`（调用点 0x152F0/0x1BE45 依次压 `ebp, dword_53Cx, count, &buf`）。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **115 → 113**（本轮 §52 −2），已还原未验证 **208 → 210**（本轮 +2）。
+- `function-map.csv`：待还原 **113 → 112**（本轮 §53 −1），已还原未验证 **210 → 211**（本轮 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 

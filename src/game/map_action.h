@@ -159,4 +159,14 @@ int map_action_anim_resolve(int a1, int count, const uint8_t *list, int bank);
  * `amount` and queue the recovered number with glyph base 105. */
 int map_action_heal_list(int a1, int count, const uint8_t *list, int amount);
 
+/* 0x20C6F - the map action router.  Reads the item entry selected by
+ * rec_field_byte(actor, slot) through the 0x4E8BC accessor; its byte +13 is
+ * the action code and the uint16 at +14 the shape bank.  Dispatches the
+ * matching effect over the `count` records named by `list` (threading `actor`
+ * and `slot` through), drops the router's `slot` from the actor's equipment
+ * list for actions 5/6/7/11, then runs the shared tail: zero dword_53EC8,
+ * release the FDOTHER effect bank, collect the party's +49 script entries and
+ * run them through the event-script interpreter.  Callers ignore the result. */
+int map_action_router(int actor, int slot, int count, const uint8_t *list);
+
 #endif /* GAME_MAP_ACTION_H */
