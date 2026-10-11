@@ -78,3 +78,21 @@ int party_member_move_front(int id)
         unit_entry_data(party[REC_STRIDE * i + 7], fp);
     return fclose(fp);
 }
+
+/* 0x24BDE - is unit id `id` in the party-record table dword_53BF7?
+ *
+ * Scans slots 0..dword_53BFB-1 (the machine's loop counter starts at 0, unlike
+ * party_member_present's 1..count) and compares the record's id byte (+8) with
+ * the zero-extended `id`.  IDA's prototype is int(int); the only callee is the
+ * dropped stack probe. */
+int party_has_unit(int id)
+{
+    const uint8_t *party = (const uint8_t *)(uintptr_t)dword_53BF7;
+    int i;
+
+    for (i = 0; i < (int)dword_53BFB; ++i) {
+        if (party[REC_STRIDE * i + 8] == (uint8_t)id)
+            return 1;
+    }
+    return 0;
+}

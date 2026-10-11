@@ -1518,10 +1518,36 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - **chkstk**：`push 0x28; call 0x3702F`，丢弃。
 - 无对拍器，标“已还原未验证”。
 
+### 59) 地图行动子树（`sub_1CFF0`/`sub_18D8C`）的三个闭包就绪叶子（本轮，3 函数）
+
+本轮闭包就绪游戏头名（u1）**全部落在这条地图行动子树里**：`0x1D6C8`/`0x24BDE` 是
+`sub_1CFF0`（其 callee 经 `sub_24754`/`sub_2FF01` 传递）的直接/间接叶子，`0x2F7B6` 是
+`sub_2EBE1`（`sub_2CF30`→`sub_2FF01`→`sub_1CFF0`）的唯一此前待还原 callee。三者真闭包＝自身，
+合计 1067B（≤1500B），故作为同一子树的叶簇整体拉出；本批后 `0x24754`/`0x2EBE1` 待还原 callee 归零，
+`0x1CFF0` 由 4 降为 3（余 `0x1CEED`/`0x1D51D`/`0x2FF01`）。
+
+| 原址 | 新名 | 模块 | 要点 |
+|---|---|---|---|
+| `0x1D6C8` | `pal_flash_entry(index)` | `fade.c`（追加） | `svc_play_sfx(dword_53B13,0,1)` 后 4 次交替：`outp(0x3C8,0)` + 三通道 `byte_51AAD/51AD1/51AF5[index]`（点亮），`svc_wait_ticks(1)`，再 `outp(0x3C8,0)`+三通道 0（熄灭），`svc_wait_ticks(1)`。 |
+| `0x24BDE` | `party_has_unit(id)` | `party_roster.c`（追加） | 扫 `dword_53BF7` 的 `dword_53BFB` 条记录（槽 0..count-1，与 `party_member_present` 的 1..count 不同），记录 +8 的 id 字节（`movzx`）等于 `id` 则返回 1，否则 0（`jge` 有符号计数）。 |
+| `0x2F7B6` | `map_attack_result(atk,def,out)` | `map_attack.c`（追加） | `map_attack_resolve`(0x1ECC7) 的同胞：同一 rec +0x48/0x4a/0x40/0x42/0x4c/0x4e、5 张 `0x51A12/0x51A2A/0x524A8` 表；`out[0]`=命中/`out[1]`=暴击半防/`out[2]`=反击（item[9]==2 且 `util_rand()%100<item[10]` 时写 def[0x25]=`rand()%4+2`）/`out[4]`=item[9]==3/`out[5]`=伤害；命中后记 `dword_53EC8`（等级表 0x4E84F 的 `[9]`、`v32=atk[0x21]`）。 |
+
+**陷阱 / 伪代码伪影**：
+- **既有模块的基址笔误（发现）**：`map_attack_resolve`(0x1ECC7) 用 `tbl_ptr(&fd2_data2[0xAF9],10,...)`，但
+  0x4E84F 的反汇编为 `lea edx,ds:0x61af9`（＝`fd2_data2[0x1AF9]`，`item_use.c`/`tables.h` 一致）——
+  既有代码少了一个 `0x1000`（`0x60AF9`）。本批新函数按权威反汇编用 `&fd2_data2[0x1AF9]`，**未改动**该已验证资产，
+  仅作台账记录待复核。
+- **伪 callee / chkstk**：三者皆仅误挂 `sub_3702F`（chkstk，不分配帧），丢弃；无其它伪 callee。
+- **写权限**：`0x2F7B6` 会写 def 记录（+0x25），故 `atk`/`def` 用 `uint8_t *`（非 const）。
+- **字节回绕**：`v32=atk[0x21]` 的 `+30` 是机器 `add BYTE PTR`，C 侧保持 `uint8_t`。
+- **返回值**：`0x1D6C8` 尾声 eax 残留 `svc_wait_ticks`，唯一调用点 `0x1CFF0` 不读 ⇒ `void`；
+  `0x24BDE` 返回 0/1、`0x2F7B6` 返回伤害（同时写入 `out[5]`）。
+- 无对拍器，标“已还原未验证”；`sub_2AE0E` 型的未初始化读陷阱不适用本批。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **98 → 97**（本轮 §58 −1），已还原未验证 **225 → 226**（本轮 +1）。
+- `function-map.csv`：待还原 **97 → 94**（本轮 §59 −3），已还原未验证 **226 → 229**（本轮 +3）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1610,7 +1636,10 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 新建 `shop_party_stats`），故该 u1 小簇里的 `0x28632`(sub_2825B) 已闭合；下一游戏头名回落至
 `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x2F7B6`(sub_2EBE1) 等。
 本轮 §58 继而拉出 §57 遗留的预览屏驱动器 `0x27F4A`(u1)，`shop_party_stats` 家族闭合；
-下一游戏头名仍为 u1 小簇 `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x2F7B6`(sub_2EBE1) 等。
+本轮 §59 把 u1 小簇三元组 `0x1D6C8`(sub_1CFF0)/`0x24BDE`(sub_24754)/`0x2F7B6`(sub_2EBE1)
+整体拉出（`fade.c`/`party_roster.c`/`map_attack.c` 追加），故 `sub_24754`/`sub_2EBE1` 现闭包就绪；
+下一游戏头名回落至 u1 小簇 `0x1B1E7`(sub_19DF7，内层读未初始化，暂跳)/`0x1BBDC`/`0x1CFF0`(sub_18D8C)
+及商店族 `0x2872B`(sub_279BC)/`0x2AA00`(sub_29DAA) 等，CRT/库包装 `0x3645D`(u4)/`0x2E95B`(u3)/`0x365DA`(u2) 仍按既定策略跳过。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交

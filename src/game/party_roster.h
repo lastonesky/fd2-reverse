@@ -24,4 +24,8 @@ int party_member_present(int count, int id);
 /* 0x2B843 */
 int party_member_move_front(int id);
 
+/* 0x24BDE - 1 when some party record in dword_53BF7 (slots 0..dword_53BFB-1)
+ * carries unit id (+8) == id. */
+int party_has_unit(int id);
+
 #endif /* GAME_PARTY_ROSTER_H */

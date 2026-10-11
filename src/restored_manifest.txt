@@ -679,3 +679,11 @@
 # conditional `jmp 0x26A73` shared epilogue (mov eax,esi; pop ebp/edi/esi/ebx;
 # ret) matching its own four-register frame, so it returns the 1 / -1 selection.
 0x27F4A sub_27F4A game/shop_party_stats.h
+
+# map-action subtree leaves (closure-ready heads of the sub_1CFF0 family).
+# 0x1D6C8 = select click + DAC-entry-0 flash (caller 0x1CFF0); 0x24BDE =
+# party-record id scan (called by scene_state_22); 0x2F7B6 = the full attack
+# evaluation sibling of 0x1ECC7 (caller 0x2EBE1).
+0x1D6C8 sub_1D6C8 game/fade.h
+0x24BDE sub_24BDE game/party_roster.h
+0x2F7B6 sub_2F7B6 game/map_attack.h

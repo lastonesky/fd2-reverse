@@ -209,3 +209,113 @@ void map_attack_bar_drain(int attacker, int defender, int *pos)
             break;
     }
 }
+
+/* 0x2F7B6 - full attack evaluation between two records (a sibling of
+ * map_attack_resolve, called by the figure/combat driver 0x2EBE1).
+ *
+ * The machine code takes `a3` as an int[6] result block (esi = [esp+0x58]); it
+ * shares the record offsets and the 0x51A12/0x51A2A/0x524A8 tables with
+ * map_attack_resolve.  The level table 0x4E84F is base 0x61AF9 / stride 10 (the
+ * offline disassembly of 0x4E84F shows `lea edx,ds:0x61af9`, i.e. fd2_data2
+ * offset 0x1AF9).  The `+30` on the atk[0x21] byte wraps mod 256 (the machine
+ * uses `add BYTE PTR`, so it stays a uint8_t here).  The tail leaves the
+ * damage in EAX; no caller-visible epilogue jump. */
+int map_attack_result(int attacker, int defender, int *out)
+{
+    uint8_t *atk = (uint8_t *)(uintptr_t)dword_53A45
+                   + 80u * (uint32_t)attacker;
+    uint8_t *def = (uint8_t *)(uintptr_t)dword_53A45
+                   + 80u * (uint32_t)defender;
+    uint8_t info[8];
+    int v27, v29, v28, v20, v23, v21, v22;
+    int v30, v26, v24, v8, v25;
+    uint8_t v32, v31;
+    const uint8_t *eff;
+
+    v30 = 0;
+    out[0] = 1;
+    out[1] = 0;
+    out[2] = 0;
+    out[3] = 0;
+    out[4] = 0;
+    out[5] = 0;
+
+    v27 = *(const uint16_t *)(const void *)(atk + 0x48);
+    v29 = *(const uint16_t *)(const void *)(def + 0x4A);
+    v28 = *(const uint16_t *)(const void *)(def + 0x40);
+    v20 = *(const uint16_t *)(const void *)(def + 0x42);
+    v23 = *(const uint16_t *)(const void *)(atk + 0x4C);
+    v21 = *(const uint16_t *)(const void *)(def + 0x4E);
+    v22 = atk[0x20] - 1;
+    v32 = atk[0x21];
+    v31 = def[0x21];
+
+    eff = item_entry(rec_field_byte(attacker, rec_slot_find(attacker, 0)));
+    v8  = eff[9];
+    v25 = eff[10];
+
+    if (!rec_skip(attacker)) {
+        map_cell_info(atk[0], atk[1], info);
+        v27 += v27 * dword_51A12[info[5]] / 100;
+    }
+    if (!rec_skip(defender)) {
+        map_cell_info(def[0], def[1], info);
+        v29 += v29 * dword_51A2A[info[5]] / 100;
+    }
+
+    v26 = byte_524A8[v22];
+    switch (v8) {
+    case 4:
+        v26 += v25;
+        break;
+    case 2:
+        if ((int)(util_rand() % 100) < v25) {
+            def[0x25] = (uint8_t)(util_rand() % 4 + 2);
+            out[2] = 1;
+        }
+        break;
+    case 3:
+        out[4] = 1;
+        break;
+    default:
+        break;
+    }
+
+    if ((int)(util_rand() % 100) < v23 - v21) {
+        out[0] = 0;
+        if ((int)(util_rand() % 100) < v26) {
+            v29 /= 2;
+            out[1] = 1;
+        }
+        v30 = 9 * (v27 - v29) / 10;
+        if (v30 < 0)
+            v30 = 0;
+        v24 = v30 / 9;
+        if (v30 / 9 != 0)
+            v30 += (int)(util_rand() % (uint32_t)v24);
+        v28 -= v30;
+        if (v28 < 0)
+            v28 = 0;
+    }
+
+    if (atk[6] == 2) {
+        int v13 = def[7];
+
+        if (v13 >= 0x44) {
+            const uint8_t *lv =
+                (const uint8_t *)tbl_ptr((void *)&fd2_data2[0x1AF9], 10,
+                                         v13 - 68, 0);
+            int v16;
+
+            if ((atk[0x20] > 8u && atk[0x20] < 0x19u) || atk[8] == 28)
+                v32 += 30;
+            v16 = v31 * (int)lv[9] / v32;
+            dword_53EC8 = v16;
+            if (v28 != 0)
+                dword_53EC8 = v30 * v16 / v20;
+        }
+    }
+
+    out[5] = v30;
+    return v30;
+}

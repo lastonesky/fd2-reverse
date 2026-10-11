@@ -22,6 +22,7 @@
  */
 #include "fade.h"
 #include "../dos.h"      /* DOS_LOWMEM_BASE: BIOS data area mirror */
+#include "svc.h"         /* 0x1D6C8 plays the select click through svc_play_sfx */
 
 #include <stdint.h>
 #include "../include/fd2_globals.h"
@@ -127,5 +128,30 @@ void pal_anim_step(void)
             OUTP(0x3C9, *p++);
         }
         word_60000 = pal_tick_word();
+    }
+}
+
+/* 0x1D6C8 - select flash: play the click, then flash DAC entry 0 four times
+ * (on with the RGB triple byte_51AAD/51AD1/51AF5[index], then black), waiting
+ * one BIOS tick after each half.  The machine's `outp(0x3C8,0)` sets the DAC
+ * write pointer to entry 0; the three 0x3C9 writes are its R/G/B channels.  The
+ * stack probe is the only dropped callee and the last svc_wait_ticks return is
+ * ignored by the single caller 0x1CFF0. */
+void pal_flash_entry(int index)
+{
+    int i;
+
+    svc_play_sfx((const void *)(uintptr_t)dword_53B13, 0, 1);
+    for (i = 0; i < 4; i++) {
+        OUTP(0x3C8, 0);
+        OUTP(0x3C9, byte_51AAD[index]);
+        OUTP(0x3C9, byte_51AD1[index]);
+        OUTP(0x3C9, byte_51AF5[index]);
+        svc_wait_ticks(1);
+        OUTP(0x3C8, 0);
+        OUTP(0x3C9, 0);
+        OUTP(0x3C9, 0);
+        OUTP(0x3C9, 0);
+        svc_wait_ticks(1);
     }
 }

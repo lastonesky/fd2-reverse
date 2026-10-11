@@ -35,4 +35,14 @@ int map_attack_resolve(int attacker, int defender);
  * "double" effect (item byte 9 == 3) or a 3% roll. */
 void map_attack_bar_drain(int attacker, int defender, int *pos);
 
+/* 0x2F7B6 - the full attack evaluation shared by the figure/combat drivers
+ * (caller 0x2EBE1): the same attack/defence roll as map_attack_resolve but it
+ * writes a six-dword result block instead of touching the defender's HP.
+ * `out[0]` = hit (0 on the RNG miss), `out[1]` = defence halved (critical),
+ * `out[2]` = attacker counter/effect flag, `out[4]` = effect type 3 flag,
+ * `out[5]` = the damage dealt; the damage is also returned.  Uses the item
+ * effect type (item byte 9) and the level table 0x4E84F to book the experience
+ * global dword_53EC8. */
+int map_attack_result(int attacker, int defender, int *out);
+
 #endif /* GAME_MAP_ATTACK_H */
