@@ -2244,15 +2244,35 @@ CRT/库包装 `0x3645D`(read)/`0x365DA`(int386) 后，游戏头名同为 u1 的�
 - **堆 / 哨兵**：`frame` 系 0x3706E（guest_malloc）所出，收尾 `guest_free`；`dword_53A51` 用 `(uint8_t*)(uintptr_t)1` 哨兵（同 `party_roster.c`）。
 - 无对拍器，标“已还原未验证”。本批后 `0x2670E` 的唯一 caller `0x26152` 的 `sub_2670E()` 调用点闭包就绪。
 
+### 88) 地图标签格查找 `0x15DF3` → `map_find_tag_cell`（本轮，1 函数）→ `src/game/map_scroll.c/.h`（追加）
+
+按 §87 遗留建议取 §1 闭包就绪游戏头名 `0x15DF3`（126B，u1，真闭包＝自身）：它是记录移动
+驱动器 `0x13A9F`（仍待还原）case 5 的叶助手，与既有 `map_scroll` 的 `map_scroll_cell_tag`（0x13A44）
+同属“地图格标签”概念（0x13A44 由格反查标签，本函数由标签反查格），故追加该模块。逐指令核过
+离线反汇编 `15df3..15e6d`。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x15DF3` | `map_find_tag_cell(tag, out)` | 外层 `y=0..dword_53AC5-1`、内层 `x=0..dword_53AC1-1` 遍历全图：`map_cell_info(x,y,info)`；命中判据 `(info[4]&0x60)==0x20 && info[2..3]==tag`（`info[2..3]` 即格标签字，`info[4]` 即 `dword_53A69[tile]` 首字节）；命中则 `out[0]=x, out[1]=y` 并返回 0，否则整图扫完后返回 −1。调用点 `13c53..13c59`（`push &out; push ebp`，`ebp=rec[61]`，`add esp,8`，读 eax）证 ABI=`int(int, uint8_t*)`。 |
+
+**陷阱 / 伪代码伪影**：
+- **伪 callee（共享尾声）**：`jmp 0x15677` = `add esp,0xc; pop edi; pop esi; pop ebx; ret`，落在 `map_attack_run`(0x1548E，其体止于 0x15676) 的尾声内，与本函数帧（`push ebx/esi/edi; sub esp,0xc`）一致 ⇒ 普通 `return`；`function-map` 因此把 `sub_1548E` 列为 callee，属假阳性，真依赖只有 `map_cell_info`。
+- **chkstk**：`push 0x28; call 0x3702F`（不分配帧），丢弃。
+- **Hex-Rays 丢 −1 路径**：伪代码把外循环越界与命中都折成 `LABEL_10: JUMPOUT(0x15677)`，漏掉了 `15e67: mov eax,0xffffffff`。按离线反汇编恢复为“未命中返回 −1”。
+- **signed 界比较**：两处 `jge` 为有符号；`dword_53AC1/AC5`（`uint32_t`）为地图尺寸（小正数），C 侧显式 `(int32_t)` 转型保持原语义。
+- **形参类型**：机器读 `[esp+4]/[esp+8]`（随 `push ebx/esi/edi; sub esp,0xc` 校正）即第 1/2 实参，与伪代码 `(int, _BYTE *)` 一致；本 C 用 `uint8_t *out`。
+- 无对拍器，标“已还原未验证”。本批后闭包就绪待还原仅剩 CRT/库包装与伪函数条目（见下）。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **37 → 36**（本轮 §87 −1），已还原未验证 **286 → 287**（本轮 +1）。
-- **闭包就绪游戏内容项**：本轮 §87 取走 `0x2670E` 后，闭包就绪待还原还剩 CRT/库包装
-  （`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`），
-  以及 `0x15DF3`(126B，u1，`0x13A9F` 的叶助手，唯一 caller 仍待还原)。`0x2CF30`(2269B)/`0x2D80D`(1780B)/`0x31C49`(1511B)
-  仍超预算或依赖未还原 CRT 包装。
-  下批按 §1 取闭包就绪游戏头名 `0x15DF3`（126B，唯一 caller `0x13A9F` 仍待还原，可单独拉出）。
+- `function-map.csv`：待还原 **36 → 35**（本轮 §88 −1），已还原未验证 **287 → 288**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §88 取走 `0x15DF3` 后，闭包就绪待还原已无 in-budget 游戏内容项——
+  只剩 CRT/库包装（`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）、伪函数条目
+  （`0x10000`/`0x36B00`），及超预算的 `0x2CF30`(2269B)/`0x2D80D`(1780B)/`0x31C49`(1511B)/`0x31529`(1718B)
+  （后者依赖未还原 CRT 包装/超 §1~1500B 预算）。
+  下批按 §5 取一个 ≤~2500B 的超预算单函数（真闭包＝自身）：优先 `0x2CF30`（2269B，`sub_2FF01`
+  fx 驱动器的 callee，`figure_view` 家族），或按 §2 取最小传递待还原闭包的游戏内容簇。
 
 > **台账发现**：`0x1CEED` 的 caller `0x1CFF0`（行动菜单驱动）仍待还原，其真闭包含 `0x1AA1D`/`0x1DB65`
 > 等大件（>8 函数，按 §4 跳过）；另一个 caller `0x1D51D` 已在 §83 还原。

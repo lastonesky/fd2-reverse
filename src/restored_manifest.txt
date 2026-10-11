@@ -428,6 +428,7 @@
 0x13315 sub_13315 game/map_scroll.h
 0x13488 sub_13488 game/map_scroll.h
 0x13A44 sub_13A44 game/map_scroll.h
+0x15DF3 sub_15DF3 game/map_scroll.h
 
 # opening / continue screen: logo scroll + continue-prompt (0x1F894) and its helpers
 0x1F894 sub_1F894 game/title_screen.h
