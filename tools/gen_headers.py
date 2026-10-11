@@ -461,6 +461,14 @@ def gen_image(bins):
     for sname, base, binf in SEGMENTS:
         if sname != 'cseg01':
             out.append('    memcpy(%s, %s_init, sizeof(%s));' % (ARR[sname], ARR[sname], ARR[sname]))
+            # BSS: the IDA export pads uninitialised data with 0xFF, but the LE
+            # loader leaves it zero.  Find the trailing 0xFF run and zero it.
+            b = bins[binf]; nz = len(b)
+            while nz > 0 and b[nz-1] == 0xFF:
+                nz -= 1
+            bss = (nz // 0x1000 + 1) * 0x1000 if nz < len(b) else len(b)
+            if bss < len(b):
+                out.append('    memset(%s + 0x%X, 0, sizeof(%s) - 0x%X);' % (ARR[sname], bss, ARR[sname], bss))
     out += ['    /* fd2_lowmem: BDA mirror; BIOS tick counter at 0x46C (40:6C) */', '}',
             '#else /* FD2_GUEST_FIXED: image comes from the guest loader */',
             'void fd2_data_init(void) { /* guest loader owns image init */ }',

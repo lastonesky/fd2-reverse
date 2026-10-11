@@ -9,6 +9,7 @@
  * lib/ail.h boundary implemented in host/fd2_audio.c.
  */
 #include <stdint.h>
+#include <stdio.h>
 
 #include "fd2_video.h"     /* fd2_palette / fd2_palette_dirty */
 #include "platform.h"
@@ -104,3 +105,21 @@ int j___delay(int ms)
     plat_sleep_ms((unsigned)ms);
     return 0;
 }
+
+/* ---- diagnostics: log an unhandled Windows exception -------------------
+ * A GUI-subsystem exe dies silently on an access violation; this prints the
+ * code and faulting address to the log so a in-game crash is actionable. */
+#if defined(_WIN32)
+#include <windows.h>
+static LONG WINAPI fd2_unhandled(EXCEPTION_POINTERS *ep)
+{
+    fprintf(stderr, "fd2: CRASH code=%08lX addr=%p\n",
+            (unsigned long)ep->ExceptionRecord->ExceptionCode,
+            ep->ExceptionRecord->ExceptionAddress);
+    fflush(stderr);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+void fd2_install_crash_handler(void) { SetUnhandledExceptionFilter(fd2_unhandled); }
+#else
+void fd2_install_crash_handler(void) { }
+#endif

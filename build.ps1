@@ -11,7 +11,7 @@
 #
 # Run the exe from the directory that holds the FD2 data files (FDOTHER.DAT,
 # FDMUS.DAT, ...), e.g.  E:\FD2 .
-param([switch]$Debug)
+param([switch]$Debug, [switch]$Console)
 
 $ErrorActionPreference = "Stop"
 $root   = $PSScriptRoot
@@ -50,7 +50,7 @@ $missing = $all | Where-Object { -not (Test-Path $_) }
 if ($missing) { throw "missing sources: $missing" }
 
 $libs = "user32.lib gdi32.lib winmm.lib d3d11.lib dxgi.lib shell32.lib ole32.lib"
-$link = "/link /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
+$link = if ($Console) { "/link /SUBSYSTEM:CONSOLE" } else { "/link /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup" }
 $objdir = Join-Path $out "fd2engine.obj"
 New-Item -ItemType Directory -Force -Path $objdir | Out-Null
 

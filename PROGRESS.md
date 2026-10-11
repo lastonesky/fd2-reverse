@@ -3033,3 +3033,17 @@ port3 已去 guest）。
   - `platform_win32.c` 的 `plat_data_selector` x64 无内联汇编 → 返回 0。
 - 回归：`make -C host check` 仍全 0 error；Linux `fd2engine` 仍可链接。
 - 运行需在含 FD2 资源文件的目录（如 `E:\FD2`）；音色库 `gm.dls` 路径待命令行参数化。
+
+### 7.2 运行时三个问题的修复（Windows）
+
+1. **没有音效** → 根因：`seg_dseg02.bin` 尾部 `[0x4000,0x56B0)` 是 **BSS**（IDA 导出成 0xFF），
+   而 port 的 LE 加载器会清零、port3 的 `fd2_data_init` 直接 memcpy。于是
+   `dword_54133`（demo 门控）=-1，`svc_play_sfx` 的 `dword_54133 != 0` 直接屏蔽全部音效。
+   修复：`fd2_data_init` 清零 dseg02 的 BSS；`gen_headers.py` 同步。修复后日志出现
+   `set_sample_address` 且 `sfx voices=1`。
+2. **卡顿/固定低频** → 实测 tick 只有 16Hz（`Sleep(55)` 被 Windows 默认 15.6ms 粒度拉长到
+   ~62.5ms）。加 `timeBeginPeriod(1)` 后 tick=18.0Hz；渲染 61~65fps。
+3. **选 Load 后崩溃** → 同 BSS 根因（大量未初始化全局为 0xFF）；修复后 Load 全流程（含选槽）不崩。
+
+另加：`FD2_LOG` 日志重定向（GUI exe 可诊断）、`FD2_KEYS`/`FD2_KEY_DELAY` 脚本按键用于复现、
+Windows 未处理异常处理器（打印 code/地址）、`-Console` 调试构建、每 2s 的 fps/tick 统计日志。

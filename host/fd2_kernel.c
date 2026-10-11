@@ -13,6 +13,11 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 #include "fd2_video.h"
 #include "fd2_audio.h"
@@ -22,6 +27,7 @@
 #include "../src/game/fd2_game.h"   /* boot.h: fd2_game_main, globals */
 
 extern void fd2_data_init(void);
+void fd2_install_crash_handler(void);
 
 uintptr_t dos_lowmem_base;
 
@@ -92,6 +98,29 @@ static void tick_thread(void *arg)
     }
 }
 
+static volatile unsigned g_frames;
+
+/* Diagnostics: frame rate + BIOS tick rate once every 2 s. */
+static void stat_thread(void *arg)
+{
+    unsigned f0 = 0; uint32_t t0 = 0; int first = 1;
+    (void)arg;
+    while (!g_quit) {
+        plat_sleep_ms(2000);
+        {
+            unsigned f = g_frames;
+            uint32_t tk = *(volatile uint32_t *)(lowmem() + 0x46C);
+            if (!first) {
+                printf("fd2: fps=%u  tick_rate=%.1f Hz", (f - f0) / 2,
+                       (tk - t0) / 2.0);
+                putchar(10);
+                fflush(stdout);
+            }
+            f0 = f; t0 = tk; first = 0;
+        }
+    }
+}
+
 static void game_thread(void *arg)
 {
     int argc = *(int *)arg;
@@ -100,9 +129,60 @@ static void game_thread(void *arg)
     g_quit = 1;
 }
 
+/* Scripted keys for testing: FD2_KEYS="1C,50,1C" (hex BIOS scan codes),
+ * injected FD2_KEY_DELAY ms apart (default 800).  An extended key (arrow /
+ * nav) is auto-prefixed with the 0xE0 ascii byte the game normalises. */
+static uint8_t g_keys[64];
+static int     g_nkeys;
+static int     g_key_delay = 800;
+
+static int is_extended_scan(uint8_t sc)
+{
+    return sc == 0x48 || sc == 0x50 || sc == 0x4B || sc == 0x4D ||
+           sc == 0x47 || sc == 0x4F || sc == 0x49 || sc == 0x51 ||
+           sc == 0x52 || sc == 0x53;
+}
+
+static void key_thread(void *arg)
+{
+    int i;
+    (void)arg;
+    plat_sleep_ms(1200);                 /* let the title screen appear */
+    for (i = 0; i < g_nkeys && !g_quit; i++) {
+        fd2_kbd_push(g_keys[i], is_extended_scan(g_keys[i]) ? 0xE0 : 0);
+        printf("fd2: autokey scan=%02X\n", (unsigned)g_keys[i]);
+        plat_sleep_ms(g_key_delay);
+    }
+}
+
+static void parse_keys(void)
+{
+    const char *s = getenv("FD2_KEYS");
+    const char *d = getenv("FD2_KEY_DELAY");
+    if (d) g_key_delay = atoi(d);
+    if (!s || !s[0]) return;
+    while (*s && g_nkeys < 64) {
+        char *end;
+        long v = strtol(s, &end, 16);
+        if (end == s) break;
+        g_keys[g_nkeys++] = (uint8_t)v;
+        s = (*end == ',') ? end + 1 : end;
+    }
+}
+
 int fd2_engine_init(int argc, char **argv)
 {
-    (void)argv;
+    const char *log = getenv("FD2_LOG");
+    if (!log) log = "fd2engine.log";
+    if (freopen(log, "w", stdout)) { }
+    if (freopen(log, "a", stderr)) { }
+    setvbuf(stdout, NULL, _IONBF, 0);
+
+    (void)argc; (void)argv;
+#if defined(_WIN32)
+    timeBeginPeriod(1);   /* 1 ms timer: BIOS tick really runs at 18.2 Hz */
+#endif
+    fd2_install_crash_handler();
     fd2_data_init();
     dos_lowmem_base = (uintptr_t)fd2_lowmem;
     bda16_set(KB_HEAD, KB_BUF);
@@ -112,6 +192,8 @@ int fd2_engine_init(int argc, char **argv)
     audio_init(11025);
     ail_set_format(11025, 8, 0);
     ail_set_master_volume(100);
+    parse_keys();
+    printf("fd2: engine init (log=%s, keys=%d)\n", log, g_nkeys);
     return 0;
 }
 
@@ -120,10 +202,14 @@ void fd2_engine_start(void)
     static int one = 1;
     plat_thread(game_thread, &one);
     plat_thread(tick_thread, NULL);
+    plat_thread(stat_thread, NULL);
+    if (g_nkeys)
+        plat_thread(key_thread, NULL);
 }
 
 void fd2_engine_frame(void)
 {
+    g_frames++;
     fd2_video_frame();
 }
 
