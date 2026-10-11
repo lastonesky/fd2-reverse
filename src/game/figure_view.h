@@ -145,4 +145,12 @@ void figure_attack_view(int attacker, int defender);
  * Hex-Rays); see figure_view.c. */
 void figure_demo_show(int unit, int mode, int count, const uint8_t *units);
 
+/* 0x2FF01 - the figure/effect dispatcher: modes >= 32 go to figure_demo_show,
+ * modes 24 / 28..31 to figure_party_show, and every other mode runs the inline
+ * emitter animation driven by funcs_30469[mode] over a 640-stride work buffer,
+ * draining each unit's HP word toward the unit_action_damage result.  See
+ * figure_view.c.  Single 3876-byte function taken under the playbook-5
+ * large-single-function clause (its true closure is itself). */
+void figure_effect_play(int unit, int mode, int count, const uint8_t *units);
+
 #endif /* GAME_FIGURE_VIEW_H */

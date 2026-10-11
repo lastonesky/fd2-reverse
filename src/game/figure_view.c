@@ -1154,3 +1154,321 @@ void figure_demo_show(int unit, int mode, int count, const uint8_t *units)
     }
     menu_stop_and_free_music();
 }
+
+/* funcs_30469[] @0x524C6, in table order (see fx.h).  The verified fx.c asset
+ * keeps the emitters reachable through the original data-segment table; the
+ * driver 0x2FF01 dispatches through it too.  Mirrored here by semantic name so
+ * the standalone profile does not depend on the data segment holding host
+ * function pointers. */
+typedef int (*fx_frame_fn)(int rec, const void *buf, void *dst, int pitch,
+                           int selector);
+
+static const fx_frame_fn fx_table[10] = {
+    fx_dots7, fx_dots8, fx_blob, fx_dots12, fx_dots6,
+    fx_dots6b, fx_dots5, fx_dots3, fx_dots16, fx_toggle,
+};
+
+/* 0x2FF01 - the figure/effect dispatcher driven by the two call sites 0x15400
+ * (sub_15311) and 0x1D43C (sub_1CFF0).
+ *
+ * mode >= 32 delegates to figure_demo_show (0x2D80D); mode 24 or 28..31
+ * delegates to figure_party_show (0x2CF30).  Every other mode (< 24, 25..27,
+ * 0..9 in practice) runs the inline effect: load the BG.DAT / TAI.DAT strips
+ * of the shown cell (or the figure_bg_pick / per-mode default), the FIGANI
+ * groups 3*rec[7] and 3*rec[7]+2 (or +1), the FDOTHER engine portraits and the
+ * FDOTHER sound bank, fade out and scroll the plates in (figure_attack_scroll),
+ * play the base group (figure_play), then drive the per-frame emitters
+ * funcs_30469[mode] over a 640-stride 0x2A300 work buffer: a nine-frame lead-in
+ * (selector 0/1/2), one drain block per unit in `units[0..count-1]` (selectors
+ * 3..5, draining the record's HP word +0x40 toward the unit_action_damage
+ * result), a tail (selector 6/7/8) and, for mode 9, the bright slide-out.  It
+ * then frees every buffer, reloads FD2SHAP.DAT / FD2.TMP, clears the frame and
+ * fades back in.
+ *
+ * The six little tables below are copied verbatim out of the original image at
+ * 0x5269C (t88), 0x526AC (t78), 0x526BC (t98), 0x526C6 (tbc), 0x526CF (tb0) and
+ * 0x526D9 (ta4 = "RRSTUVWXYZ"); the machine only ever indexes them with
+ * mode < 10.  tbc's byte [9] is not copied by the machine (its 9-byte copy
+ * stops at +8) and would read uninitialised stack on the mode==9 path; modelled
+ * as 0 (playbook 6, same convention as the uninitialised-register locals).
+ *
+ * TRAP: Hex-Rays renders `malloc(0x2A300)` as `malloc(&loc_2A300)` (the
+ * odd-immediate artifact) and the offset read `t98[mode]` as an out-of-bounds
+ * `v42[mode - 4]`; the disassembly (2ffb8..2fff5, 301a3, 30656) is
+ * authoritative.  The funcs_30469[a2] call sites use the mode as the table
+ * index (`call [eax*4+0x524c6]`, eax = ebp = the mode argument).
+ *
+ * DEVIATION (playbook 5): this is a single 3876-byte function, above the
+ * ~2500-byte large-single-function cap, taken as the approved keystone unblock
+ * (its true closure is itself - every callee is already restored).  ABI is
+ * cdecl with four stack arguments; the `push 0x164; call 0x3702F` Watcom probe
+ * is a chkstk, not a callee and not a register parameter. */
+void figure_effect_play(int unit, int mode, int count, const uint8_t *units)
+{
+    uint8_t  t98[10];   /* 0x526BC, indexed by mode                        */
+    uint8_t  ta4[10];   /* 0x526D9 "RRSTUVWXYZ", indexed by mode           */
+    uint8_t  tb0[10];   /* 0x526CF, indexed by mode                        */
+    uint8_t  tbc[10];   /* 0x526C6 (9 bytes copied, [9] modelled 0)        */
+    int      t88[4];    /* 0x5269C, indexed by v72                         */
+    int      t78[4];    /* 0x526AC, indexed by v72                         */
+    uint8_t  cell[8];   /* map_cell_info output (byte 6 = DAT index)       */
+    const uint8_t *rec; /* this unit's 80-byte record                      */
+    void    *groups[30];/* per-unit FIGANI group 3*rec[7]                  */
+    void    *bg = NULL;    /* BG.DAT strip (v55)                           */
+    void    *tai = NULL;   /* TAI.DAT strip (v56)                          */
+    void    *fig_a = NULL; /* FIGANI group 3*rec[7]      (v57)             */
+    void    *fig_b = NULL; /* FIGANI group 3*rec[7]+2 or +1 (v63)          */
+    void    *p = NULL;     /* FDOTHER engine portrait    (p)               */
+    uint8_t *screen;    /* 320-stride 0xFA00 buffer   (v69)                */
+    uint8_t *work;      /* 640-stride 0x2A300 buffer  (v10)                */
+    int      i, j, k, m, n, ii, jj, kk, mm, nn;
+    int      v5;        /* TAI default from byte_52470[dword_53C03]        */
+    int      v6;        /* figure_bg_pick result                           */
+    int      v7;        /* BG default                                      */
+    int      v54 = 11;  /* palette strip row base                          */
+    int      v58 = 32;  /* panel vertical origin                           */
+    int      v60;       /* *fig_b - 1                                      */
+    int      v61;       /* frames returned by the current emitter          */
+    int      v67 = 0;   /* row toggle for modes 3/7/9                      */
+    int      v70;       /* drain posture index                             */
+    int      v71 = 8;   /* vertical step into the strip                    */
+    int      v72 = 3;   /* t88/t78 row                                     */
+    int      v64 = -1;  /* horizontal direction                            */
+    int      v73 = 0x4BA0; /* 640-stride stripe offset (19360)             */
+    int      v65, v59;  /* record HP word before / after the action        */
+    int      v74;       /* unit_action_damage returned 0                   */
+    int      r23;       /* emitter selector-5 return                       */
+    const void *strip;  /* palette strip pointer (v51)                     */
+
+    memcpy(t88, &unk_5269C, sizeof(t88));
+    memcpy(t78, &unk_526AC, sizeof(t78));
+    memcpy(t98, &unk_526BC, sizeof(t98));
+    memcpy(tbc, &unk_526C6, 9);          /* machine copies 9 bytes */
+    memcpy(tb0, &unk_526CF, sizeof(tb0));
+    memcpy(ta4, &fd2_data1[0x26D9], sizeof(ta4));
+    tbc[9] = 0;
+
+    if (mode >= 32) {
+        figure_demo_show(unit, mode, count, units);
+        return;
+    }
+    if (mode == 24 || mode > 27) {
+        figure_party_show(unit, mode, count, units);
+        return;
+    }
+
+    if (mode == 8) {
+        v58 = 176;
+        v54 = 19;
+    } else if (mode > 3) {
+        v58 = 176;
+        v54 = 15;
+    }
+
+    guest_free(dword_53A61);              /* buf / DATO atlas */
+    guest_free(dword_53A49);
+    guest_free(dword_53A5D);
+    dword_53A5D = NULL;
+    for (i = 0; i < 30; ++i)
+        groups[i] = NULL;
+
+    rec = (const uint8_t *)dword_53A45 + 80 * unit;
+    map_cell_info(rec[0], rec[1], cell);
+    v5 = byte_52470[dword_53C03];
+    if (!rec_skip(unit) || v5 == 0)
+        v5 = cell[6];
+    v6 = figure_bg_pick(count, units);
+    v7 = v6;
+    if (rec[6] == 0) {
+        v7 = v5;
+        v5 = v6;
+    }
+
+    bg  = res_load(aBgDat, NULL, v7);
+    tai = res_load(aTaiDat, NULL, v5);
+    screen = guest_malloc(0xFA00);
+    work   = guest_malloc(0x2A300);
+    memset(screen, 0, 0xFA00);
+    ui_status_panel_at((int)(uintptr_t)screen, unit);
+    ui_status_panel_at((int)(uintptr_t)screen, units[0]);
+    rle_decode(bg, 0, 50, screen, 320, -1);
+
+    i     = 3 * rec[7];
+    fig_a = res_load(aFiganiDat, NULL, i);
+    fig_b = res_load(aFiganiDat, NULL, i + 2);
+    dword_54153 = 0;
+    dword_54153 = (uint32_t)(uintptr_t)res_load(aFdotherDat, NULL, ta4[mode]);
+    if (*(const uint16_t *)fig_b == 0)
+        fig_b = res_load(aFiganiDat, fig_b, i + 1);
+    pal_fade_out();
+
+    for (j = 0; j < count; ++j) {
+        const uint8_t *r = (const uint8_t *)dword_53A45 + 80 * units[j];
+
+        groups[j] = res_load(aFiganiDat, groups[j], 3 * r[7]);
+    }
+
+    if (rec[6] != 0)
+        i = tbc[mode];
+    else
+        i = tb0[mode];
+    p = res_load(aFdotherDat, p, i);
+
+    figure_attack_scroll(unit, 0, fig_a, groups[0], work, screen, tai);
+    figure_play(unit, mode, fig_b, groups[0], work, screen, bg, tai);
+
+    if (mode == 9) {
+        for (k = 0; k <= 10; ++k) {
+            gfx_copy_rows(work + 320, 640, screen, 320, 320, 200);
+            if (k != 10)
+                res_blit(fig_a, 0, work - 10 * k + 320, 640, -1);
+            res_blit(groups[0], 0, work + 320, 640, -1);
+            gfx_copy_rows((uint8_t *)0xA0000, 320, work + 320, 640, 320, 200);
+        }
+        j___delay(500);
+    }
+
+    v60 = *(const uint8_t *)fig_b - 1;
+    v61 = fx_table[mode](unit, p, work, 320, 0);
+    anim_cycle_frame(groups[0], 0, work, 640);
+    for (m = 0; m < v61; ++m) {
+        uint8_t *dst = work + v73;
+
+        gfx_copy_rows(work + v73, 640, screen, 320, 320, 200);
+        fx_table[mode](unit, p, dst, 640, 1);
+        if (mode != 9)
+            res_blit(fig_b, v60, dst, 640, -1);
+        anim_cycle_frame(groups[0], -1, work + v73, 640);
+        fx_table[mode](unit, p, work + v73, 640, 2);
+        gfx_copy_rows((uint8_t *)0xA0000, 320, work + v73, 640, 320, 200);
+        svc_wait_ticks(1);
+    }
+
+    for (n = 0; n < count; ++n) {
+        uint8_t *r = (uint8_t *)dword_53A45 + 80 * units[n];
+
+        v61 = fx_table[mode](unit, p, work, 320, 3);
+        anim_cycle_frame(groups[0], 0, work, 640);
+        v65 = *(const int16_t *)(const void *)(r + 0x40);
+        v74 = (unit_action_damage(units[n], mode) == 0);
+        v59 = *(const int16_t *)(const void *)(r + 0x40);
+        *(uint16_t *)(void *)(r + 0x40) = (uint16_t)v65;
+        v70 = 1;
+        for (ii = 0; ii < v61; ++ii) {
+            uint8_t *dst;
+
+            if (mode == 7 || mode == 3 || mode == 9) {
+                v67 ^= 1;
+                gfx_copy_rows(work + v73 - 640 * v67, 640, screen, 320, 320,
+                              200);
+            } else {
+                gfx_copy_rows(work + v73, 640, screen, 320, 320, 200);
+            }
+
+            dst = work + v73;
+            fx_table[mode](unit, p, dst, 640, 4);
+            if (mode != 9)
+                res_blit(fig_b, v60, dst, 640, -1);
+
+            if (v74) {
+                anim_cycle_frame(groups[n], -1, work + v73, 640);
+                fx_table[mode](unit, p, work + v73, 640, 5);
+            } else {
+                int v22 = v64 * t88[v72];
+                int v53 = t78[v72];
+                int off = v58 + (v71 << 8);
+
+                --v71;
+                anim_cycle_frame(groups[n], off,
+                                 work + v73 + v22 + 640 * v53, 640);
+                if (v71 == 1)
+                    v71 = 8;
+                if (v72 != 3)
+                    ++v72;
+                r23 = fx_table[mode](unit, p, work + v73, 640, 5);
+                if (r23 == 1) {
+                    int v24 = t98[mode];
+
+                    if (v24 >= v70) {
+                        *(uint16_t *)(void *)(r + 0x40) = (uint16_t)(v65 -
+                            v70 * (v65 - v59) / v24);
+                        ui_status_panel_at((int)(uintptr_t)screen, units[n]);
+                        ++v70;
+                    }
+                    v72 = 0;
+                    v64 = 1 - (int)(util_rand() % 3);
+                }
+            }
+            gfx_copy_rows((uint8_t *)0xA0000, 320, work + v73, 640, 320, 200);
+            svc_wait_ticks(1);
+        }
+        if (count - 1 != n) {
+            fx_play(unit, p, fig_b, groups[n], work, screen, groups[n + 1],
+                    mode);
+            ui_status_panel_at((int)(uintptr_t)screen, units[n + 1]);
+        }
+    }
+
+    v61 = fx_table[mode](unit, p, work, 320, 6);
+    for (jj = 0; jj < v61; ++jj) {
+        uint8_t *dst = work + v73;
+
+        gfx_copy_rows(work + v73, 640, screen, 320, 320, 200);
+        fx_table[mode](unit, p, dst, 640, 7);
+        if (mode != 9)
+            res_blit(fig_b, v60, dst, 640, -1);
+        anim_cycle_frame(groups[count - 1], -1, work + v73, 640);
+        fx_table[mode](unit, p, work + v73, 640, 8);
+        gfx_copy_rows((uint8_t *)0xA0000, 320, work + v73, 640, 320, 200);
+        svc_wait_ticks(1);
+    }
+
+    if (mode == 9) {
+        for (kk = 7; kk >= 0; --kk) {
+            gfx_copy_rows(work + 320, 640, screen, 320, 320, 200);
+            res_blit(fig_a, 0, work - 10 * kk + 320, 640, -1);
+            res_blit(groups[0], 0, work + 320, 640, -1);
+            gfx_copy_rows((uint8_t *)0xA0000, 320, work + 320, 640, 320, 200);
+        }
+    }
+
+    for (mm = 1; mm < 4; ++mm) {
+        gfx_copy_rows(work, 320, screen, 320, 320, 200);
+        strip = dword_53A6D +
+            *(const uint32_t *)(dword_53A6D + 4 * (mm + v54) + 6);
+        rle_decode_lut(bg, 0, 50, screen, 320, strip);
+        rle_decode_lut(tai, 164, 157, screen, 320, strip);
+        res_blit(fig_b, 0, work, 320, -1);
+        anim_cycle_frame(groups[count - 1], -1, work, 320);
+        gfx_copy_rows((uint8_t *)0xA0000, 320, work, 320, 320, 200);
+        svc_wait_ticks(1);
+    }
+
+    gfx_copy_rows(work, 320, screen, 320, 320, 200);
+    rle_decode(bg, 0, 50, screen, 320, -1);
+    rle_decode(tai, 164, 157, screen, 320, -1);
+    res_blit(fig_b, 0, work, 320, -1);
+    anim_cycle_frame(groups[count - 1], -1, work, 320);
+    gfx_copy_rows((uint8_t *)0xA0000, 320, work, 320, 320, 200);
+    svc_play_sfx((const void *)(uintptr_t)dword_54153, -1, 1);
+    guest_free((void *)(uintptr_t)dword_54153);
+    guest_free(p);
+    for (nn = 0; nn < count; ++nn)
+        guest_free(groups[nn]);
+    guest_free(screen);
+    guest_free(work);
+    guest_free(fig_a);
+    guest_free(fig_b);
+    guest_free(bg);
+    guest_free(tai);
+
+    dword_53A49 = guest_malloc(0x25680);
+    dword_53A5D = res_load(aFdshapDat, dword_53A5D,
+                           2 * *(const uint8_t *)(uintptr_t)dword_53A55);
+    figure_tmp_load();
+    svc_wait_ticks(8);
+    pal_fade_out();
+    memset((uint8_t *)0xA0000, 0, 0xFA00);
+    map_view_update(1);
+    pal_fade_in();
+}

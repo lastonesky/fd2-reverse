@@ -516,6 +516,12 @@
 # figure effect-demo sibling of figure_party_show (0x2FF01 mode>=32 branch)
 0x2D80D sub_2D80D game/figure_view.h
 
+# the figure/effect dispatcher itself, called by 0x15400 (sub_15311) and
+# 0x1D43C (sub_1CFF0).  True closure = itself (all callees already in the
+# manifest).  Playbook-5 large-single-function deviation: 3876 B, above the
+# ~2500 B cap, taken as the approved keystone unblock.  No differential harness.
+0x2FF01 sub_2FF01 game/figure_view.h
+
 # map view / zoom / gauge frame-buffer helpers.  The zoom transition driver
 # 0x2000A lives in map_zoom.h (its 0x21548 sibling is map_action_zoom_resolve
 # in map_action.h); the map status overlay family 0x1E611/1E7F6/1E856 pending.
