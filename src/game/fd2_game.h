@@ -58,6 +58,7 @@
 #include "password.h"
 #include "path.h"
 #include "place_menu.h"
+#include "place_screen.h"
 #include "rec.h"
 #include "res.h"
 #include "reveal.h"

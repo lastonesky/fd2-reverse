@@ -2151,14 +2151,37 @@ CRT/库包装 `0x3645D`(read)/`0x365DA`(int386) 后，游戏头名同为 u1 的�
 - **对既有模块的唯一改动**：追加两函数与头声明、`action_menu.c` 增 `<string.h>`（`memmove`），
   并订正头注释中两处 caller 的“pending”描述；未改任何已验证/已还原函数。无对拍器，标“已还原未验证”。
 
+### 84) 场所菜单选项屏 + 队员行动列表 `0x29300`/`0x29620`（本轮，2 函数）→ `src/game/place_screen.c/.h`（新建）
+
+按 §1 闭包就绪列表（usage 降序）：跳过 CRT 包装 `0x3645D`(u4，read) 后，usage 最高的在预算游戏内容项为
+`0x29620`(u2，109B，真闭包＝自身)。其两个 caller 之一 `0x29300`(u1，800B) 只差它一个 callee（`sub_29DAA` 另需
+`0x28F65`），故取同族 caller/callee 对 `0x29620`+`0x29300`＝909B（≤ §1 的 ~1500B 指引），落 `place_screen` 新模块。
+生成器验得两函数真闭包＝本簇（callee 全在册）；逐指令核过离线反汇编 `29300..2961f`、`29620..2968c`。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x29300` | `place_screen_run(src)` | 载 FDOTHER 13(`res_load`→`dword_53F66`)+`res_blit6(0xA0000,320,·,0)`+`pal_fade_in`+`j___delay(200)`+`msg_open_portrait`+`vm_run(585)`+`dlg_blit_dato(...,0)`；随后 `for(;;)`：`dword_53C57=v1`→`screen_curtain(0)`→`v6=menu_choice4()`（`v6==1` 时 `v1=dword_53C57`）→`screen_curtain(1)`→`msg_close_portrait`；`v6!=1` 退出。槽 0→`place_member_actions_run()`；槽 1→`save_slot_write(1)`；槽 2→`save_slot_load()`；其余槽→`vm_run(415)`+`map_window_run()`+`map_draw_text_window()`，若 `v2!=-1 && dword_53C57==0` 则 `vm_run(416,0xAAc8C)`+`j___delay(200)`+`msg_close_portrait`+`return 1`。每步收尾 `vm_run(586)`。退出后 `res_blit6`+`j___delay(200)`+`pal_fade_out`+`i=10..0` 的 `place_zoom_blit(·,·,src,128-9i)`+`memmove(VGA←dword_53A49,0xFA00)`+`pal_fade_range(0,255,4i)`→`guest_free(dword_53F66)`→`return 0` |
+| `0x29620` | `place_member_actions_run()` | `dword_53F5E=dword_53BFB`；`for(;;)`：`ret=menu_list_select()`+`msg_close_portrait()`+存 `dword_53C67`；`ret==-1` 返回；否则 `action_menu_open(dword_53C57)`+还原 `dword_53C67`+`dword_53A85=res_load(aDatoDat,dword_53A85,byte_52387[0])` 循环 |
+
+**陷阱 / 伪代码伪影**：
+- **chkstk**：两者皆 `push size; call 0x3702F`，丢弃（0x3702F 自恢复 ESP，实参仍在 `[esp+N]` 原位）。
+- **`<<7` 改写为 `*128`**：`0x29300` 退场的两条中心坐标 `((i*(byte_52363[6*v5+dword_53F4A]-150)/10)<<7)+20480`、
+  `((i*(byte_52375[…]-100)/10)<<7)+12800`，机器用有符号 `idiv` 后 `shl eax,7`；商可负，C 侧用 `*128`（32 位结果一致）。
+- **`0x4E809` 表访问器**：`v5=*(u8*)tbl_ptr(&fd2_data2[0x238D],31,dword_53C03,-31)`（tables.h 常量 0x6238D/31/-31，同 scene_core）。
+- **资源索引固定 `byte_52387[0]`**：机器 `movzx eax,BYTE PTR ds:0x52387`（无下标），两函数均按原位还原（非 `[…+dword_53F4A]`）。
+- **堆**：`dword_53F66` 系 `res_load`（guest_malloc）所出，收尾用 `guest_free`（不是宿主的 `free`）；`0x29300` 的 `return 1` 提前退出路径**不释放**，与机器一致。
+- **返回/末值**：两函数机器 eax 末值（`place_member_actions_run` 的残留、`place_screen_run` 的 0/1）——前者调用点全忽略（C 侧 `void`），后者按位返回 0/1。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **44 → 42**（本轮 §83 −2），已还原未验证 **279 → 281**（本轮 +2）。
-- **闭包就绪游戏内容项**：本轮 §83 取走 `0x17AED`/`0x1D51D` 后，闭包就绪待还原为 CRT/库包装
+- `function-map.csv`：待还原 **42 → 40**（本轮 §84 −2），已还原未验证 **281 → 283**（本轮 +2）。
+- **闭包就绪游戏内容项**：本轮 §84 取走 `0x29620`/`0x29300` 后，闭包就绪待还原仍为 CRT/库包装
   （`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`），
-  加上仍在册的游戏内容项 `0x15DF3`(126B，u1)、`0x31C49`(1511B，u1)、`0x2CF30`(2269B，u1)、`0x2D80D`(1780B，u1)。
-  下批按 §1 取 usage 最高的在预算游戏项 `0x15DF3`(u1，126B，真闭包＝自身) 或 `0x31C49`(u1，1511B，属 §2 整闭包可拉)。
+  加上仍在册的游戏内容项 `0x15DF3`(126B，u1)、`0x31C49`(1511B，u1)、`0x2CF30`(2269B，u1)、`0x2D80D`(1780B，u1)；
+  且本轮令 `0x28F65`(693B，u1) 与 `0x279BC`(887B，u1) 转为闭包就绪（`0x28F65` 只差 `0x29300`，`0x279BC` 只差 `0x28F65`）。
+  下批按 §1 取同族对 `0x28F65`+`0x279BC`（1580B，去程超 ~1500B 少量，可单体取 `0x15DF3`）。
 
 > **台账发现**：`0x1CEED` 的 caller `0x1CFF0`（行动菜单驱动）仍待还原，其真闭包含 `0x1AA1D`/`0x1DB65`
 > 等大件（>8 函数，按 §4 跳过）；另一个 caller `0x1D51D` 已在 §83 还原。

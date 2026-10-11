@@ -853,3 +853,19 @@
 # itself (all callees in the manifest); 0x16E24 is a false callee from the shared
 # epilogue, 0x3702F is the Watcom stack probe, both dropped.  No differential harness.
 0x1D51D sub_1D51D game/action_menu.h
+
+# 0x29300 - the place menu's in-game option screen (place type 0): load FDOTHER
+# entry 13, loop the four-slot menu_choice4 under the screen_curtain wipe, and
+# dispatch slot 0 -> 0x29620, 1 -> save_slot_write(1), 2 -> save_slot_load, else
+# the map_window_run text dialogue; on cancel play the 11-step place_zoom_blit
+# zoom-out and free the FDOTHER buffer.  True closure = itself + 0x29620 (all
+# other callees in the manifest); 0x3702F is the Watcom stack probe, dropped.
+# No differential harness.
+0x29300 sub_29300 game/place_screen.h
+
+# 0x29620 - the place menu's member action list: loop the party-member selector
+# (menu_list_select) and open each chosen member's box (action_menu_open),
+# restoring dword_53C67 and reloading DATO.DAT.  True closure = itself (all
+# callees in the manifest); 0x3702F is the Watcom stack probe, dropped.  No
+# differential harness.
+0x29620 sub_29620 game/place_screen.h
