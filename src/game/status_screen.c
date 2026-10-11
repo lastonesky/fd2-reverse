@@ -19,7 +19,7 @@
 
 /* 0x2810B - draw the party name rows.  `highlight` selects the bright row
  * (record index), `base` is the screen offset of the panel. */
-void status_names_draw(int highlight, int base)
+void status_names_draw(int highlight, uint8_t *base)
 {
     int idx = dword_53F72;
     int count;
@@ -46,9 +46,9 @@ void status_names_draw(int highlight, int base)
         int y   = 26 * (i / 2);
 
         sprite24_plain49(sprite,
-                         (void *)(uintptr_t)(off + base + 320 * (y + 117) + 14),
+                         base + (off + 320 * (y + 117) + 14),
                          320);
-        vm_run(dword_53A7D, rec[8] + 1,VGA_P(off + base + 320 * (y + 121) + 40), 320,
+        vm_run(dword_53A7D, rec[8] + 1,base + (off + 320 * (y + 121) + 40), 320,
                (i + dword_53F4E == highlight) ? 201 : 205, 76, 0, 0, 0);
     }
 }
@@ -69,7 +69,7 @@ void status_panel_draw(int *layout, int mode)
     if (mode != 0) {
         if (mode == 1 || mode == 3) {
             if (mode == 3)
-                status_names_draw(dword_53C57, 655360);
+                status_names_draw(dword_53C57, VGA_P(655360u));
 
             if (dword_53F4E != 0)
                 rle2_blit((void *)(uintptr_t)VGA_P(0xA972Au),

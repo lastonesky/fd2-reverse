@@ -76,7 +76,7 @@ void ui_status_panel(char *dst, int pitch, int rec)
     dlg_draw_number_pair(dst + 30 * pitch + 126, pitch,
                          v7, v6, 3);
 
-    vm_run(dword_53A7D, r[8] + 1,dst + 4 * pitch + 5,
+    vm_run(dword_53A7D, r[8] + 1, (uint8_t *)dst + 4 * pitch + 5,
            pitch, 205, 76, 0, 0, 0);
 }
 

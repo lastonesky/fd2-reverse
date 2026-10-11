@@ -43,7 +43,7 @@
 void action_menu_open(int rec);
 
 /* 0x1CEED */
-void action_menu_draw(int rec, int sel, int base);
+void action_menu_draw(int rec, int sel, uint8_t *base);
 
 /* 0x1D51D */
 int action_menu_select(int rec);

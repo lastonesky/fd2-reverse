@@ -87,7 +87,7 @@ void password_screen_run(void)
 {
     uint8_t        regs[0x1C];
     uint8_t        glyphs[8];
-    uint8_t        entered[3];
+    uint8_t        entered[3] = { 0, 0, 0 };
     int            entered_n = 0;
     int            sel = 2;
     int            code_n;

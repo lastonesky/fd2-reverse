@@ -22,7 +22,7 @@
 #define GAME_STATUS_SCREEN_H
 
 /* 0x2810B */
-void status_names_draw(int highlight, int base);
+void status_names_draw(int highlight, uint8_t *base);
 
 /* 0x27079 */
 void status_panel_draw(int *layout, int mode);
