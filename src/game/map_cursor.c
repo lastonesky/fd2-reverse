@@ -45,7 +45,7 @@ void map_cursor_window_save(void)
 
     if (dword_53A71 != 0)
         guest_free((void *)(uintptr_t)dword_53A71);
-    dword_53A71 = (uint32_t)(uintptr_t)guest_malloc(BLOCK_SIZE);
+    dword_53A71 = guest_malloc(BLOCK_SIZE);
 
     src = dword_53A49 + MAP_VIEW_OFF + 24 * (dword_53AB9 - 1) +
           10944 * (dword_53ABD - 1);
@@ -83,7 +83,7 @@ static void map_cursor_blit_tiles(uint8_t *view, const int *ofs,
     int j;
 
     for (j = 0; j < PATCH_TILES; ++j) {
-        uint32_t tbl = dword_53A89;
+        uint8_t *tbl = dword_53A89;
         uint32_t idx = (uint32_t)(3 * a_tiles[j] + 2 * b_tiles[j]);
         uint32_t off = *(const uint32_t *)(uintptr_t)(tbl + 4u * idx);
 
@@ -186,7 +186,7 @@ void map_cursor_dir_draw(const int *frame_a, const int *frame_b)
             MAP_VIEW_PITCH * (24 * dword_53ABD);
 
     for (j = 0; j < PATCH_TILES; ++j) {
-        uint32_t tbl = dword_53A89;
+        uint8_t *tbl = dword_53A89;
         uint32_t idx = (uint32_t)(3 * frame_a[j] + 2 * frame_b[j]);
         uint32_t off;
 

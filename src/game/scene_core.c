@@ -67,7 +67,7 @@ int scenario_menu(void)
     if (choice == 0) {                                  /* 0x25ED1 NEW GAME */
         sub_1F882();                                    /* fade out        */
         dword_53C03 = 0;
-        dword_53A65 = (uint32_t)(uintptr_t)res_load(aFdotherDat,
+        dword_53A65 = res_load(aFdotherDat,
                         (void *)(uintptr_t)dword_53A65, 0);   /* palette     */
         dword_53BFB = 0;
         byte_51AAC = 0;
@@ -86,10 +86,10 @@ int scenario_menu(void)
     }
 
     /* ---- choice == 1: LOAD GAME (0x25F2E..) ---- */
-    dword_53F66 = (uint32_t)(uintptr_t)res_load(aFdotherDat,
+    dword_53F66 = res_load(aFdotherDat,
                     (void *)(uintptr_t)dword_53F66, 13);      /* save UI gfx */
     sub_1F882();
-    dword_53A65 = (uint32_t)(uintptr_t)res_load(aFdotherDat,
+    dword_53A65 = res_load(aFdotherDat,
                     (void *)(uintptr_t)dword_53A65, 0);
     memset((void *)(uintptr_t)VGA_BASE, 0, 320u * 200u);
     sub_11D40(0, 255, 0);                               /* pal_fade_range  */
@@ -195,19 +195,19 @@ int scene_event_tick(void)
                 break;
             }
             case 72:                                    /* 'H' */
-                sub_25A96((int)dword_53EEC, 0, 1);
+                sub_25A96(dword_53EEC, 0, 1);
                 sub_11B48();
                 return 0;
             case 80:                                    /* 'P' */
-                sub_25A96((int)dword_53EEC, 0, 1);
+                sub_25A96(dword_53EEC, 0, 1);
                 sub_11B9B();
                 return 0;
             case 75:                                    /* 'K' */
-                sub_25A96((int)dword_53EEC, 0, 1);
+                sub_25A96(dword_53EEC, 0, 1);
                 sub_11C59();
                 return 0;
             case 77:                                    /* 'M' */
-                sub_25A96((int)dword_53EEC, 0, 1);
+                sub_25A96(dword_53EEC, 0, 1);
                 sub_11BFA();
                 break;
             default:
@@ -227,7 +227,7 @@ int scene_event_tick(void)
         dword_53EC8 = 0;                                /* reset counter     */
         if (rec[7] != 121 && rec[31] != 10) {
             if (rec[6] == 2 && (int)rec[5] >= 0 && rec[38] == 0) {
-                sub_25A96((int)dword_53EEC, 7, 1);      /* sfx               */
+                sub_25A96(dword_53EEC, 7, 1);      /* sfx               */
                 while (sub_18890(sel) == 0)
                     ;                                   /* wait animation    */
             } else {
@@ -297,7 +297,7 @@ int scene_apply_state(void)
     for (i = 0; i < (int)dword_53BFB; ++i) {
         uint8_t *rec = (uint8_t *)(uintptr_t)dword_53BF7
                      + (uint32_t)i * REC_STRIDE;    /* eax*5 << 4 */
-        sub_11019(rec[7], (int)(uintptr_t)fp);
+        sub_11019(rec[7], fp);
     }
     fclose(fp);
 
@@ -306,18 +306,18 @@ int scene_apply_state(void)
         memset((void *)(uintptr_t)VGA_BASE, 0, 320u * 200u);
         sub_11D40(0, 255, 0);
         sub_1956B(75);
-        sub_15F84((int)dword_53A7D, 410, 0xA9524, 320, 205, 76, 74, 19, 1);
+        sub_15F84(dword_53A7D, 410, 0xA9524, 320, 205, 76, 74, 19, 1);
         /* 0x16559: the machine code pushes ONE arg (see 0x262D8) while port/'s
            dlg_blit_dato takes 3 and passed dlgcheck(800); port/'s own call sites
            pass (dword_53A85, dword_53C67, idx). ABI question recorded in PROGRESS 0-F. */
-        sub_16559((int)(uintptr_t)dword_53A85, dword_53C67, 0);
-        dword_53A51 = 1;                            /* non-NULL sentinel */
+        sub_16559(dword_53A85, dword_53C67, 0);
+        dword_53A51 = (uint8_t *)(uintptr_t)1;      /* non-NULL sentinel */
         rc = sub_19953();
         dword_53A51 = 0;
         sub_197E5();
         sub_26996();
         if (rc != -1 && dword_53C57 == 0) {
-            dword_53F66 = (uint32_t)(uintptr_t)res_load(aFdotherDat,
+            dword_53F66 = res_load(aFdotherDat,
                             (void *)(uintptr_t)dword_53F66, 13);
             sub_2968D(0);
             free((void *)(uintptr_t)dword_53F66);
@@ -332,11 +332,11 @@ int scene_apply_state(void)
     }
 
     /* ---- B: interactive scene-select (0x2637F..0x265EB) ----------------- */
-    dword_53A5D = (uint32_t)(uintptr_t)malloc(0x25680);
+    dword_53A5D = malloc(0x25680);
     /* 0x4E809 = table accessor: base 0x6238D, stride 31, offset -31 (tables.h).
        port/ implements it as the file-local static tbl_6238D, so call the
        migrated generic helper directly instead of an alias that cannot link. */
-    dword_53F56 = (uint32_t)(uintptr_t)tbl_ptr((void *)&fd2_data2[0x238D], 31,
+    dword_53F56 = tbl_ptr((void *)&fd2_data2[0x238D], 31,
                                                (int)dword_53C03, -31);
     v5 = *(uint8_t *)(uintptr_t)dword_53F56;                     /* [0] */
     sub_1F882();
@@ -344,10 +344,10 @@ int scene_apply_state(void)
     dword_53F4A = 0;                                /* selection cursor */
 
     tbl_src = (int16_t *)(uintptr_t)res_load(aFdotherDat, NULL, sel3[v5]);
-    sub_4E98D(tbl_src, 0, 0, (int)(uintptr_t)dword_53A5D + 32904, 456, -1);
+    sub_4E98D(tbl_src, 0, 0, dword_53A5D + 32904, 456, -1);
     free(tbl_src);
     dword_53F5A = 0;
-    dword_53F5A = (uint32_t)(uintptr_t)res_load(aFdotherDat, NULL, 10);
+    dword_53F5A = res_load(aFdotherDat, NULL, 10);
     sub_265EC();
     sub_1F525();
     sub_4E381();
@@ -382,12 +382,12 @@ int scene_apply_state(void)
             sub_25977(bgm_sel, 0);
             break;
         case 0x4D:                                  /* 0x264FA: cursor left     */
-            sub_25A96((int)dword_53EEC, 0, 1);
+            sub_25A96(dword_53EEC, 0, 1);
             if ((int32_t)--dword_53F4A < 0)         /* 0x2650C: 32-bit signed   */
                 dword_53F4A = 4;
             break;
         case 0x4B:                                  /* 0x2652C: cursor right    */
-            sub_25A96((int)dword_53EEC, 0, 1);
+            sub_25A96(dword_53EEC, 0, 1);
             if (++dword_53F4A > 4)
                 dword_53F4A = 0;
             break;
@@ -403,7 +403,7 @@ int scene_apply_state(void)
         if (((uint8_t *)&word_53A8D)[1] == 0x1C ||  /* Enter or space (AL=20h) */
             (uint8_t)word_53A8D == 0x20) {
             if (dword_53F4A != 2)
-                sub_25A96((int)dword_53EEC, 1, 3);  /* 0x265A7: sfx             */
+                sub_25A96(dword_53EEC, 1, 3);  /* 0x265A7: sfx             */
             accepted = (uint8_t)sub_2670E();        /* 0x265AF: commit          */
         }
         if (accepted == 0)

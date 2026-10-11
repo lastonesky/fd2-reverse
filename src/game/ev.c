@@ -66,7 +66,7 @@ uint32_t ev_status24_27(void)
         ORIG_STATUS(24, 27, 7);
         vm_sub(3);
         *((uint8_t *)(uintptr_t)dword_53AD5 + 16) = 1;
-        return dword_53AD5;
+        return (uint32_t)(uintptr_t)dword_53AD5;
     }
     return flag;
 }
@@ -104,7 +104,7 @@ uint32_t ev_rec6_gate(int idx)
     if (b != 0) {
         ORIG_STATUS(9, 27, 0);
         *((uint8_t *)(uintptr_t)dword_53AD5 + 16) = 1;
-        return dword_53AD5;
+        return (uint32_t)(uintptr_t)dword_53AD5;
     }
     return b;
 }
@@ -122,7 +122,7 @@ uint32_t ev_clear_status12_13(void)
     vm_sub(2);
     *((uint8_t *)(uintptr_t)dword_53A45 + 12 * REC_STRIDE + 52) = 0;
     *((uint8_t *)(uintptr_t)dword_53A45 + 13 * REC_STRIDE + 52) = 0;
-    return dword_53A45 + 13 * REC_STRIDE;
+    return (uint32_t)(uintptr_t)(dword_53A45 + 13 * REC_STRIDE);
 }
 
 /* 0x35123 - the machine code passes the incoming argument (which the first
@@ -150,7 +150,7 @@ uint32_t ev_status16_71(void)
         ORIG_STATUS(16, 71, (int)flag);
         vm_sub(1);
         *((uint8_t *)(uintptr_t)dword_53AD5 + 16) = 1;
-        return dword_53AD5;
+        return (uint32_t)(uintptr_t)dword_53AD5;
     }
     return flag;
 }

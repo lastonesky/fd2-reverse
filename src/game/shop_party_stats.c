@@ -151,9 +151,9 @@ int shop_party_stat_run(int count, const uint8_t *members, int item)
     int i;
     int ret = 0;
 
-    dword_53C5B = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C5F = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C63 = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    dword_53C5B = guest_malloc(0xFA00u);
+    dword_53C5F = guest_malloc(0xFA00u);
+    dword_53C63 = guest_malloc(0xFA00u);
 
     memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u,
             0xFA00u);

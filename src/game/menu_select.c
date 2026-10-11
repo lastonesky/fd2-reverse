@@ -57,9 +57,9 @@ int menu_list_select(void)
     int ret = 0;
     int i;
 
-    dword_53C5B = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C5F = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C63 = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    dword_53C5B = guest_malloc(0xFA00u);
+    dword_53C5F = guest_malloc(0xFA00u);
+    dword_53C63 = guest_malloc(0xFA00u);
 
     memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u,
             0xFA00u);

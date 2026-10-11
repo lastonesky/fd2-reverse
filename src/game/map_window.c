@@ -73,7 +73,7 @@ int map_window_run(void)
 
     if ((uint32_t)dword_53A51 > 1) {
         sub_1297D();
-        sub_11EEE((int)(uintptr_t)buf + VIEW_SRC_OFF, 456, 13, 8,
+        sub_11EEE(buf + VIEW_SRC_OFF, 456, 13, 8,
                   (int)qword_53AA9, (int)(qword_53AA9 >> 32));
         sub_127A9();
     }
@@ -85,8 +85,8 @@ int map_window_run(void)
             memmove(buf + ROW_STRIDE * (uint32_t)i + BUF_OFF_2,
                     save + 320u * (uint32_t)i + SAVE_OFF_2, 0x136u);
         for (i = 0; i < 2; ++i)
-            sub_4ED34((int)(uintptr_t)&slide[offs[i]],
-                      (int)(uintptr_t)(base89 + *(const uint32_t *)
+            sub_4ED34(&slide[offs[i]],
+                      (const void *)(base89 + *(const uint32_t *)
                           (const void *)(base89 + 12u * (uint32_t)sel[i])),
                       456);
         sub_11EB0((char *)0xA0504, 320, (char *)buf + VIEW_SRC_OFF, 456, 0x138u, 192);
@@ -101,7 +101,7 @@ int map_window_run(void)
                 dword_53C17 = (uint32_t)tick_word();
                 if ((uint32_t)dword_53A51 > 1) {
                     sub_1297D();
-                    sub_11EEE((int)(uintptr_t)buf + VIEW_SRC_OFF, 456, 13, 8,
+                    sub_11EEE(buf + VIEW_SRC_OFF, 456, 13, 8,
                               (int)qword_53AA9, (int)(qword_53AA9 >> 32));
                     sub_127A9();
                 }
@@ -136,8 +136,8 @@ int map_window_run(void)
                     int v13 = 3 * (int)sel[i];
                     if (i == (int)dword_53C57)
                         v13 += (int)dword_53C13 / 2;
-                    sub_4ED34((int)(uintptr_t)&slide[offs[i]],
-                              (int)(uintptr_t)(base89 + *(const uint32_t *)
+                    sub_4ED34(&slide[offs[i]],
+                              (const void *)(base89 + *(const uint32_t *)
                                   (const void *)(base89 + 4u * (uint32_t)v13)),
                               456);
                 }

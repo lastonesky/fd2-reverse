@@ -188,9 +188,9 @@ int action_menu_run(int rec)
     const uint8_t *e;       /* selected action's 7-byte 0x619FD entry       */
     int i, sel, choice, step, count, v9, v15, lo, hi;
 
-    dword_53C5B = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C5F = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C63 = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    dword_53C5B = guest_malloc(0xFA00u);
+    dword_53C5F = guest_malloc(0xFA00u);
+    dword_53C63 = guest_malloc(0xFA00u);
     memmove((void *)(uintptr_t)dword_53C5F,
             (const void *)0xA0000u, 0xFA00u);
     memmove((void *)(uintptr_t)dword_53C63,

@@ -34,7 +34,7 @@
  * (stream, sub, 0xA0000, 320, 205, 76, 74, 19, 1). */
 static int vm(int sub)
 {
-    return sub_15F84((int)dword_53A79, sub, 0xA0000, 320, 205, 76, 74, 19, 1);
+    return sub_15F84(dword_53A79, sub, 0xA0000, 320, 205, 76, 74, 19, 1);
 }
 
 /* 0x23296 - funcs_25E23[5] */
@@ -555,7 +555,7 @@ void scene_state_26(void)
     sub_1366A(82);
     vm(15);
     dword_51A83 = 0;
-    sub_1C2DA(0, 19, 1, (int)(uintptr_t)tmp);
+    sub_1C2DA(0, 19, 1, tmp);
     sub_22253(1, 255, 255, base[0], base[1]);
     vm(16);
     dword_51A83 = 0;
@@ -778,11 +778,11 @@ void scene_state_22(void)
         sub_11DF2(0, 255, i);
         j___delay(4);
     }
-    dword_53A51 = (uint32_t)(uintptr_t)res_load("FDFIELD.DAT",
+    dword_53A51 = res_load("FDFIELD.DAT",
                     (void *)(uintptr_t)dword_53A51, 69);
-    dword_53A5D = (uint32_t)(uintptr_t)res_load("FDSHAP.DAT",
+    dword_53A5D = res_load("FDSHAP.DAT",
                     (void *)(uintptr_t)dword_53A5D, 46);
-    dword_53A69 = (uint32_t)(uintptr_t)res_load("FDSHAP.DAT",
+    dword_53A69 = res_load("FDSHAP.DAT",
                     (void *)(uintptr_t)dword_53A69, 47);
     sub_4DF4C((uint8_t *)(uintptr_t)dword_53A51);   /* util_mask_recolor */
     sub_10652();                                    /* world_load_tiles */

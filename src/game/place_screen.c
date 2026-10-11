@@ -44,7 +44,7 @@ int place_screen_run(void *src)
                                    (int)dword_53C03, -31);
     v5 = ent[0];
 
-    dword_53F66 = (uint32_t)(uintptr_t)res_load(aFdotherDat,
+    dword_53F66 = res_load(aFdotherDat,
                     (void *)(uintptr_t)dword_53F66, 13);
     res_blit6((void *)(uintptr_t)0xA0000u, 320,
               (void *)(uintptr_t)dword_53F66, 0);
@@ -129,7 +129,7 @@ int place_screen4_run(void *src)
                                    (int)dword_53C03, -31);
     v5 = ent[0];
 
-    dword_53F66 = (uint32_t)(uintptr_t)res_load(aFdotherDat,
+    dword_53F66 = res_load(aFdotherDat,
                     (void *)(uintptr_t)dword_53F66, 14);
     res_blit6((void *)(uintptr_t)0xA0000u, 320,
               (void *)(uintptr_t)dword_53F66, 0);

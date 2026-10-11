@@ -105,10 +105,10 @@ void item_menu_figure_play(int rec, int group)
     dword_5413F[0] = 0;
     dword_54143 = 0;
     dword_54147 = 0;
-    dword_5413F[0] = (uint32_t)(uintptr_t)res_load(aBgDat, NULL, 0);
-    dword_54143 = (uint32_t)(uintptr_t)res_load(
+    dword_5413F[0] = res_load(aBgDat, NULL, 0);
+    dword_54143 = res_load(
         aBgDat, (void *)(uintptr_t)dword_54143, 1);
-    dword_54147 = (uint32_t)(uintptr_t)res_load(
+    dword_54147 = res_load(
         aBgDat, (void *)(uintptr_t)dword_54147, 2);
 
     work = (uint8_t *)guest_malloc(WORK_SIZE);

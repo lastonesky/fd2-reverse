@@ -205,8 +205,8 @@ void ani_run_frame(short count, const unsigned char *cmds)
 void ani_target_set(uint16_t size, void *screen, void *palette)
 {
     word_52760  = size;
-    dword_52762 = (uint32_t)(uintptr_t)screen;
-    dword_52766 = (uint32_t)(uintptr_t)palette;
+    dword_52762 = screen;
+    dword_52766 = palette;
 }
 
 /* 0x20421 - play the ANI.DAT container.  See ani.h for the format. */

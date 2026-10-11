@@ -282,7 +282,7 @@ void ev6_34D2F(int arg)
 /* 0x34DD0 - idx[30]: clear records 12..33, seed record 11, two vm_runs. */
 void ev6_34DD0(int arg)
 {
-    uint32_t v7;
+    uint8_t *v7;
     int i;
     (void)arg;
     for (i = 12; i < 34; i++)

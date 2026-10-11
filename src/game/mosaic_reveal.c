@@ -26,7 +26,7 @@ void reveal_bank_load(void)
         return;
 
     dword_53B0F = 0;
-    dword_53B0F = (uint32_t)(uintptr_t)res_load(aFdotherDat, NULL, 64);
+    dword_53B0F = res_load(aFdotherDat, NULL, 64);
 }
 
 /* 0x1A7F1 - release the bank (original: `push dword_53B0F; call 0x3776E`). */

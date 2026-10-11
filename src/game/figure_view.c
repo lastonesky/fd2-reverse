@@ -263,7 +263,7 @@ void figure_frame_run(const void *figure, void *work, int frames)
  * dword_54133!=0; modelled as 0. */
 int figure_attack_play(int attacker, int defender, const uint8_t *figure,
                        const uint8_t *base, uint8_t *work, uint8_t *screen,
-                       const void *portrait, int snd)
+                       const void *portrait, const void *snd)
 {
     int      off[6];   /* pixel shake offsets, dword_5266C = {0,4,9,14,18,14} */
     int      strip[6]; /* strip index step,    dword_52684 = {0,2,4,6,8,10}   */
@@ -615,7 +615,7 @@ void figure_attack_view(int attacker, int defender)
     next_flag = *((const uint8_t *)fig_att_next + 1);
 
     pal_fade_out();
-    dword_5413B = (uint32_t)(uintptr_t)res_load(
+    dword_5413B = res_load(
         aBgDat, (void *)(uintptr_t)dword_5413B, bg_att);
     if (dword_54133 == 0)
         ui_status_panel_at((int)(uintptr_t)screen, attacker);
@@ -627,18 +627,15 @@ void figure_attack_view(int attacker, int defender)
         dword_5413F[0] = 0;
         dword_54143 = NULL;
         dword_54147 = NULL;
-        dword_54137 = (uint32_t)(uintptr_t)res_load(aBgDat, NULL, bg_def);
-        dword_5413F[0] =
-            (uint32_t)(uintptr_t)res_load(aBgDat,
+        dword_54137 = res_load(aBgDat, NULL, bg_def);
+        dword_5413F[0] = res_load(aBgDat,
                                           (void *)(uintptr_t)dword_5413F[0], 0);
-        dword_54143 =
-            (uint32_t)(uintptr_t)res_load(aBgDat,
+        dword_54143 = res_load(aBgDat,
                                           (void *)(uintptr_t)dword_54143, 1);
-        dword_54147 =
-            (uint32_t)(uintptr_t)res_load(aBgDat,
+        dword_54147 = res_load(aBgDat,
                                           (void *)(uintptr_t)dword_54147, 2);
         if (rec1[6] == 0) {
-            uint32_t tmp = dword_5413B;
+            uint8_t *tmp = dword_5413B;
 
             dword_5413B = dword_54137;
             dword_54137 = tmp;
@@ -653,8 +650,8 @@ void figure_attack_view(int attacker, int defender)
     }
 
     if (dword_54133 == 0) {
-        dword_5414B = (uint32_t)(uintptr_t)ev5_314DE(fig_att_next);
-        dword_5414F = (uint32_t)(uintptr_t)ev5_314DE(fig_def_next);
+        dword_5414B = ev5_314DE(fig_att_next);
+        dword_5414F = ev5_314DE(fig_def_next);
     }
 
     figure_attack_scroll(attacker, next_flag, fig_att, fig_def, work, screen,
@@ -756,10 +753,10 @@ void figure_scene_play(int unit)
     fig_a = res_load(aFiganiDat, NULL, 3 * group);
     fig_b = res_load(aFiganiDat, NULL, 3 * group + 1);
     pal_fade_out();
-    dword_5413B = (uint32_t)(uintptr_t)res_load(aBgDat, NULL, cell[6]);
+    dword_5413B = res_load(aBgDat, NULL, cell[6]);
     ui_status_panel_at((int)(uintptr_t)screen, unit);
     rle_decode((const void *)(uintptr_t)dword_5413B, 0, 50, screen, 320, -1);
-    dword_5414B = (uint32_t)(uintptr_t)ev5_314DE(fig_b);
+    dword_5414B = ev5_314DE(fig_b);
     figure_attack_scroll(unit, 1, fig_a, fig_a, work, screen, tai);
 
     for (i = 0; i < fig_b[0]; ++i) {
@@ -872,11 +869,10 @@ void figure_party_show(int unit, int mode, int count, const uint8_t *units)
     dword_5413F[0] = 0;
     dword_54143    = 0;
     dword_54147    = 0;
-    dword_5413F[0] =
-        (uint32_t)(uintptr_t)res_load(aBgDat, NULL, 0);
-    dword_54143 = (uint32_t)(uintptr_t)res_load(
+    dword_5413F[0] = res_load(aBgDat, NULL, 0);
+    dword_54143 = res_load(
         aBgDat, (void *)(uintptr_t)dword_54143, 1);
-    dword_54147 = (uint32_t)(uintptr_t)res_load(
+    dword_54147 = res_load(
         aBgDat, (void *)(uintptr_t)dword_54147, 2);
 
     screen = guest_malloc(SCR_SIZE);
@@ -894,7 +890,7 @@ void figure_party_show(int unit, int mode, int count, const uint8_t *units)
     i      = 3 * rec[7];
     fig_a  = res_load(aFiganiDat, NULL, i);
     fig_b  = res_load(aFiganiDat, NULL, i + 2);
-    dword_5414B = (uint32_t)(uintptr_t)ev5_314DE(fig_b);
+    dword_5414B = ev5_314DE(fig_b);
     pal_fade_out();
 
     for (i = 0; i < count; ++i) {
@@ -1054,8 +1050,7 @@ void figure_demo_show(int unit, int mode, int count, const uint8_t *units)
 
     fd_plate = res_load(aFdotherDat, NULL, mode + 33);
     dword_54153 = 0;
-    dword_54153 =
-        (uint32_t)(uintptr_t)res_load(aFdotherDat, NULL, tab[12 + row]);
+    dword_54153 = res_load(aFdotherDat, NULL, tab[12 + row]);
 
     figure_attack_scroll(unit, 1, fig_a, NULL, work, screen, tai);
     figure_play(unit, mode, fig_b, fig_b, work, screen, bg, tai);
@@ -1297,7 +1292,7 @@ void figure_effect_play(int unit, int mode, int count, const uint8_t *units)
     fig_a = res_load(aFiganiDat, NULL, i);
     fig_b = res_load(aFiganiDat, NULL, i + 2);
     dword_54153 = 0;
-    dword_54153 = (uint32_t)(uintptr_t)res_load(aFdotherDat, NULL, ta4[mode]);
+    dword_54153 = res_load(aFdotherDat, NULL, ta4[mode]);
     if (*(const uint16_t *)fig_b == 0)
         fig_b = res_load(aFiganiDat, fig_b, i + 1);
     pal_fade_out();

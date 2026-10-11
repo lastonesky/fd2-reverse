@@ -98,11 +98,11 @@ typedef uint32_t (*rand_fn)(void);
 #define REC_STRIDE 80
 #define VGA_BASE   0x000A0000u
 
-static void vm(int stream, int sub, int addr)
+static void vm(void *stream, int sub, int addr)
 {
-    ORIG_VM_RUN((void *)(uintptr_t)stream, sub, addr, 320, 205, 76, 74, 19, 1);
+    ORIG_VM_RUN(stream, sub, addr, 320, 205, 76, 74, 19, 1);
 }
-static void vm_sub(int stream, int sub) { vm(stream, sub, VGA_BASE); }
+static void vm_sub(void *stream, int sub) { vm(stream, sub, VGA_BASE); }
 
 /* ---------------------------------------------------------------- 0x352CA */
 void ev3_352CA(int arg)
@@ -378,7 +378,7 @@ void ev3_35F88(int arg)
 /* ---------------------------------------------------------------- 0x35FCF */
 void ev3_35FCF(int arg)
 {
-    uint32_t rec = dword_53A45 + REC_STRIDE * (uint32_t)arg;
+    uint8_t *rec = dword_53A45 + REC_STRIDE * (uint32_t)arg;
 
     if (*(uint8_t *)(uintptr_t)(rec + 6) == 0)
         return;

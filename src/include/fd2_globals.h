@@ -1083,4 +1083,5 @@ extern uint8_t fd2_lowmem[0x100000]; /* real-mode IVT+BDA mirror */
 #define dword_53D34 (*(uint8_t *)&fd2_data1[0x3D34])
 #define dword_53DFC (*(uint8_t *)&fd2_data1[0x3DFC])
 
+#include "fd2_native.h" /* de-guest phase C: real pointer cells */
 #endif /* FD2_GLOBALS_H */

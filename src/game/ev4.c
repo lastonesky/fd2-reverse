@@ -122,7 +122,7 @@ void ev4_1366A(int sel)
                     ORIG_FLUSH();
                 }
             } else {
-                uint32_t save;
+                uint8_t *save;
                 ORIG_WAIT(1);
                 ORIG_MAP_RENDER((uint8_t *)(uintptr_t)MAP_BASE, 456, 13, 8,
                                 (int)dword_53AA9, (int)dword_53AAD);
@@ -264,7 +264,7 @@ void ev4_12263(void)
 void ev4_1E1DC(int rec)
 {
     uint8_t  v11[4];
-    uint32_t base = dword_53A45 + REC_STRIDE * (uint32_t)rec;
+    uint8_t  *base = dword_53A45 + REC_STRIDE * (uint32_t)rec;
     int      v5 = *(uint8_t *)(uintptr_t)base;
     int      v6 = *(uint8_t *)(uintptr_t)(base + 1);
     int      i;

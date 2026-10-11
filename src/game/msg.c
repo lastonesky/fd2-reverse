@@ -66,9 +66,9 @@ typedef void  (*blit_band_fn)(int y, void *dst, void *src);
 
 void msg_open_portrait(int id)
 {
-    dword_53C5B = (uint32_t)(uintptr_t)guest_malloc(SCREEN_BYTES);
-    dword_53C5F = (uint32_t)(uintptr_t)guest_malloc(SCREEN_BYTES);
-    dword_53C63 = (uint32_t)(uintptr_t)guest_malloc(SCREEN_BYTES);
+    dword_53C5B = guest_malloc(SCREEN_BYTES);
+    dword_53C5F = guest_malloc(SCREEN_BYTES);
+    dword_53C63 = guest_malloc(SCREEN_BYTES);
 
     memmove((void *)(uintptr_t)dword_53C5F,
             (const void *)(uintptr_t)VGA_BASE, SCREEN_BYTES);
@@ -88,7 +88,7 @@ void msg_open_portrait(int id)
     default:   dword_53C67 = 0x9017; break;
     }
 
-    dword_53A85 = (uint32_t)(uintptr_t)
+    dword_53A85 = 
         RES_LOAD("DATO.DAT", (void *)(uintptr_t)dword_53A85, id);
 
     /* the resource's first byte is the header length; the decode stream

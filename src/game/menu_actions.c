@@ -453,7 +453,7 @@ void menu_show_map_pan(void)
 {
     ORIG_205DA();
     dword_53B13 = 0;
-    dword_53B13 = (uint32_t)(uintptr_t)ORIG_RESLOAD("FDOTHER.DAT", NULL, 88);
+    dword_53B13 = ORIG_RESLOAD("FDOTHER.DAT", NULL, 88);
     ORIG_135DD(5, 0);
     menu_vm(1);
     memset((void *)(uintptr_t)dword_53A49, 0, 0x25680u);

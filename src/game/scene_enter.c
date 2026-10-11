@@ -16,7 +16,7 @@
 /* vm_run with the fixed tail tuple used by the whole scene family. */
 static int vm(int sub)
 {
-    return sub_15F84((int)dword_53A79, sub, 0xA0000, 320, 205, 76, 74, 19, 1);
+    return sub_15F84(dword_53A79, sub, 0xA0000, 320, 205, 76, 74, 19, 1);
 }
 
 /* 0x32FB2 - funcs_25E3A[3] */

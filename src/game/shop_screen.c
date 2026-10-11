@@ -29,9 +29,9 @@ void shop_items_paint(int count, const uint8_t *items, uint8_t half_price)
 {
     int i;
 
-    dword_53C5B = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C5F = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C63 = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    dword_53C5B = guest_malloc(0xFA00u);
+    dword_53C5F = guest_malloc(0xFA00u);
+    dword_53C63 = guest_malloc(0xFA00u);
 
     memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u,
             0xFA00u);
@@ -118,9 +118,9 @@ int shop_party_run(int count, const uint8_t *members)
     int ret = 0;
     int i;
 
-    dword_53C5B = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C5F = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C63 = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    dword_53C5B = guest_malloc(0xFA00u);
+    dword_53C5F = guest_malloc(0xFA00u);
+    dword_53C63 = guest_malloc(0xFA00u);
 
     memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u,
             0xFA00u);
@@ -129,7 +129,7 @@ int shop_party_run(int count, const uint8_t *members)
 
     dword_53F4E = 0;
     dword_53C57 = 0;
-    dword_53F62 = (uint32_t)(uintptr_t)members;
+    dword_53F62 = members;
     dword_53F5E = (uint32_t)count;
 
     /* panel sub-image at dword_53F66 + [dword_53F66+70], blitted at +35845. */
@@ -189,9 +189,9 @@ int shop_party_equip_run(int count, const uint8_t *members,
     int ret = 0;
     int i;
 
-    dword_53C5B = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C5F = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C63 = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    dword_53C5B = guest_malloc(0xFA00u);
+    dword_53C5F = guest_malloc(0xFA00u);
+    dword_53C63 = guest_malloc(0xFA00u);
 
     memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u,
             0xFA00u);
@@ -200,7 +200,7 @@ int shop_party_equip_run(int count, const uint8_t *members,
 
     dword_53F4E = 0;
     dword_53C57 = 0;
-    dword_53F62 = (uint32_t)(uintptr_t)members;
+    dword_53F62 = members;
     dword_53F5E = (uint32_t)count;
 
     /* panel sub-image at dword_53F66 + [dword_53F66+70], blitted at +35845. */
@@ -490,7 +490,7 @@ int shop_place_buy_run(int count, const uint8_t *items)
 
         saved_window = (int32_t)dword_53F5E;
         dword_53F5E = (uint32_t)n;
-        dword_53F62 = (uint32_t)(uintptr_t)v12;
+        dword_53F62 = list;
         msg_open_portrait(byte_52387[dword_53F4A]);
         vm_run(dword_53A7D, *((int16_t *)&v12[11] + dword_53F4A), 0xA94CC,
                320, 205, 76, 74, 19, 1);
@@ -678,7 +678,7 @@ int place_menu_run(const char *src)
     else if (dword_53F4A == 5)
         index = 63;
 
-    dword_53F66 = (uint32_t)(uintptr_t)res_load(aFdotherDat,
+    dword_53F66 = res_load(aFdotherDat,
                     (void *)(uintptr_t)dword_53F66, index);
     res_blit6((void *)(uintptr_t)0xA0000u, 320,
               (void *)(uintptr_t)dword_53F66, 0);

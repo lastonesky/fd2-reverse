@@ -270,6 +270,7 @@ def gen_globals(items, strings_set, unk_needed):
         if addr:
             emit(nm, addr)
     out.append('')
+    out.append('#include "fd2_native.h" /* de-guest phase C: real pointer cells */')
     out.append('#endif /* FD2_GLOBALS_H */')
     open(os.path.join(INC, 'fd2_globals.h'), 'w', encoding='utf-8').write('\n'.join(out) + '\n')
     return len(seen), sorted(set(warns)), sorted(set(dup)) + ['skipped:' + n for n in sorted(set(skipped_odd))]

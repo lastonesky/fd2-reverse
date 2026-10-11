@@ -63,29 +63,27 @@ int main(int argc, char **argv)
     /* ---- 1. AIL bring-up (0x25C01..0x25C5E) ------------------------ */
     AIL_startup();                                   /* 0x25C01 */
     mdi = AIL_install_MDI_INI();                     /* 0x25C06 */
-    dword_53ED8 = (uint32_t)(uintptr_t)mdi;
+    dword_53ED8 = mdi;
     if (mdi != NULL) {
         byte_53EF0 = 1;
-        dword_53ED0 = (uint32_t)(uintptr_t)
+        dword_53ED0 = 
             AIL_allocate_sequence_handle(mdi);       /* 0x25C1D */
     }
     dig = AIL_install_DIG_INI();                     /* 0x25C2B */
-    dword_53EDC = (uint32_t)(uintptr_t)dig;
+    dword_53EDC = dig;
     if (dig != NULL) {
         byte_53EF1 = 1;
-        dword_53EE4 = (uint32_t)(uintptr_t)
+        dword_53EE4 = 
             AIL_allocate_sample_handle(dig);         /* 0x25C43 */
-        dword_53EE8 = (uint32_t)(uintptr_t)
+        dword_53EE8 = 
             AIL_allocate_sample_handle(dig);         /* 0x25C50 */
     }
 
     /* ---- 2. resource loads (0x25C63..0x25D2E) ----------------------
-     * fd2_* globals hold heap pointers as 32-bit values (original idiom);
-     * res_load frees the old buffer and returns the new one, so each line
-     * is "reload in place". */
+     * res_load frees the old buffer and returns the new one, so each line is
+     * "reload in place"; the slots are real pointers on native (de-guest C1). */
 #define RELOAD(slot, file, idx) \
-    ((slot) = (uint32_t)(uintptr_t)res_load((file), \
-              (void *)(uintptr_t)(slot), (idx)))
+    ((slot) = res_load((file), (void *)(slot), (idx)))
     RELOAD(dword_53EEC, aFdotherDat, 31);   /* 0x25C63 sound-effect pack */
     RELOAD(dword_53A4D, aFdotherDat,  1);   /* 0x25C7D */
     RELOAD(dword_53A89, aFdotherDat,  2);   /* 0x25C97 */
@@ -97,9 +95,9 @@ int main(int argc, char **argv)
 #undef RELOAD
 
     /* ---- 3. heaps (0x25D33..0x25D61) ------------------------------- */
-    dword_53AD5 = (uint32_t)(uintptr_t)malloc(0x20);      /* 0x25D35 */
-    dword_53A49 = (uint32_t)(uintptr_t)malloc(0x25680);   /* 0x25D47: push 0x25680 */
-    dword_53BF7 = (uint32_t)(uintptr_t)malloc(0xA00);     /* 0x25D59: 80*32 records */
+    dword_53AD5 = malloc(0x20);      /* 0x25D35 */
+    dword_53A49 = malloc(0x25680);   /* 0x25D47: push 0x25680 */
+    dword_53BF7 = malloc(0xA00);     /* 0x25D59: 80*32 records */
 
     /* ---- 4. VGA mode 13h (0x25D66..0x25D80) ------------------------
      * word_53A8D is the game's REGS cell for int386: AX at offset 0. */

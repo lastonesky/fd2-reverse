@@ -81,7 +81,7 @@ void ev5_13536(void)
 void *ev5_1D4CB(void)
 {
     dword_53B13 = 0;
-    dword_53B13 = (uint32_t)(uintptr_t)ORIG_RES_LOAD("FDOTHER.DAT", NULL, 80);
+    dword_53B13 = ORIG_RES_LOAD("FDOTHER.DAT", NULL, 80);
     return (void *)(uintptr_t)dword_53B13;
 }
 
@@ -118,7 +118,7 @@ void ev5_25089(void)
 {
     uint32_t i;
     for (i = 0; i < dword_53BFB; i++) {
-        uint32_t r = REC * i + dword_53BF7;
+        uint8_t *r = REC * i + dword_53BF7;
         *(uint8_t *)(uintptr_t)(r + 5) = 0;
         *(uint16_t *)(uintptr_t)(r + 64) = *(uint16_t *)(uintptr_t)(r + 66);
         *(uint16_t *)(uintptr_t)(r + 68) = *(uint16_t *)(uintptr_t)(r + 70);
@@ -188,7 +188,7 @@ int ev5_2B749(const uint8_t *p)
 void ev5_26C9B(void *dst, int pitch, int index)
 {
     uint8_t *d = (uint8_t *)dst;
-    uint32_t base = dword_53F66 + *(uint32_t *)(uintptr_t)(dword_53F66 + 14) + 4;
+    uint8_t *base = dword_53F66 + *(uint32_t *)(uintptr_t)(dword_53F66 + 14) + 4;
     uint8_t *s = (uint8_t *)(uintptr_t)(base + 6u * (uint32_t)index);
     int      i;
     for (i = 0; i < 9; i++) {
@@ -310,7 +310,7 @@ void ev5_205BE(void)
     int i;
     dword_53ECC = 2;
     for (i = 0; i < (int)dword_53BEB; i++) {
-        uint32_t r = dword_53A45 + REC * (uint32_t)i;
+        uint8_t *r = dword_53A45 + REC * (uint32_t)i;
         if (*(uint8_t *)(uintptr_t)(r + 6) == 0 && (*(uint8_t *)(uintptr_t)(r + 5) & 1) == 0)
             dword_53ECC = *(uint8_t *)(uintptr_t)(r + 6);
     }
@@ -368,7 +368,7 @@ int ev5_1B653(uint8_t *out)
 {
     int i, v5 = 0;
     for (i = 0; i < (int)dword_53BEB; i++) {
-        uint32_t r = dword_53A45 + REC * (uint32_t)i;
+        uint8_t *r = dword_53A45 + REC * (uint32_t)i;
         if ((*(uint8_t *)(uintptr_t)(r + 5) & 1) == 0
             && *(uint8_t *)(uintptr_t)(r + 49) == 3
             && *(uint16_t *)(uintptr_t)(r + 64) == 0)

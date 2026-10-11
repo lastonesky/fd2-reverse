@@ -9,29 +9,31 @@ CC=${CC:-gcc}
 FLAGS="-fsyntax-only -std=c99"
 WARN="-Wall -Wextra"
 
-# Transitional 32-bit build tolerances (assumption B, uncertainties §5):
-#  - migrated port/ sources typed several pointer cells as uint32_t per-file while
-#    the unified fd2_globals headers give them pointer types; on the 32-bit target
-#    those int<->pointer conversions are bit-identical;
-#  - the same sources compare int/uint32 freely (sign-compare).
-# Both are cleaned up in the de-guest stage rather than blocking the compile now.
+# Transitional tolerance is now needed ONLY by the 32-bit hybrid profile
+# (FD2_GUEST_FIXED): it deliberately keeps the 4-byte LE segment-mirror cells
+# and the machine-code ORIG_* callbacks, whose pointer<->int casts are bit-exact
+# on the -m32 target.  The standalone/native profile is checked STRICT (no
+# int-conversion suppressions) since de-guest phase C1 moved every pointer cell
+# to real C storage (src/include/fd2_native.h, src/fd2_native.c).
+# sign-compare tolerance remains for both profiles until the C4 ORIG_* sweep.
 TOLERANT="-Wno-int-conversion -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast -Wno-sign-compare"
 
 hr() { printf '%s\n' "------------------------------------------------------------"; }
 
-echo "########## standalone: game modules ($CC) ##########"
-$CC $FLAGS $WARN $TOLERANT src/game/*.c 2>&1 | grep -E "error:" | head -40
-echo "errors: $($CC $FLAGS $TOLERANT src/game/*.c 2>&1 | grep -c 'error:')"
+echo "########## standalone (native): game modules STRICT (no int-conv) ##########"
+$CC $FLAGS $WARN -Wno-sign-compare src/game/*.c src/fd2_native.c 2>&1 | grep -E "error:" | head -40
+echo "errors: $($CC $FLAGS $WARN -Wno-sign-compare src/game/*.c src/fd2_native.c 2>&1 | grep -c 'error:')"
 
-echo "########## hybrid: game modules ##########"
-$CC $FLAGS -DFD2_GUEST_FIXED $WARN $TOLERANT src/game/*.c 2>&1 | grep -E "error:" | head -40
-echo "errors: $($CC $FLAGS -DFD2_GUEST_FIXED $TOLERANT src/game/*.c 2>&1 | grep -c 'error:')"
+hr
+echo "########## hybrid (FD2_GUEST_FIXED): game modules ##########"
+$CC $FLAGS -DFD2_GUEST_FIXED $WARN $TOLERANT src/game/*.c src/fd2_native.c 2>&1 | grep -E "error:" | head -40
+echo "errors: $($CC $FLAGS -DFD2_GUEST_FIXED $TOLERANT src/game/*.c src/fd2_native.c 2>&1 | grep -c 'error:')"
 
 if [ "${1:-}" = "--full" ]; then
   hr
   echo "########## -Werror: all modules + generated (both profiles) ##########"
   for P in "" "-DFD2_GUEST_FIXED"; do
-    $CC $FLAGS -Werror $TOLERANT $P src/game/*.c src/fd2_image.c src/fd2_relocate.c
+    $CC $FLAGS -Werror $TOLERANT $P src/game/*.c src/fd2_native.c src/fd2_image.c src/fd2_relocate.c
     echo "profile ${P:-standalone} rc=$?"
   done
   echo "########## header self-test ##########"

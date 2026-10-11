@@ -94,7 +94,7 @@ void figure_frame_run(const void *figure, void *work, int frames);
  * on the early-out of the dword_54133==1 mode, otherwise the last drain value. */
 int figure_attack_play(int attacker, int defender, const uint8_t *figure,
                        const uint8_t *base, uint8_t *work, uint8_t *screen,
-                       const void *portrait, int snd);
+                       const void *portrait, const void *snd);
 
 /* 0x2E95B - reload FD2.TMP into the global DATO buffer dword_53A61 (the whole
  * 0x32A00-byte file).  Called by figure_attack_view; returns the fclose

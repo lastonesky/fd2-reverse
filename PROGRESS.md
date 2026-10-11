@@ -2887,3 +2887,35 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 - 145 个寄存器 ABI 原型（CRT/AIL/数学库内部，按范围决策多数不必还原）；
 - 255 个函数无直接调用点（纯表分派/回调），arity 待按表站点证据补；
 - big5 的 43 条"字符串"多为 data-in-code，语义未逐条核。
+
+---
+
+## 5. 阶段 C：去 guest 化（进行中）
+
+目标：源码不再依赖 32 位 flat guest（`port/docs/TRANSLATION.md` §6 阶段 C）。
+顺序（已确认）：**C1 指针数据模型 → C4 删 `ORIG_*` → C2 分派表 → C3 VGA/低内存/平台缝**。
+每步验收：standalone/native 严格 64 位 `gcc -fsyntax-only -std=c99 -Wall -Wextra`
+（**不加** int-conversion 宽容）0 error；`FD2_GUEST_FIXED` 32 位 hybrid 不回归；
+`tools/check_compile.sh --full` 两 profile `-Werror` 全绿。
+
+### 5.1 C1 完成：指针单元改用真实 C 存储（本轮）
+
+- 新增 `src/include/fd2_native.h` + `src/fd2_native.c`：把 45 个指针单元
+  （AIL 句柄 `53ED0/53ED8/53EDC/53EE4/53EE8`、0xFA00 三屏暂存 `53C5B/F/63`、
+  资源缓冲 `53EEC/53A4D/…/53F66`、记录表 `53A49/53BF7/53C1B`、图集 `53A61`、
+  人物屏 `54137/5413B/5414B/5414F/54153` 等）在 standalone profile 下由段镜像
+  4 字节宏改为真实 `uint8_t*`/`void*` 变量；`dword_5413F[3]` 与同址别名
+  `dword_54143/54147` 用数组元素统一，避免 64 位下重叠。
+- `fd2_globals.h` 末尾 `#include "fd2_native.h"`（`tools/gen_headers.py` 同步）。
+- 32 个源文件、约 100 个赋值点去掉 `(uint32_t)(uintptr_t)` 位级转换；相应局部
+  `uint32_t` 改为指针类型；`figure_attack_play` 的 `snd` 参数改为指针；
+  `dword_53C1B`/`dword_53F62` 为只读视图，取 `const uint8_t *`。
+- 验收：`tools/check_compile.sh`（默认）standalone strict + hybrid 均 0 error；
+  `--full` 两 profile `-Werror` rc=0，伞头自检通过。
+- 过渡期宽容现仅 hybrid 需要（bit-exact 的 4 字节镜像 + `ORIG_*` 回调）。
+
+### 5.2 待办
+
+- **C4**：420 个 `ORIG_*` 调用点（100 个别名）全部换成已还原 C 函数/libc。
+- **C2**：17 张 `funcs_*` 表改真实函数指针数组；`fd2_relocate` 的 4 字节写删除。
+- **C3**：173 处 `0xA0000/0xA0504` VGA 与 `fd2_lowmem`/`MEMORY` 抽 framebuffer/平台缝。

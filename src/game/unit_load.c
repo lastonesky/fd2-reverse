@@ -172,7 +172,7 @@ int unit_entry_data(int idx, void *fh)
     }
 
     dword_53B17[0] = (uint32_t)idx;
-    dword_53A61 = (uint32_t)(uintptr_t)guest_malloc(ATLAS_SIZE);
+    dword_53A61 = guest_malloc(ATLAS_SIZE);
     ORIG_FSEEK(fh, (long)tbl[0], 0);
     ORIG_FREAD((uint8_t *)(uintptr_t)(dword_53A61 + 1920), 1, (unsigned)len, fh);
     for (i = 0; i < 12; i++)
@@ -305,7 +305,7 @@ int unit_sprites_build(int idx)
         printf("File 'FDICON.B24' error !!\n");
         exit(1);
     }
-    dword_53A59 = (uint32_t)(uintptr_t)
+    dword_53A59 = 
         ORIG_RES_LOAD("FDFIELD.DAT", (void *)(uintptr_t)dword_53A59,
                       3 * (int)dword_53C03 + 2);
     for (i = 0; i < dword_53BE3; i++) {

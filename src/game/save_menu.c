@@ -43,9 +43,9 @@ int save_slot_select(int base, int wait_keys)
     int i;
     int key;
 
-    dword_53C5B = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C5F = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
-    dword_53C63 = (uint32_t)(uintptr_t)guest_malloc(0xFA00u);
+    dword_53C5B = guest_malloc(0xFA00u);
+    dword_53C5F = guest_malloc(0xFA00u);
+    dword_53C63 = guest_malloc(0xFA00u);
 
     memmove((void *)(uintptr_t)dword_53C5F, (const void *)(uintptr_t)0xA0000u,
             0xFA00u);
@@ -201,7 +201,7 @@ void save_slot_load(void)
                             *(uint8_t *)(uintptr_t)(dword_53BF7 + 80 * i + 7),
                             fp);                            /* 0x11019    */
                     fclose(fp);
-                    dword_53F56 = (uint32_t)(uintptr_t)tbl_ptr(
+                    dword_53F56 = tbl_ptr(
                         (void *)&fd2_data2[0x238D], 31,
                         (int)dword_53C03, -31);             /* 0x4E809    */
                     ret = -1;

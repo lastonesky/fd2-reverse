@@ -53,7 +53,7 @@ int rec_find(int want)
 
     for (i = 0; i < dword_53BEB; i++) {
         if (rec[8] == (uint8_t)want) {
-            dword_53C1B = (uint32_t)(uintptr_t)rec;
+            dword_53C1B = (uint8_t *)rec;
             if (rec_flag(i) == 0)
                 return i;
         }
@@ -66,7 +66,7 @@ int rec_find(int want)
         rec = (const uint8_t *)(uintptr_t)dword_53BF7;
         for (i = 0; i < dword_53BFB; i++) {
             if (rec[8] == (uint8_t)want)
-                dword_53C1B = (uint32_t)(uintptr_t)rec;
+                dword_53C1B = (uint8_t *)rec;
             rec += REC_STRIDE;
         }
     }
@@ -236,14 +236,14 @@ int rec_flag_set1(int index)
  * the dispatch in sub_117E7 pushes one; returns the table base. */
 uint32_t rec_status_mask_records(void)
 {
-    uint32_t base = dword_53A45;
+    uint8_t *base = dword_53A45;
     int i;
 
     for (i = 0; i < 18; i++) {
         uint8_t *rec = (uint8_t *)((uintptr_t)(base + REC_STRIDE * (uint32_t)(i + 10)));
         rec[52] &= 0x80;
     }
-    return base;
+    return (uint32_t)(uintptr_t)base;
 }
 
 /* 0x35009 - the single-record twin: record 14 gets byte +52 = 0x83, and the

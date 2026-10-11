@@ -51,8 +51,8 @@ void ev_script_run(int rec_index, int steps, int script)
                     return;
                 sub_1956B(rec[7]);                  /* msg_open_portrait */
                 dword_53AE1 = (uint32_t)arg;
-                sub_15F84((int)dword_53A7D, 435, 0xA9F23, 320, 205, 76, 74, 19, 1);
-                sub_16559((int)(uintptr_t)dword_53A85, dword_53C67, 0);
+                sub_15F84(dword_53A7D, 435, 0xA9F23, 320, 205, 76, 74, 19, 1);
+                sub_16559(dword_53A85, dword_53C67, 0);
                 sub_16C57(0);                       /* dlg_wait_key */
                 sub_196CB();                        /* ev4_196CB */
                 dword_53BF3 += dword_53AE1;
@@ -62,7 +62,7 @@ void ev_script_run(int rec_index, int steps, int script)
                 ((void (*)(int))funcs_1199C[arg])(rec_index);
                 break;
             case 3:
-                sub_15F84((int)dword_53A79, arg, 0xA0000, 320, 205, 76, 74, 19, 1);
+                sub_15F84(dword_53A79, arg, 0xA0000, 320, 205, 76, 74, 19, 1);
                 break;
             default:
                 break;
@@ -74,19 +74,19 @@ void ev_script_run(int rec_index, int steps, int script)
                 return;
             dword_53AD9 = (uint32_t)(arg + 181);
             sub_1956B(rec[7]);
-            sub_15F84((int)dword_53A7D, 432, 0xA9F23, 320, 205, 76, 74, 19, 1);
+            sub_15F84(dword_53A7D, 432, 0xA9F23, 320, 205, 76, 74, 19, 1);
             if (sub_1BB8C(rec_index, arg) == -1) {
-                sub_16559((int)(uintptr_t)dword_53A85, dword_53C67, 0);
+                sub_16559(dword_53A85, dword_53C67, 0);
                 sub_16C57(0);
                 sub_196CB();
                 j___delay(100);
                 sub_1956B(rec[7]);
-                sub_15F84((int)dword_53A7D, 433, 0xA9F23, 320, 205, 76, 74, 19, 1);
-                sub_16559((int)(uintptr_t)dword_53A85, dword_53C67, 0);
+                sub_15F84(dword_53A7D, 433, 0xA9F23, 320, 205, 76, 74, 19, 1);
+                sub_16559(dword_53A85, dword_53C67, 0);
                 v9 = sub_19953();
                 sub_197E5();
                 if (v9 != 1 || dword_53C57 != 0) {
-                    sub_15F84((int)dword_53A7D, 434, 0xAB6E3, 320, 205, 76, 74, 19, 1);
+                    sub_15F84(dword_53A7D, 434, 0xAB6E3, 320, 205, 76, 74, 19, 1);
                 } else {
                     sub_196CB();
                     if (sub_1B932(rec_index, 0)) {
@@ -97,11 +97,11 @@ void ev_script_run(int rec_index, int steps, int script)
                     }
                     j___delay(100);
                     sub_1956B(rec[7]);
-                    sub_15F84((int)dword_53A7D, 434, 0xA9F23, 320, 205, 76, 74, 19, 1);
+                    sub_15F84(dword_53A7D, 434, 0xA9F23, 320, 205, 76, 74, 19, 1);
                 }
                 j___delay(200);
             } else {
-                sub_16559((int)(uintptr_t)dword_53A85, dword_53C67, 0);
+                sub_16559(dword_53A85, dword_53C67, 0);
                 sub_16C57(0);
             }
             sub_196CB();

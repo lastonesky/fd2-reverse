@@ -86,18 +86,18 @@ void scenario_load(void)
     memmove((void *)(uintptr_t)dword_53BF7, buf + STATE_OFFSET, 0xA00u);
     dword_53A65 = (uint8_t *)res_load(aFdotherDat, dword_53A65, 0);
     dword_53C03 = field[2];                                 /* 0x10143 */
-    dword_53A59 = (uint32_t)(uintptr_t)res_load(aFdfieldDat,
+    dword_53A59 = res_load(aFdfieldDat,
                     (void *)(uintptr_t)dword_53A59, 3 * dword_53C03 + 2);
 
     if (dword_53A55 != 0)
         guest_free((void *)(uintptr_t)dword_53A55);         /* free 'p'    */
-    dword_53A55 = (uint32_t)(uintptr_t)guest_malloc(STATE_OFFSET);
+    dword_53A55 = guest_malloc(STATE_OFFSET);
     if (dword_53A55 == 0)
         oom_exit(aOutOfMemory_0);
     memmove((void *)(uintptr_t)dword_53A55, buf, STATE_OFFSET);
     world_load_tiles();                                     /* 0x101D7 */
 
-    dword_53A79 = (uint32_t)(uintptr_t)res_load(aFdtxtDat,
+    dword_53A79 = res_load(aFdtxtDat,
                     (void *)(uintptr_t)dword_53A79, dword_53C03 + 1);
     dword_53A51 = (uint8_t *)res_load(aFdfieldDat, dword_53A51,
                     3 * dword_53C03);
@@ -105,7 +105,7 @@ void scenario_load(void)
     dword_53AC5 = (uint32_t)(int32_t)*((int16_t *)dword_53A51 + 1);
     i = 2 * ((uint8_t *)(uintptr_t)dword_53A55)[0];         /* 2 * p[0]   */
     dword_53A5D = (uint8_t *)res_load(aFdshapDat, dword_53A5D, i);
-    dword_53A69 = (uint32_t)(uintptr_t)res_load(aFdshapDat,
+    dword_53A69 = res_load(aFdshapDat,
                     (void *)(uintptr_t)dword_53A69, i + 1);
     util_fix_records(dword_53A51);                          /* 0x10270    */
     dword_53BE7 = ((uint8_t *)(uintptr_t)dword_53A55)[1];

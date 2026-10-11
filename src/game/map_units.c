@@ -70,7 +70,7 @@ void map_units_animate(void)
     }
 
     for (j = 0; j < 13; ++j) {
-        sub_11EEE((int)(uintptr_t)buf + VIEW_SRC_OFF, 456, 13, 8, ox, oy);
+        sub_11EEE(buf + VIEW_SRC_OFF, 456, 13, 8, ox, oy);
         for (i = 0; i < (int)dword_53BEB; ++i) {
             uint8_t *rec = (uint8_t *)(uintptr_t)dword_53A45 + 80u * (uint32_t)i;
             if ((rec[5] & 1) == 0) {
@@ -92,14 +92,14 @@ void map_units_animate(void)
     }
 
     scratch = (uint8_t *)malloc(SCRATCH_SIZE);      /* 0x25680 */
-    sub_11EEE((int)(uintptr_t)scratch + VIEW_SRC_OFF, 456, 13, 8, ox, oy);
+    sub_11EEE(scratch + VIEW_SRC_OFF, 456, 13, 8, ox, oy);
     {
         uint8_t *saved = buf;
-        dword_53A49 = (uint32_t)(uintptr_t)scratch;
+        dword_53A49 = scratch;
         sub_127A9();
-        dword_53A49 = (uint32_t)(uintptr_t)saved;
+        dword_53A49 = saved;
     }
-    sub_25A96((int)dword_53EEC, 3, 1);              /* svc_play_sfx */
+    sub_25A96(dword_53EEC, 3, 1);              /* svc_play_sfx */
 
     for (n = 0; n < 6; ++n) {
         for (i = 0; i < found; ++i) {
