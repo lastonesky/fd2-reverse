@@ -815,3 +815,10 @@
 0x4ECA4 sub_4ECA4 game/gfx.h
 0x4ECF0 sub_4ECF0 game/gfx.h
 0x4ED4F sub_4ED4F game/gfx.h
+
+# 0x2DFC8 - play a party unit's FIGANI animation frame by frame over the map
+# cell background with the status panel under it, then restore FD2SHAP.DAT and
+# the map (called only by the AI action driver 0x15055; true closure = itself,
+# the frame counter is an uninitialised EDI modelled as 0).  No differential
+# harness.
+0x2DFC8 sub_2DFC8 game/figure_view.h

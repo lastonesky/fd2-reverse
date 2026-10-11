@@ -714,3 +714,82 @@ void figure_attack_view(int attacker, int defender)
         pal_fade_in();
     }
 }
+
+/* 0x2DFC8 - play a unit's figure animation over its map cell's background.
+ * Loads TAI.DAT (index 3), the two FIGANI.DAT groups 3*rec[7] and 3*rec[7]+1
+ * and the BG.DAT sub-image cell[6], fades out, stamps the status panel and the
+ * background into the 320-stride screen buffer, opens the sound handle and
+ * slides the figure's two plates in (figure_attack_scroll).  Then, for every
+ * frame of the +1 group, it resets the 640-stride work buffer from the screen,
+ * blits the frame over it, publishes the 320x200 window and waits the frame's
+ * tick count (playing the frame's SFX first).  It frees the six buffers,
+ * reloads FD2SHAP.DAT into dword_53A5D, then clears the visible frame, refreshes
+ * the map view, stops the sound and fades back in.  Called only by the AI
+ * action driver 0x15055, which ignores the result.
+ *
+ * The frame loop's counter is EDI, never written by this function (its entry
+ * value is the caller's reachable-cell count); it is modelled as 0 here, as for
+ * the other uninitialised-register locals (playbook 6). */
+void figure_scene_play(int unit)
+{
+    uint8_t        cell[8];
+    uint8_t       *rec    = (uint8_t *)dword_53A45 + 80 * unit;
+    int            group  = rec[7];
+    uint8_t       *screen;
+    uint8_t       *work;
+    const uint8_t *tai;
+    const uint8_t *fig_a; /* FIGANI group 3*group   */
+    const uint8_t *fig_b; /* FIGANI group 3*group+1 */
+    int            i;
+
+    dword_5413B = 0;
+    guest_free((void *)(uintptr_t)dword_53A49);
+    guest_free((void *)(uintptr_t)dword_53A5D);
+    dword_53A5D = NULL;
+
+    screen = guest_malloc(SCR_SIZE);
+    work   = guest_malloc(WORK_SIZE);
+    memset(screen, 0, SCR_SIZE);
+
+    map_cell_info(rec[0], rec[1], cell);
+    tai   = res_load(aTaiDat, NULL, 3);
+    fig_a = res_load(aFiganiDat, NULL, 3 * group);
+    fig_b = res_load(aFiganiDat, NULL, 3 * group + 1);
+    pal_fade_out();
+    dword_5413B = (uint32_t)(uintptr_t)res_load(aBgDat, NULL, cell[6]);
+    ui_status_panel_at((int)(uintptr_t)screen, unit);
+    rle_decode((const void *)(uintptr_t)dword_5413B, 0, 50, screen, 320, -1);
+    dword_5414B = (uint32_t)(uintptr_t)ev5_314DE(fig_b);
+    figure_attack_scroll(unit, 1, fig_a, fig_a, work, screen, tai);
+
+    for (i = 0; i < fig_b[0]; ++i) {
+        const uint8_t *f =
+            fig_b + *(const uint32_t *)(const void *)(fig_b + 4 * i + 8);
+
+        if (f[5] != 0)
+            svc_play_sfx((const void *)(uintptr_t)dword_5414B, f[5], 1);
+        gfx_copy_rows(work, 320, screen, 320, 320, 200);
+        res_blit((void *)(uintptr_t)fig_b, i, work, 320, -1);
+        gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, work, 320, 320, 200);
+        svc_wait_ticks(f[6]);
+    }
+
+    guest_free(screen);
+    guest_free(work);
+    guest_free((void *)(uintptr_t)fig_a);
+    guest_free((void *)(uintptr_t)fig_b);
+    guest_free((void *)(uintptr_t)dword_5413B);
+    guest_free((void *)(uintptr_t)tai);
+
+    dword_53A49 = guest_malloc(0x25680);
+    dword_53A5D = res_load(aFdshapDat, dword_53A5D,
+                           2 * *(const uint8_t *)(uintptr_t)dword_53A55);
+    svc_wait_ticks(6);
+    pal_fade_out();
+    memset((void *)(uintptr_t)VGA_FRAME, 0, SCR_SIZE);
+    map_view_update(1);
+    svc_play_sfx((const void *)(uintptr_t)dword_5414B, -1, 1);
+    if (dword_5414B != 0)
+        guest_free((void *)(uintptr_t)dword_5414B);
+    pal_fade_in();
+}

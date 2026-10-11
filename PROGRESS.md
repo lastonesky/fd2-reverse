@@ -2043,14 +2043,40 @@ in-budget 游戏内容项（仅 CRT/库包装与伪函数），故本轮取该�
   `map_attack_bar_drain` 改为返回 `int`（`map_attack.h/.c`）；其唯一调用点即本函数，无其他 C 调用者。
 - 无对拍器，标“已还原未验证”。
 
+### 80) 单位图形场景播放器 `0x2DFC8` → `figure_scene_play`（本轮，1 函数）→ `src/game/figure_view.c/.h`（追加）
+
+§79 记“下批按 §2 取次小传递待还原闭包的游戏内容簇”。闭包就绪列表按 usage 降序，跳过
+CRT/库包装 `0x3645D`(read)/`0x365DA`(int386) 后，游戏头名同为 u1 的四项中，`0x2DFC8`(744B)
+是唯一落在 §1 的 `~1500B` 预算内、且与既有 `figure_view` 同模块（`figure_view.h` 开篇即记
+`sub_2CF30` 家族及其复用的一套助手）的项，故取之（`0x15DF3` 126B 为孤立叶子、`0x2CF30`
+2269B/`0x2D80D` 1780B 超预算，均留下批）。生成器验得**真闭包＝自身**（callee 全在册）。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2DFC8` | `figure_scene_play(unit)` | 取记录 `dword_53A45+80*unit`：释放 `dword_53A49`/`dword_53A5D` → 建 320 跨距屏缓（0xFA00）与 640 跨距工作缓（0x1F400）→ `map_cell_info` 得 BG 索引 `cell[6]` → `res_load` TAI.DAT(3)、FIGANI.DAT(3*rec[7]) 与 (3*rec[7]+1)、BG.DAT(cell[6]) → `pal_fade_out` → 屏缓画状态面板 + BG → `ev5_314DE` 开机声 → `figure_attack_scroll(unit,1,fig_a,fig_a,work,screen,tai)` → 逐帧（`fig_b[0]` 帧）：每帧 `gfx_copy_rows(work←screen)` 复位、`res_blit(fig_b,i,work)`、发布 0xA0000、`svc_wait_ticks(f[6])`（先按 `f[5]` 放音）→ 释放六缓冲 → 重载 FD2SHAP.DAT 到 `dword_53A5D` → `svc_wait_ticks(6)`→`pal_fade_out`→清帧→`map_view_update(1)`→停声→`pal_fade_in`。 |
+
+**陷阱 / 伪代码伪影**：
+- **未初始化寄存器（playbook §6）**：帧循环计数器是 `edi`，本函数从不写它（入口值来自调用者
+  `0x15055`——离线反汇编 `1511c: mov edi,eax` 取自 `map_reveal_reachable(0x14818)` 的返回）；
+  C 侧建模为 `0` 并注释（同 `map_wait_key`/`map_zoom_run` 的 tick 基线先例）。
+- **返回 void**：函数原型记 `int`，但尾声 `call 0x1F525`(pal_fade_in, void) 后直接 `ret`，
+  eax 残留；唯一调用点 `0x15055`（`15195 call 0x2dfc8; add esp,4`）不读返回值 → C 侧 `void`。
+- **free/malloc 缝**：`0x3776E/0x3706E` → `guest_free/guest_malloc`；字符串 `aTaiDat/aFiganiDat/aBgDat/aFdshapDat` 与
+  `dword_53A55`（FDJSHAP 尺寸表首字节×2）直接复用 figure_view 既有写法。
+- **共享尾声（伪 callee）**：`0x2DFC8` 自身尾声 `add esp,0x24; pop ebp/edi/esi/ebx; ret`，无跨函数跳转；
+  `sub_3702F`＝Watcom chkstk（`push 0x54`），丢弃。
+- **对既有模块的唯一改动**：仅追加函数与头声明，未改任何已验证/已还原函数。
+- 无对拍器，标“已还原未验证”。本批后 `0x2DFC8` 的两个调用者 `0x15055`(u2)/`0x31C49`(u1) 转为闭包就绪。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **48 → 47**（本轮 §79 −1），已还原未验证 **275 → 276**（本轮 +1）。
-- **闭包就绪游戏内容项**：本轮 §79 取走 `0x1548E` 后，闭包就绪待还原仍仅剩 CRT/库包装
-  （`0x3645D`/`0x365DA`/`0x36C56`/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）；
-  下批按 §2 取次小传递待还原闭包的游戏内容簇——已闭包就绪的大驱动器 `0x2DFC8`(744B，u1)/
-  `0x2D80D`(1780B，u1)/`0x2CF30`(2269B，u1)（§78 记与 `0x2E2B0` 合流的 `0x1548E` 本轮已取）。
+- `function-map.csv`：待还原 **47 → 46**（本轮 §80 −1），已还原未验证 **276 → 277**（本轮 +1）。
+- **闭包就绪游戏内容项**：本轮 §80 取走 `0x2DFC8` 后，闭包就绪待还原为 CRT/库包装
+  （`0x3645D`/`0x365DA`/`0x36C56`/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`），
+  加上**新解锁的** `0x15055`(700B，u2，`0x2DFC8` 的调用者)与 `0x31C49`(1511B，u1)，及仍在册的
+  `0x2CF30`(2269B)/`0x2D80D`(1780B)/`0x15DF3`(126B)。下批按 §1 取 usage 最高的在预算游戏项
+  `0x15055`(u2，700B)。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 

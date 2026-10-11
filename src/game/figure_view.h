@@ -32,6 +32,10 @@
  *   0x2FE14  figure_frame_run play N frames of a figure group over the cycling
  *                              BG strips into the 640-stride work buffer,
  *                              publishing one 320x200 window per frame.
+ *   0x2DFC8  figure_scene_play  play one unit's FIGANI group frame by frame
+ *                              over the background of its map cell with the
+ *                              status panel under it, then restore the map
+ *                              (called by the AI action driver 0x15055).
  *
  * ABI is cdecl; argument order and the constants were decoded from the offline
  * disassembly (analysis/cseg01_disasm.txt), which is authoritative.  Every real
@@ -104,6 +108,15 @@ int figure_tmp_load(void);
 void figure_attack_scroll(int unit, int flag, const void *plate_a,
                           const void *plate_b, uint8_t *work, uint8_t *screen,
                           const void *portrait);
+
+/* 0x2DFC8 - play a unit's FIGANI animation frame by frame over the BG.DAT
+ * background of its map cell with the status panel drawn under it: load the
+ * TAI/FIGANI/BG strips, slide the two figure plates in (figure_attack_scroll),
+ * then for every frame of the +1 group stamp it over the background, publish
+ * the 320x200 window and wait the frame's tick count; finally reload
+ * FD2SHAP.DAT, clear the frame, refresh the map and fade back in.  The machine
+ * starts the frame loop from an uninitialised EDI (see figure_view.c). */
+void figure_scene_play(int unit);
 
 /* 0x2E2B0 - the map attack view driver between records `attacker` and
  * `defender`: load their FIGANI/TAI/BG strips, stamp the two plates, play the
