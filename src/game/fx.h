@@ -7,7 +7,7 @@
  * and fires a sample when a particle crosses a threshold; the return value is
  * the number of frames to wait before the next call (or a "done" flag).
  *
- * The nine translated here (every table entry except [6] 0x2C67D) are pure:
+ * The ten handlers (every table entry) are pure:
  * they read/write game globals, memcpy a read-only table from its original
  * address and call four already-translated services (res_blit 0x2EB9F,
  * svc_play_sfx 0x25A96, svc_play_sfx2 0x25B45, util_rand 0x4EBE3). One
@@ -51,6 +51,9 @@ int fx_dots6(int rec, const void *buf, void *dst, int pitch, int selector);
 
 /* funcs_30469[5]  0x2C441 - six particles, 0x525DD offset table */
 int fx_dots6b(int rec, const void *buf, void *dst, int pitch, int selector);
+
+/* funcs_30469[6]  0x2C67D - five particles on an ellipse / five-slot spinner */
+int fx_dots5(int rec, const void *buf, void *dst, int pitch, int selector);
 
 /* funcs_30469[7]  0x2CAFC - three particles, 0x5261E offset table */
 int fx_dots3(int rec, const void *buf, void *dst, int pitch, int selector);

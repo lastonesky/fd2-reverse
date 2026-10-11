@@ -21,6 +21,7 @@
  *   0x2BFD9  fx_dots12  funcs_30469[3]  12 particles
  *   0x2C217  fx_dots6   funcs_30469[4]  6 particles
  *   0x2C441  fx_dots6b  funcs_30469[5]  6 particles
+ *   0x2C67D  fx_dots5   funcs_30469[6]  5 particles on an ellipse / spinner
  *   0x2CAFC  fx_dots3   funcs_30469[7]  3 particles
  *   0x2CCF4  fx_dots16  funcs_30469[8]  16 particles
  *   0x2CE1A  fx_toggle  funcs_30469[9]  two-frame flip
@@ -39,6 +40,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <math.h>
 #include "../include/fd2_globals.h"
 
 /* --- services (original entry points) ---------------------------------- */
@@ -674,5 +676,179 @@ int fx_toggle(int rec, const void *buf, void *dst, int pitch, int selector)
         return 20;
     default:
         return 0;
+    }
+}
+
+/* 0x2C67D - funcs_30469[6] (1151 bytes, the only entry with CRT sin/cos).
+ *
+ * Two effects share the function, selected by `selector`:
+ *
+ *  - selectors 1/2/7/8 place five particles on an ellipse. The frame angle is
+ *    72*n degrees; the radii are byte_540C9 and the base y offset is v23 (30,
+ *    or 90 when record[+6]==0). Exactly as the machine code (fild/fmul/fadd
+ *    with __CHP+fistp, i.e. a truncating cast):
+ *        x[n] = (int)(cos(a)*byte_540C9 + v23);
+ *        y[n] = (int)(sin(a)*byte_540C9*1.2 + 30.0);
+ *    The two read-only tables 0x52605 (5 dwords) / 0x52619 (5 bytes) are
+ *    copied out of the image; when record[+6]==0 the first three dwords are
+ *    negated and the first three bytes zeroed, and v23 becomes 90.
+ *    Selector 2/8 then bump byte_540C9 by +6/-6 (radius animation).
+ *
+ *  - selectors 0/3/6 arm the spinner: 0 resets byte_540C9/CA and returns 7,
+ *    6 fires a sample and seeds byte_540C9=42, 3 (once) resets the five slot
+ *    phases dword_540B0[]=-n and counters byte_540C4[]=0 and rotates the
+ *    dword_54090/98 and dword_540A4/AC pair, returning 12.
+ *  - selectors 4/5 are the spinner frame: slot phase picks the sub-image
+ *    (clamped to 4), a secondary counter byte_540C4[] walks 0..9, and every
+ *    fifth frame a sample fires (slots 0/2 use svc_play_sfx, 1/3/4 use
+ *    svc_play_sfx2); the return value is 1 on the frame the phase hits 2.
+ *
+ * All indices derived from byte_540C9 stay in 0..4 (the byte is either 4 or a
+ * slot phase 0..4), so the 5-entry local tables are not overrun.
+ */
+#define FX_TABLE_DOTS5_X 0x00052605u  /* 5 dwords, first three negated  */
+#define FX_TABLE_DOTS5_Y 0x00052619u  /* 5 bytes,  first three zeroed   */
+#define FX_DEG2RAD 0.017453277483582497  /* float 0x3C8EFA2D, pi/180     */
+
+int fx_dots5(int rec, const void *buf, void *dst, int pitch, int selector)
+{
+    int32_t  v15[5];
+    uint8_t  v18[5];
+    uint8_t  v23;
+    uint8_t  v24 = 0;
+    uint8_t  v25 = fx_rec_flag(rec);
+    uint8_t  sel = (uint8_t)selector;
+    int32_t *b0  = (int32_t *)(void *)dword_540B0;
+    int32_t *x   = (int32_t *)(void *)dword_54088;
+    int32_t *y   = (int32_t *)(void *)dword_5409C;
+    uint8_t *c4  = (uint8_t *)byte_540C4;
+    int      n;
+
+    memcpy(v15, (const void *)(uintptr_t)FX_TABLE_DOTS5_X, sizeof v15);
+    memcpy(v18, (const void *)(uintptr_t)FX_TABLE_DOTS5_Y, sizeof v18);
+    v23 = 30;
+    if (v25 == 0) {
+        v23 = 90;
+        for (n = 0; n < 3; ++n) {
+            v15[n] = -v15[n];
+            v18[n] = 0;
+        }
+    }
+
+    if (sel == 0) {
+        SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 2, 1);
+        byte_540C9 = 0;
+        byte_540CA = 0;
+        return 7;
+    }
+    if (sel == 3) {
+        if (byte_540CA == 0) {
+            int32_t t;
+
+            for (n = 0; n < 5; ++n) {
+                b0[n] = -n;
+                c4[n] = 0;
+            }
+            t = dword_54090;
+            dword_54090 = dword_54098;
+            dword_54098 = t;
+            dword_540A4 = dword_540AC;
+            dword_540AC = byte_540C9;
+            byte_540CA = 1;
+        }
+        return 12;
+    }
+    if (sel == 6) {
+        SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 3, 1);
+        byte_540C9 = 42;
+        return 7;
+    }
+    if (sel == 1 || sel == 2 || sel == 7 || sel == 8) {
+        for (n = 0; n < 5; ++n) {
+            double a = (double)(72 * n) * FX_DEG2RAD;
+
+            x[n] = (int)(cos(a) * (double)byte_540C9 + (double)v23);
+            y[n] = (int)(sin(a) * (double)byte_540C9 * 1.2 + 30.0);
+            if (v25 != 0) {
+                if (((sel == 1 || sel == 7) && n < 2) ||
+                    ((sel == 2 || sel == 8) && n > 1)) {
+                    RES_BLIT(buf, 4,
+                             (void *)((intptr_t)dst +
+                                      (intptr_t)pitch * y[n] + x[n]),
+                             pitch, -1);
+                }
+            } else if (sel == 2 || sel == 8) {
+                RES_BLIT(buf, 4,
+                         (void *)((intptr_t)dst +
+                                  (intptr_t)pitch * y[n] + x[n]),
+                         pitch, -1);
+            }
+        }
+        if (sel == 2)
+            byte_540C9 += 6;
+        else if (sel == 8)
+            byte_540C9 -= 6;
+        return 0;
+    }
+    if (sel != 4 && sel != 5)
+        return 0;
+
+    /* selector 4/5: five-slot spinner */
+    for (n = 0; ; ++n) {
+        if (n >= 5) {
+            if (sel == 5) {
+                int m;
+
+                for (m = 0; m < 5; ++m) {
+                    if (c4[m] != 0) {
+                        RES_BLIT(buf, c4[m],
+                                 (void *)((intptr_t)dst +
+                                          (intptr_t)pitch * (y[m] - 20) +
+                                          x[m] - 60),
+                                 pitch, -1);
+                        if ((uint8_t)(++c4[m]) == 10)
+                            c4[m] = 0;
+                    }
+                    if (b0[m] == 0) {
+                        if (m != 0 && m != 2)
+                            SVC_PLAY_SFX2((const void *)(uintptr_t)dword_54153, 1, 1);
+                        else
+                            SVC_PLAY_SFX((const void *)(uintptr_t)dword_54153, 1, 1);
+                    }
+                    if ((uint32_t)(++b0[m]) == 5u)
+                        b0[m] = 0;
+                    if (b0[m] == 2)
+                        v24 = 1;
+                }
+            }
+            return v24;
+        }
+
+        {
+            int idx;
+
+            if (b0[n] < 0)
+                byte_540C9 = 4;
+            else
+                byte_540C9 = (uint8_t)b0[n];
+            idx = (uint8_t)byte_540C9;
+            if (idx == 1)
+                c4[n] = 5;
+            if (v25 != 0) {
+                if ((sel == 4 && n < 2) || (sel == 5 && n > 1)) {
+                    RES_BLIT(buf, idx,
+                             (void *)((intptr_t)dst +
+                                      (intptr_t)pitch * (y[n] + v18[idx]) +
+                                      x[n] + v15[idx]),
+                             pitch, -1);
+                }
+            } else if (sel == 5) {
+                RES_BLIT(buf, idx,
+                         (void *)((intptr_t)dst +
+                                  (intptr_t)pitch * (y[n] + v18[idx]) +
+                                  x[n] + v15[idx]),
+                         pitch, -1);
+            }
+        }
     }
 }

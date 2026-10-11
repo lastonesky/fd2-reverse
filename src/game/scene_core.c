@@ -414,3 +414,37 @@ int scene_apply_state(void)
     free((void *)(uintptr_t)dword_53F5A);           /* 0x265CB                  */
     return dword_53F4A != 2;                        /* 0x265D3                  */
 }
+
+/* ---- 0x265EC -------------------------------------------------------------
+ * Redraw the map view: copy the saved view buffer back, blit the location
+ * panel and name, stamp the map cursor sprite for the current record cell and
+ * publish the 312x192 window to the VGA staging page 0xA0504.  Reached from
+ * scene_apply_state's interactive branch (0x26434 / 0x2647E) once per frame.
+ * The machine leaves eax from gfx_copy_rows; the callers ignore the value.
+ */
+int scene_map_view_draw(void)
+{
+    const uint8_t *ent = (const uint8_t *)tbl_ptr((void *)&fd2_data2[0x238D],
+                                                  31, (int)dword_53C03, -31);
+    uint8_t  v2    = ent[0];
+    uint32_t frame = dword_53F52;                   /* 0x53F52: 0..3 frame    */
+    uint8_t *base  = dword_53A61;                   /* map animation bank     */
+    uint8_t *src;
+    int      col, row;
+
+    memmove(dword_53A49, dword_53A5D, 0x25680u);    /* 0x53A5D -> 0x53A49      */
+    rle2_blit(dword_53A49 + 0x1A20C,
+              (const void *)(uintptr_t)dword_53F5A, 456);
+    vm_run(dword_53A7D, (int)(dword_53F4A + 495),
+           (int)(uintptr_t)(dword_53A49 + 0x1ACC4), 456, 205, 76, 74, 19, 0);
+
+    if (frame == 3)                                 /* frame 3 aliases frame 1 */
+        frame = 1;
+    src = base + *(uint32_t *)(void *)(base + 4u * frame);
+    col = byte_52363[6 * v2 + dword_53F4A];
+    row = byte_52375[6 * v2 + dword_53F4A];
+    sprite24_plain(src, dword_53A49 + 32904 + 456 * row + col, 456);
+    gfx_copy_rows((void *)0xA0504, 320, dword_53A49 + 32904, 456, 312, 192);
+
+    return 0;
+}

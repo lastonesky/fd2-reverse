@@ -208,6 +208,764 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 
 ---
 
+## 0-L. P1 启动（本轮）：fx 收尾 + 两簇源码化
+
+### 1) `0x2C67D` → `fx_dots5`（`src/game/fx.c`）——P1 头号项，fx 分派表闭合
+
+- `funcs_30469[6]` 的 1151 B handler，也是该表**最后一块**；此前被单独摘出（唯一含 CRT `cos/sin`）。
+- 双效果共用：`selector 1/2/7/8` 把 5 粒子摆在椭圆上（角度 `72*n` 度，半径 `byte_540C9`，
+  y 基 `v23`=30，`rec[+6]==0` 时 90）：
+  `x[n]=(int)(cos a*byte_540C9+v23)`、`y[n]=(int)(sin a*byte_540C9*1.2+30.0)`；两处常量
+  经段镜像核出（`0x502AA`=double 1.2、`0x502B2`=double 30.0、float `0x3C8EFA2D`=π/180）。
+  两张只读表 `0x52605`(5 dword)/`0x52619`(5 B) 从镜像复制；`rec[+6]==0` 时前三项取反/清零。
+- `selector 0/3/6` 装填/复位旋转子（`byte_540C9/CA`、`dword_54090/98`、`dword_540A4/AC`），
+  `4/5` 为每帧五槽（`dword_540B0[]` 相位、`byte_540C4[]` 子图计数），每 5 帧发一次音效、
+  相位命中 2 时返回 1。
+- **离线反汇编定案**：Hex-Rays 把 `fild/fmul/fadd/__CHP/fistp` 渲染成 `_CHP()` + 乱序
+  `__int64`，逐指令回读 `0x2C7DD..0x2C890` 得上述两条公式；`__CHP`=截断转换（CRT 助手）。
+- **fx 表语义完整性**：`funcs_30469[0..9]` 现已 10/10 全部源码化（`fx.c`/`fx.h`），
+  `sub_31266` 小分派器只剩 `0x2FB2C/0x2FE14` 依赖。
+
+### 2) `0x182AD/0x18312/0x1839B/0x18409` → `fb_slide_band_a/b/c` + `fb_slide_step`（`src/game/fb_slide.c/.h`）
+
+- 对话框/地图框 12 步滑动转场的最底层合成器：三条 320 行带搬运（`memmove`，步长 320、
+  常量偏移 `0x8C0/0x8C5`、`0x5C/0x91C`、`0x5/0x7585`），`0x18409` 每步
+  `memmove(dst,saved,0xFA00)` → 三条带 → `memmove(0xA0000,dst,0xFA00)`。
+- 调用方证据：`0x17E0B`/`0x1B932`/`0x1BFFE`（`dword_53C5B/5F/63` 三块 0xFA00 暂存）。
+- ABI=`(int x, char *dst, char *src[, char *saved])`；负 x 移位并按 `-x` 裁剪字节数，
+  逐指令核对。无对拍器，标“已还原未验证”。
+
+### 3) `0x2FACD` + `0x18C6D`/`0x18795`/`0x17D6F` → `src/game/ui_meter.c/.h`
+
+- `0x2FACD`（u15，当时 P1 剩余最高用量）= `ui_status_panel_at`：选 HUD 槽位（+1451 或
+  +49280；`dword_53C03==24 && rec==17` 强制 +49280）后转 `ui_status_panel`。
+- `0x18C6D` = 状态面板：`rle2_blit` 背景 → 两条 `ui_meter_bar`（记录 +64/66 与 +68/70 的
+  `int16` 值/上限）→ `dlg_draw_number`(+33, base 31, 2)/`dlg_draw_number_pair`×2
+  → 9 参 `vm_run`（名字流）；末 `jmp 0x1317D` = 普通 `return`。
+- `0x18795` = 值/上限→段数（有符号 `101*value/max+1`）；`0x17D6F` = 按段画 tile
+  （`dlg_frame_tile`，tile / +1 / +2；count==0 时固定 101 段 29/30）。
+- **closure 校正**：`16 进制` 的“共享尾声跳转”会被 `function-map` 算成 callee（`0x18C6D`
+  的 `jmp 0x1317D` 落在 `0x1300D` 体内），故不要按该近似的闭包直接展开——真依赖只需
+  本 4 个函数。
+
+### 4) `0x219AD` + `0x22046` + `0x24618` → `src/game/reveal.c/.h`（扩张圆开图）
+
+- `0x24618`（u8，本轮最高）= `portrait_reveal`：`ev5_1D4CB` → malloc 0x25680 →
+  `map_render_view(13×8)` → 循环 i=9..1（`memmove` 暂存 → `reveal_band(col*24+12,row*24+16)`
+  → `gfx_copy_rows(0xA0504, 312×192)` → x+=step → delay5）→ `free` → delay500 →
+  `pal_fade_add(0,255,j)` 步进 → `ev5_1D4CB`。
+- `0x22046` = `reveal_band`：两次 `reveal_arc`（第二次 y 从圆心起，中间夹 `dlg_portraits_refresh`）
+  + 下半 `(int)(radius*1.6)` 半宽的实心带；`0x219AD` = `reveal_arc`：逐行
+  `half=(int)(sqrt(r²-dy²)*16/10)` 并按 312 裁剪，`util_translate` 输出。（常量 `0x501F0`=10.0、
+  `0x50208`=1.6 经段镜像核出。）
+- **closure 校正（再次）**：`0x219AD` 的 `jmp 0x1951B` 落在 `0x190AC` 体内、`0x24618` 的
+  `jmp 0x10B46` 属外部尾声——两者都是伪 callee，真依赖只要本 3 个函数。
+
+### 5) `0x2189A` + `0x26CE4`（本轮）—— 另两个独立闭合项
+
+- `0x2189A` → `portrait_reveal_cell`（追加到 `reveal.c`）：以**记录地图格**为中心的开图，
+  `vx=(rec[0]-ox)*24+12`、`vy=(rec[1]-oy)*24+18`，半径从 `a2` 起每帧 `+=a3`，10 帧后
+  `map_view_update(0)`。
+- `0x26CE4` → `screen_curtain`（新模块 `screen_fx.c/.h`）：全屏百叶转场——暂存 0xA0000 →
+  20 行 `memset(p+320i+54281,74,104)` → 4 趟滑出 `dword_53F66` 的 4 张子图
+  （除数 `mode==0?4-j:j+1`，基偏移表 `0x52408`={-39,-13,13,39}）→ `mode!=0` 保留末帧否则还原。
+
+### 6) 道具/治疗使用簇 → `src/game/item_use.c/.h`（本轮）
+
+- `0x13FD4` → `item_use`（u6）：滑出肖像 → 两次精灵闪烁（`view_draw_unit_sprite` + `gfx_copy_rows`）
+  → HP 加 `max/5`；入口要求“受伤且 +37/+38 为零”。
+- `0x22AF6` → `item_apply`：先 `map_draw_party_icons(_anim)`，再逐记录治疗 10（`unit_heal`+
+  `map_enqueue_status`+清字段+经验）或排入光标精灵。
+- `0x1C916` → `unit_heal`：加 `9·amount/10 + (rand%100)·amount/1000`，按 max 截断，
+  按 `40·rec[33]·heal/max` 记账 `dword_53EC8`；返回本次增量。
+- `0x1DA16` → `view_draw_unit_sprite`：地图格内 24×24 精灵（方向 +3、帧 +2、相位 `53C07/53C0B`），
+  越界丢弃；`mode` 0=plain / 2=const。
+- **ABI 注**：机器向 `0x4E127` 多压一个实参，但被调方从不读第 4 参（`[ebp+0x14]` 无引用）；
+  已对拍验证的 `sprite24_const` 只取 3 参，故 C 丢弃多余实参。
+
+### 7) `0x21EB1` + `0x27816` + `0x278E7`（本轮）+ Ghidra 交叉验证
+
+- `0x21EB1` → `portrait_reveal_zoom`（追加 `reveal.c`）：以格 `(0x53AB9,0x53ABD)` 为中心，
+  半径从 `radius` 每帧 `+=step` 共 9 帧，然后再在末半径上重复 7 帧（`i=3..9`）。
+- `0x27816`/`0x278E7` → `screen_band_forward/backward`（追加 `screen_fx.c`）：284 字节带
+  在 `0xA8FCA` 与两个后备拷贝 `0xA974A`/`0xA99CA` 之间三步搬运 + `0xAEC4A`/`0xAE9CA` 填充。
+- **Ghidra MCP 交叉验证**（与 IDA 互补）：对 `0x2C67D / 0x2189A / 0x21EB1 / 0x27816 / 0x278E7 /
+  0x1DA16` 分别用 Ghidra 反编译比对，**结构/常量/公式全一致**（特别是 `0x2C67D` 的
+  `cos·byte_540C9+v23` 与 `sin·byte_540C9·1.2+30.0`、`0x1DA16` 的视图边界式、以及两条
+  屏幕带循环的 `0x140/0x11C/0xa8fca/0xa974a/0xa99ca` 常量）。Ghidra 不恢复 chkstk 后的
+  栈参，故用于**结构/常量互证**而非 ABI。
+
+### 8) 队伍状态屏簇 → `src/game/status_screen.c/.h`（本轮）
+
+- `0x26EDA` → `status_screen_run`（u6）：拷 `0x52418` 到本地 4-dword layout → BDA tick
+  驱动面板动画（`dword_53F52` 步进 / `dword_53F72` 帧）→ 轮到 `dlg_blit_dato(0)`/`(3)`
+  交替头像 → `kbd_pending()` 后 INT 16h 取键（含 E0/52→1C、53→1 重映射）。
+- `0x27079` → `status_panel_draw`（mode 0=高亮头像、1/3=帧带、2=图标行）。
+- `0x2810B` → `status_names_draw`：最多 6 行头像（`sprite24_plain49`）+ 名字流（`vm_run`），
+  高亮行用亮调色板（205/201）。
+- Ghidra 对 `27079/2810B/184C0` 的结构反编译**逐分支一致**（尤其确认 `184C0` 的
+  `rec[2*i+10] & 0x80` 循环条件，澄清了 IDA 的 `v15>=0` 写法）。
+
+### 9) 消息/道具弹框簇 → `src/game/box_popup.c/.h`（本轮，6 函数）
+
+- `0x17FC0` `box_status_draw`：两血条 + 数字 + 三条 `vm_run` 名字流 + 框图块。
+- `0x184C0` `box_items_draw`：逐槽跳 `rec[2*i+10]&0x80`，按道具类型（`tbl_ptr` base
+  `&fd2_data2[0x2AD]`/stride 23）选 tile 64..67 + 数字，`+0x40` 位加 3。
+- `0x17EEF` `box_open_init`：`res_load(DATO.DAT)` → `dlg_box_stage` → 两条 mask 条 → 面板。
+- `0x17E0B` `box_open_anim`：三块 0xFA00 暂存 + `box_open_init`/`box_items_draw` + 12 步 `fb_slide_step`。
+- `0x1B9DE` `box_input`：上/下/翻页 + 确认（经道具表 `[13]` 检查），ESC 返回 -1。
+- `0x1B932` `box_popup`：循环到确认/取消，滑出，释放三块暂存（返回 `ret != -1`）。
+- **发现并绕过已验证资产的缺口**：`0x16C57` 机器码**返回扫描码**（`movzx eax,[0x53A8E]`），
+  但 port/ 的 `dlg_wait_key` 声明为 `void`。为不动已验证资产，调用点改为
+  `dlg_wait_key(0); key = byte_53A8E;`（行为等价，已写入注释）。
+
+### 10) 地图交互环 → `src/game/map_interact.c/.h`（本轮）—— P1 头号 u9 收口
+
+- `0x115B6` `map_pick_record`（u9，本轮最高）："选记录"交互环——`map_wait_key` 取键，
+  方向键走 `ev4_11B48/9B/FA/C59` 视窗步进 + `svc_play_sfx`，逗号/点号在 `list` 中轮换，
+  回车/空格按 `mode`（4/5/6）做不同确认（含 mode==6 的重复记录去重 + `rec_skip` 检查）。
+- `0x12DAC` `map_wait_key`：等键 + `pal_anim_step` + tick 变化时 `map_view_update(0)`。
+  （机器首轮读未初始化的 `esi`，已在 C 里定为 0，注释说明。）
+- `0x14742` `map_find_records`：曼哈顿半径内按 `rec[5]&1` 与 `rec[6]` 状态类收集，返回计数。
+- **Ghidra 结构比对**：`0x115B6` 的双层循环/`mode` 分支/重复去重与 C 版**逐分支一致**。
+
+### 11) 地点/场景菜单选择环 → `src/game/menu_select.c/.h`（本轮）
+
+- `0x27D33` `menu_list_select`（u6，535B，本轮最高）＝地点菜单（`dword_53F4A` 选定）的
+  滚动列表选择环：`guest_malloc` 三块 `0xFA00`（共享全局 `dword_53C5B/F/63`）→ 快照 VGA →
+  `rle2_blit` 面板子图（`dword_53F66+[+70]` @ `+35845`）→ `status_names_draw` 布名行 → 6 条
+  `msg_blit_band` → 循环 `status_screen_run(3)`，上/下（`4B/4D`）走一行、翻页（`48/50`）走两行，
+  越过窗口界线 `dword_53F4E±2` 时 `screen_band_forward/backward` 滚动，回车/空格返回 1、Esc 返回 -1。
+- `0x26E38` `menu_choice4`（u3）＝同一渲染器上的四槽环绕选择环：`status_screen_run(0)`，
+  左右在 `dword_53C57`（0..3）环绕，回车/空格 1、Esc -1。两者共用同键值表（`4B/4D/48/50/1C/39/1`）。
+- **共享尾声 + 有符号比较（陷阱）**：`0x27D33` 的反编译把三个下行分支折成 `LABEL_7/9/13`
+  goto；本 C 用 `scroll_down`/`scroll_up_tail` 标号等价还原（已逐指令核对 `27e1a..27f49`）。
+  机器对 32 位全局 `dword_53C57/53F4E/53BFB` 用 `jge/jle/jl`（**有符号**）比较，C 侧显式
+  `(int32_t)` 转型以保原语义（`-Wno-sign-compare` 之外仍按原样写）。
+- **伪 callee**：`0x27D33` 曾误挂 `sub_3702F`(chkstk)；真实依赖仅 `rle2_blit/status_names_draw/
+  msg_blit_band/screen_band_forward/backward`（全部已还原）＋ `0x26E38`。闭包=本 2 函数。
+- **未在机内释放**：`0x27D33` 只分配不释放 `0x53C5B/F/63`——这三个全局与 `msg.c`(0x1956B/26996)、
+  `box_popup.c`(0x17E0B/1B932) 复用，释放点在 `msg_close_portrait`/`box_popup`，故 C 版同样不 free。
+- **相邻未还原**：`0x2921A`（u4，230B，中心缩放最近邻 blit 到 `dword_53A49`）为同一批地点菜单
+  驱动的退场缩放，本轮未纳入（可与 `0x26A0D`/`0x28B41` 等菜单驱动一并拉出）。
+
+### 12) 地图队伍状态面板 → `src/game/party_panel.c/.h`（本轮，6 函数）
+
+被 0x1B1E7（地图队伍弹出面板，仍待还原）驱动的整簇。0x1B41D 用已还原资产
+（`res_blit6`/`dlg_draw_number`/`vm_run`/`ev5_1B5F1`/`unit_exists`）把一行行的头像 tile、
+数字和两条名字流画进一块 0xFA00 暂存缓冲；另外 5 条 band 助手再把该缓冲中的横带按
+竖直滑动偏移搬进帧缓冲 `dword_53A49`，即队伍面板的滑入/滑出：
+
+| 原址 | 新名 | 几何 |
+|---|---|---|
+| `0x1AF1E` | `party_panel_band_a` | 170B×117 行；源行随 step 下移（75→…），越界按 `-` 裁剪 |
+| `0x1AF99` | `party_panel_band_b` | 170B×117 行；源偏移固定 11915，目标行随 step |
+| `0x1B019` | `party_panel_band_c` | 102B×17 行；源偏移 `109+320*r` |
+| `0x1B0AD` | `party_panel_band_d` | 170B×16 行；源偏移固定 49675 |
+| `0x1B14B` | `party_panel_band_e` | 63B×15 行；源偏移固定 55169 |
+| `0x1B41D` | `party_panel_draw` | 4×`res_blit6`(tile 0x85..0x88) + 6×`dlg_draw_number` + 2×`vm_run`(sub `2*dword_53C03+597`/`+598`，`dword_53C03==16 && unit_exists(18)==0` 时前者 `-2`) |
+
+- 每步的负中间值（`srcy<0`/`t<0`）在机器里就是“片段长度裁剪 + 源/目标归零”，已逐指令
+  在离线反汇编核出（`1af1e..1b1e6`、`1b41d..1b5f0`）；常量 0x2E40(11840)/0x2E8B(11915)/
+  0xC20B(49675)/0xD781(55169)/0x6D(109)/0x4B(75)/0x81(129)/0xAA(170)/0x66(102)/0x3F(63) 均来自段镜像。
+- **伪 callee**：五条 band 的唯一“被调”是 `sub_3702F`(chkstk) + memmove；真依赖只有 memmove。
+- **未纳入**：编排者 `0x1B1E7` 在循环里读**未初始化的 ebp**（BIOS tick 基线，全函数未赋值、
+  未保存该寄存器），语义含歧义，故本轮只拉出 6 个干净 callee（`0x1B1E7` 现已闭包就绪）。
+
+### 13) 地图滚动步进簇 → `src/game/map_scroll.c/.h`（本轮，6 函数）
+
+把队伍记录/地图视口一起推动一格的动画簇（`scene_enter` 与本家族链路上的
+`0x14B78`/`0x18890`/`0x13A9F` 都会用到）：
+
+- `0x12EAA/0x1300D/0x13185/0x13315` → `map_scroll_down/left/up/right`：把记录
+  `dword_53A45[rec]`（步长 80）挪一格（状态字节 `rec[+3]`=0..3、动画帧 `rec[+4]`=1..6），
+  同时平移视口原点（x=`dword_53AA9`/`dword_53AB1`，y=`dword_53AAD`/`dword_53AB5`），7 帧里
+  每帧 `map_unit_ping(0x32230)`→`pal_anim_step(0x4E31C)`→`anim_frame_step(0x1297D)`→
+  `map_render_view(0x11EEE)`（13×9；`0x1300D` 固定 14 列，`0x13315` 按分支 13/14 列）→
+  `dlg_portraits_refresh(0x127A9)`→`gfx_copy_rows(0x11EB0)`（312×192 → 0xA0504）→`ev5_13460`。
+  常量 `0x8088/0x8070/0x55C8`、`±4/±1824/0x720`、行偏移 456/320 均取自离线反汇编。
+  四处“是否已到位”的判据与 `ev4_11B48/9B/FA/C59` 同构（`dword_53AC5/51A8B`、`dword_53AC1/51A87`）。
+- `0x13488` → `map_scroll_path`：按方向码表逐项调用上四者（0=下/1=左/2=上/3=右）。
+- `0x13A44` → `map_scroll_cell_tag`：读 `map_cell_info` 的格（`flags&0x60==0` 且 tag!=0）→
+  查 `dword_53A55 + 2*(tag-1)` 的 `+0x33/+0x34`，命中 `which` 时写 `dword_51A8F`。
+- **伪 callee / 共享尾声**：四者的尾跳（`jmp 0x13167/0x1314F/0x12FF0/0x13180`）都落在邻函数体内，
+  是共享尾声（调 `map_scroll_cell_tag` 或纯 `ret`），非调用；真依赖＝本簇 6 个 + 上列已还原资产。
+- **qword 伪视图**：Hex-Rays 把相邻的 `dword_53AA9/dword_53AAD` 与 `dword_53AB1/dword_53AB5` 并成
+  `qword_53AA9/qword_53AB1`；机器其实按 32 位读写（低位=x，高位=y），C 侧按 `ev4.c` 既有约定恢复。
+- **返回值**：`0x13A44` 在部分路径于 eax 留一字节，其三个调用点（`0x1300D/0x13A9F/0x18890`）均不读，
+  C 侧声明 `void`。
+
+### 14) 开场/继续游戏画面助手 → `src/game/title_screen.c/.h`（本轮，3 函数）
+
+开场屏 `0x1F894`（载 FDOTHER.DAT、滚动 logo、读 FD2.SAV 询问“继续？”）的三个已闭包就绪 callee：
+
+- `0x2DF01` → `pal_blend_to(first,last,step,r,g,b)`（u5，本轮最高）：把 DAC 段 `[first,last)` 每项按
+  `target + (pal[i]-target)*step/40` 混合（机器用 `imul/idiv`，**有符号截断**；`step`=40 原样输出、0 全变目标色），
+  每项先 `outp(0x3C8,i)` 再逐通道 `outp(0x3C9,·)`；`outp` 经原地址 `0x37AE5` 调用（同 `fade.c`）。被开场屏与片头 `0x2D80D` 共用。
+- `0x1FF79` → `title_options_draw(image,selected,count)`（u4）：把 `image`（FDOTHER 项）的第 1..3 条选项带
+  `res_blit6` 到屏幕固定偏移 `0xACD81/0xAD8C1/0xAE401`（各差 9 行=2880B），选中行用偶数子图（2/4/6）、
+  否则奇数（1/3/5）；`count` 决定画 1..3 条（`cmp;jle` 有符号）。原函数 eax 留 `res_blit6` 的返回值，调用点不读，C 侧声明 `void`。
+- `0x1F73F` → `title_frame_show(image_index,palette_index,strip,row)`（u1）：淡出 → `memset(0xA0000,0,0xFA00)`
+  → `res_load(FDOTHER,·,palette_index)` 换调色板 + `res_load(FDOTHER,0,image_index)` → `rle_decode` 到屏
+  → 淡入 → `svc_wait_ticks(1)`/`(6)` → 淡出 → `res_load(FDOTHER,·,101)` →
+  `gfx_copy_rows(0xA0000,320,strip+320*row,320,320,200)` → 淡入：把 735 行的 5 段合成长图按 `row` 竖直开窗。
+- **伪 callee**：三者皆仅误挂 `sub_3702F`(chkstk)；真依赖全部已还原（res/rle/gfx/fade/svc）。三者无对拍器，标“已还原未验证”。
+
+### 15) 地图行动效果处理簇 → `src/game/map_action.c/.h`（本轮，6 函数）
+
+地图行动路由 `sub_20C6F`（行动码 8..24 分派）与 `funcs_1541F` 事件/行动表共同调用的
+“逐记录效果处理”簇。全部真依赖已还原（map/rec/ev4/unit_load/util）：
+
+- `0x21082` → `map_action_add_field(a1,value,field,slot,count,list,table_idx)`：画队伍图标 →
+  对 `list[0]` 记录的 `field` 处 16 位字 `+= value` → `map_enqueue_status(value,94,list[0])` →
+  刷新并弹状态数字 → `unit_metrics(a1)` → `rec_slot_remove(a1,slot)`。被 `sub_20C6F` 以多个
+  行动码（字段偏移 55/57/59/62/66/70、字形基 13/17/18/19）复用。
+- `0x22721` → `map_action_grow_x`：对每个目标，若记录 +34 标志为空则置为 `rand%4+2`，
+  把 +72 度量按 `(word * dbl_50210 + 1.0)` 增长（**Watcom `fild/fmul/fld1/faddp/__CHP/fistp`**，
+  C 侧即 `(int)((double)word * dbl_50210 + 1.0)` 截断）并把该增量显示为数字，`dword_53EC8 += 2*r[33]`；
+  否则只 `ev4_1E1DC` 排空闲光标精灵。
+- `0x22997` → `map_action_widen`：同构，作用 +36 标志并把 +76/+78 度量各 `+= 15`，显示 15。
+- `0x22C04` → `map_action_clear_flag`：`rec_sub_table5(a1,25)` 后对每个目标清除记录 +5 的 bit7
+  （`rec_flag_or80` 的逆操作），`dword_53EC8 += 8*r[33]`；否则排空闲光标精灵。
+- `0x226EA`/`0x22960` → `map_action_grow_x_cost`/`map_action_widen_cost`：`funcs_1541F` 第 17/19 项，
+  先 `rec_sub_table5(index,18/19)` 扣费再调用上面对应的 0x22721/0x22997。
+
+**陷阱/伪代码伪影**：
+- **伪 callee（共享尾声）**：`0x22721` 的 callee 表误挂 `sub_1300D`（尾 `jmp 0x1317D` 落进其共享尾声），
+  `0x22997` 误挂 `sub_22AF6`（尾 `jmp 0x22BBE`）——均按普通 return 处理，不传递依赖。
+- **chkstk**：六者皆 `push size; call 0x3702F`，丢弃。
+- **`_CHP()`**：`0x22721` 的 `call 0x37AF4` 是 Watcom 浮点取整辅助，配 `fistp` 即 C 的 `(int)` 截断。
+- **符号比较**：`0x22C04` 的 `rec[5] >= 0` 在机器上是 `test byte,0x80; je`，C 侧写 `(rec[5] & 0x80) == 0`
+  以避免 `uint8_t` 恒真；`v6 > 8 && v6 < 25` 用 `movzx` 无符号量，正数下与有符号同。
+- **返回值**：`0x22C04`/`0x22721`/`0x22997` 尾声处的 eax 是 `map_view_update`/`map_draw_status_popups`
+  的残留（均 void），调用点不读，C 侧返回 0。六者无对拍器，标“已还原未验证”。
+
+### 16) 密码输入屏 → `src/game/password.c/.h`（本轮，3 函数）
+
+地图视图处理器 `0x117E7` 解锁的密码屏整簇（`0x344B4`(u5) 为闭包就绪头部）：
+
+- `0x33FAF` → `password_screen_run`：`guest_malloc(0xFA00)` 屏幕缓冲 → `res_load` FDOTHER 96/97/98
+  → `rle_decode`(97) 到缓冲并释放 → `util_rand()%100` 取随机两位数密码 → 按该值查 `0x60181`
+  的 3 字节记录（`util_rec3`）→ `ev5_34317` 解出 6 个字型索引 → `password_frame_draw` →
+  `pal_fade_in` → 键循环（INT 16h，AH=0x10；E0/52/39→1C、53→1）：左/右（4B/4D）移动光标 0..5、
+  回车（1C）追加字型（最多 3 个）、退格（01）删除，各带 `svc_play_sfx` → 释放、`pal_fade_out`
+  → `memset(0xA0000,0,0xFA00)` → `map_view_update(1)` → `pal_fade_in`。
+- `0x34366` → `password_frame_draw`：拷屏到新缓冲 → `sprintf(buf,"%02d",n)` 拆两位数 → 逐字型
+  `password_glyph_blit`（两位数 col 150/162、row 75；6 个轮盘字型 col 25i+86、row 132；
+  已选字型 col 32i+116、row 97；光标 `dword_53A4D` 的 0 号子图 col 25·sel+86、row 132）
+  → 拷回 0xA0000。
+- `0x344B4` → `password_glyph_blit`：单字型 `sprite24_plain`，源 `img+*(int*)(img+4*index+6)`、
+  目标 `surface+stride*row+col`（机器 ABI 即 `(img,index,surface,stride,col,row)`）。
+
+**陷阱 / 伪代码伪影**：
+- **死代码（关键发现）**：`0x34215..0x3423A` 把 3 个已输入字型与密码比较，但不等分支 `0x34233`
+  是**无条件跳转**（字节 `39 D8 EB E9` = `cmp eax,ebx; jmp 0x3421E`），故置失败标志的 `0x34235`
+  不可达、`0x34243` 整段“密码错误”路径（`rle_decode`(98) + `j___delay(1000)` + 重试计数
+  `0x34274` + `AIL_shutdown` + INT 10h 文字模式 + `printf("Sorry your password is wrong !!!")` +
+  `exit(1)`）是**死代码**；Hex-Rays 亦整段省略。本 C 未翻译该死段（屏幕恒通过），仍按机器保留
+  98 号资源的载入/释放。已核 `0x34235`/`0x34243` 无任何跳转/调用目标。
+- **chkstk**：三者皆 `push size; call 0x3702F`，丢弃。
+- **局部 REGS**：INT 16h 用局部 REGS 块（AX 在偏移 0），扫描码取高字节（偏移 1）；其余键读取器
+  用全局 `word_53A8D`。
+- **资源 98**：仅死段使用，本 C 仍载入并在收尾释放（保持分配序列一致）。
+- 无对拍器，标“已还原未验证”。
+
+### 17) 队伍肖像马赛克揭示过渡 → `src/game/mosaic_reveal.c/.h`（本轮，4 函数）
+
+地图上“角色加入 / 队伍变更”时的整屏过渡簇（编排者 `0x1A30B` 未还原，仅取其闭包就绪的
+三段：`0x1F42D` 头 + 两个 caller `0x1F1CC`/`0x1F30A` + 其私有块化 blit `0x4EB59`）：
+
+- `0x4EB59` → `mosaic_blit(block,dst,src)`：把 `src+0x504` 的 312×192 窗口按 `block×block`
+  栅格重采样写到 `dst+0x504`（`block==1` 即 1:1）；每格取格左上角源字节。行内每 `block` 列步进
+  `block`，每 `block` 行把源指针整体前移 `320*block`。机器用 16 位 `mul` 把 `320*block` 只留低 16 位
+  （本簇 1..17，不溢出）。仅被本簇两个 caller 使用（usage=2），是私有 helper。
+- `0x1F42D` → `reveal_slide_draw(offset,index)`：在 456 行距地图窗（`dword_53A49+0x8088`）里
+  保存左右两条肖像带背景 → 左带画子图 `index`（列 `85-offset`）、右带画子图 81（列 `165+offset`，
+  皆行 82）→ 把 312×192 窗口拷到 VGA 暂存页 `0xA0504`（`gfx_copy_rows`）→ `svc_wait_ticks(1)`
+  → `dlg_snap_restore` 还原两条带。即“两肖像沿水平方向分开”的一帧。
+- `0x1F1CC` → `reveal_mosaic_out(index)`：`guest_malloc(0xFA00)` 暂存屏 → 拷 `0xA0000` 屏幕
+  → 连续 `reveal_slide_draw(25*i,i=4..0)`、`(1)`、`(0)` 播放分带帧 → 存回 `dword_53A49`、清暂存
+  → 循环 `j=0..15`：`mosaic_blit(j+1,暂存,屏)`（1→16 渐粗）→ 在暂存上画子图 `index`/81 并释放
+  → `pal_fade_range(16,255,j)`（**渐暗**，`j` 即减色量）→ 拷回屏 → 等 1 tick → 释放、`kbd_flush`。
+- `0x1F30A` → `reveal_mosaic_in(index)`：清暂存 → 循环 `i=16..0`：`mosaic_blit(i+1,暂存,屏)`
+  （17→1 渐细）+ 画子图/释放 + `pal_fade_range(16,255,i)`（**渐亮**）+ 拷回屏 + 等 1 tick
+  → `map_render_view(dword_53A49+0x8088,456,13,8,dword_53AA9,dword_53AAD)` → `dlg_portraits_refresh`
+  → 再播 `reveal_slide_draw(25*j,j=0..4)`。
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声**：`0x1F42D` 尾 `jmp 0x184BA` 落进 `fb_slide_step` 尾声（`add esp,0xC; pop esi; pop ebx; ret`），
+  该 `add esp,0xC` 恰好清掉第二次 `dlg_snap_restore` 的 3 个实参（Watcom cdecl 调用者清栈），
+  机器上是普通 `return`，非调用/非依赖。
+- **chkstk**：四者皆 `push size; call 0x3702F`，丢弃。
+- **寄存器复用**：`0x1F30A` 尾部把 `esi`（原暂存指针，已 free）改作循环计数，C 侧用独立 `j`。
+- **伪 qword 视图**：`0x1F30A` 的 Hex-Rays 把相邻 `dword_53AA9/dword_53AAD` 并成 `qword_53AA9`，
+  机器按 32 位读（低位=ox、`dword_53AAD`=oy）；C 侧按 `map_scroll`/`ev4` 既有约定取 `(int)dword_53AA9`。
+- **块化读法**：Hex-Rays 未表出 `0x4EB59` 的“行指针复用+栅格重采样”结构，须以反汇编为准（行内只在
+  栅格边界步进、行间 `push/pop esi` 复用同一行）。
+- **语义归属**：`0x4EB59` 位于库区（funcmap zone=lib），但仅被本簇调用，故随簇归入本模块。
+- 无对拍器，标“已还原未验证”。
+
+### 18) 地点/场所菜单辅助簇 → `src/game/place_menu.c/.h`（本轮，5 函数）
+
+`dword_53F4A` 选定当前场所；菜单环本身是 `menu_list_select`（0x27D33），场所/商店子屏由
+`sub_2670E/279BC/2872B/28CBD/29300/29DAA/2A43E` 驱动（均待还原）。本簇是这些驱动共用的屏幕片段：
+
+- `0x26A0D` → `place_name_copy(dst)`：按 `dword_53F4A` 从 `dword_53F56` 的表取场所名片段
+  （1→偏移 3、长 12；3→偏移 15、长 8；其他→偏移 23、长 8），逐字节拷到 `dst`，遇 `0xFF` 停，
+  返回字节数。
+- `0x2921A` → `place_zoom_blit(src_x,src_y,src,zoom)`：把 320×200（步长 320）源图最近邻放大进
+  实时帧 `dword_53A49`；`src_x/src_y` 为源点 ×128（定点），`zoom` 为倍率 ×128；先 `memset` 清屏、
+  越界裁剪。地点菜单退场逐帧调用它（`i=10..0`，`zoom=128-9*i`；x 中心 `((i*(byte_52363[..]-150)/10)<<7)+20480`）。
+- `0x28B41` → `place_transition()`：按 `dword_53F4A` 分支播放转场（1/5：`res_blit6` 带擦除循环；
+  3：单带 + `svc_wait_ticks(8)`；4：9 带 + 两段 `pal_fade_add` 增亮/减暗各 `j___delay(4)` + 等待），
+  结束 `dlg_blit_dato(dword_53A85,dword_53C67,0)`、`kbd_flush()`。
+- `0x26A7A`/`0x26B91` → `place_money_gain/spend(amount)`：把金额 `dword_53BF3` 加/减 `amount`，用
+  `%0.8d` 拆成 8 位数字逐位列滚动动画（`ev5_26C9B` 画 6×9 字形，列基址 `0xA7A90+6*n`），每帧 `j___delay(10)`。
+
+**陷阱 / 伪代码伪影**：
+- **实参定序**：`0x2921A` 机器帧里 4 个实参在 `[esp+0x1c..0x28]`，经离线反汇编（cdecl 末压者在低地址，
+  调用点 `0x26882/0x268a2` 的压栈序）定为 `(src_x, src_y, src, zoom)`；Hex-Rays 的 `a1/a2` 顺序一致。
+- **有符号除 128**：机器用 `sar/sbb` 惯用法实现“向零截断”的 /128；两处读取都先做
+  `(unsigned)<范围` 守卫（源列 x∈[0,0xA000)、源行 y∈[0,0x6400)），非负下 `>>7` 与之等价，C 侧照写。
+- **数字滚动细节**：`0x26A7A` 滚动标志从 1 递增（达 10 时进位显示位、**不重置**标志——下一轮 while
+  才按 `cur==tgt` 重新初始化），字形索引 `flag+9*cur`；`0x26B91` 标志从 9 递减，字形索引 `9*cur+flag-1`，
+  且显示位在每轮 while 开头 `--cur`（0→9 回绕）。两者逐句与 Hex-Rays 一致，已在离线反汇编 `26a7a..26c96` 核过。
+- **共享尾声**：`0x26A7A`/`0x26B91` 共用尾声 `0x26B8A`（`add esp,0x3C; pop edi/esi/ebx; ret`），是普通 `return`。
+- **chkstk**：五者皆 `push size; call 0x3702F`，丢弃。
+- **返回值**：`0x2921A` 退出时 eax 残留 `zoom`、`0x28B41` 残留 `kbd_flush` 的左值，调用点均不读，C 侧声明 `void`。
+- 无对拍器，标“已还原未验证”。
+
+### 19) 地图行动 / 记录列表助手簇 → `src/game/map_records.c/.h` + `map_action.c`（本轮，3 函数）
+
+地图行动路由 `sub_20C6F`（行动码 8..24）与其驱动 `sub_1CFF0/15055/1567E/1548E/18D8C` 共用的
+“y 放大”handler 与记录收集助手；三者真依赖全部已还原：
+
+- `0x22866` → `map_action_grow_y`（追加 `map_action.c`）：与 `map_action_grow_x`（0x22721）同构——
+  先 `map_draw_party_icons_anim/_icons(a1,18,a2,a3)`，再逐目标：若记录 +35 空则置 `rand%4+2`，
+  把 +74 度量按 `(word * dbl_50218 + 1.0)` **截断**增长（Watcom `fild/fmul/fld1/faddp/__CHP/fistp`），
+  数字显示、`dword_53EC8 += 2*rec[33]`；否则 `ev4_1E1DC` 排空闲光标精灵。记录 +72/+74/+76/+78 在
+  `unit_load.c` 里即 x/y/h/w，故 +72→x（0x22721）、+74→y（本函数）、+76/+78→w/h（0x22997）。
+  是 `sub_20C6F` 行动码 15 的 handler。
+- `0x1B6B7` → `map_collect_scripts(out)`（新模块 `map_records`）：扫 `dword_53A45` 的 `dword_53BEB`
+  条记录，凡 `(rec[5]&1)==0 && rec[49]!=0xFF && word[rec+64]==0` 者，把 +49 处的 3 字节“脚本条目”
+  `memmove` 到 `out + 3*count`，**返回 count**（机器把计数留在 eax）。`sub_20C6F` 尾部即用它填好
+  局部数组后交给 `ev_script_run`（0x1AA1D）。
+- `0x149F8` → `map_scan_records(ref_x,ref_y,out,start_x,start_y,steps,want_empty)`：
+  从格 `(start_x,start_y)` 出发，每步按方向（同轴比 `ref`）±1 推进 `steps` 步，令全局 `qword_53AB1`
+  置 `(x,y)` 后 `dlg_portrait_find()` 找该格记录，命中且 `(want_empty==0 && rec[6]!=0) ||
+  (want_empty!=0 && rec[6]==0)` 则写入 `out`；越界（`0<=x<dword_53AC1 && 0<=y<dword_53AC5`，均
+  **有符号**比较）跳过。收尾还原 `qword_53AB1`，返回 count。`sub_15055/1567E/1CFF0` 用它做“从目标格
+  朝选中格”的行扫描。
+
+**陷阱 / 伪代码伪影**：
+- **伪 callee（共享尾声返 eax）**：三者的返回都靠跳进**邻函数**的共享尾声——
+  `0x1B6B7` 尾 `jmp 0x1B64D`（在 `sub_1B5F1` 体内，`mov eax,esi; pop×3; ret`）、
+  `0x149F8` 尾 `jmp 0x114FF`（在 `sub_1145A` 体内，`add esp,0x10; pop×3; ret`）、
+  `0x22866` 尾 `jmp 0x2281B`（在 `sub_22721` 体内：`map_view_update(0)`+`map_draw_status_popups()`）。
+  故 `function-map` 把 `sub_1B5F1/sub_1145A/sub_22721` 误列为 callee；真依赖仅本 3 函数 + 上列已还原资产。
+- **返回值**：IDA 因尾声不在本体内把 `0x1B6B7/0x149F8` 标成 `void`，实际 eax 回计数——
+  调用点 `0x1562f/0x18fd6/0x1d48d/0x21058` 均 `mov ebx,eax` 后作 `ev_script_run` 的 steps 参数，
+  故 C 侧声明为 `int`。
+- **qword 视图**：`0x149F8` 的 `qword_53AB1` 是 x/y 两个 32 位单元（低位 x=0x53AB1、高位
+  y=0x53AB5）；C 侧用 `qword_53AB1` 整体存取（与 `dlg.c`/`scene.c` 约定一致），步进用 32 位局部
+  变量以免 64 位进位污染另一半。
+- **word[rec+64] 判零**：机器 `movzx; test; jg skip`（有符号 >0 跳过）；与同簇 `ev5_1B653`、
+  `map_units.c` 的既有写法一致，按 `== 0` 还原（该字段为非负计数）。
+- **chkstk**：三者皆 `push size; call 0x3702F`，丢弃。
+- 无对拍器，标“已还原未验证”。
+
+### 20) 地图方向光标补片动画簇 → `src/game/map_cursor.c/.h`（本轮，4 函数）
+
+`dword_53C57` 选方向的地图交互族（驱动器 `0x16F55/0x1728C/0x18D8C/0x19DF7/0x1BBDC`，均待还原）共用的
+“tile 补片 + 窗口暂存回填”动画：每帧先把暂存的 72×72 字节块贴回地图视图，再在 4 个偏移处
+`gfx_blit_transparent` 盖 4 张 tile，然后重画记录肖像并把 312×192 窗口发布到 VGA 暂存页 `0xA0504`。
+全部真依赖已还原（`dlg_portrait_find/draw`、`svc_play_sfx`、`anim_frame_step`、`map_render_view`、
+`dlg_portraits_refresh`、`map_draw_cursor`、`gfx_blit_transparent`、`gfx_copy_rows`、`kbd_flush`）：
+
+| 原址 | 新名 | 行为 |
+|---|---|---|
+| `0x175A9` | `map_cursor_window_save` | 释放旧 `dword_53A71` → `guest_malloc(0x1440)` → 72 行×72 字节从视图块拷入 |
+| `0x17643` | `map_cursor_window_restore` | 反向：把 72×72 块贴回视图（每行步长 456） |
+| `0x1741C` | `map_cursor_patch_expand` | 开场 4 帧：偏移表 `{0x390×4}` 每帧 `−0x8E8/−6/+6/+0x8E8`（发散）；先 find→sfx→anim→render→refresh→cursor→save |
+| `0x176B4` | `map_cursor_patch_collapse` | 收场 4 帧：偏移表 `{−0x23A0,0x378,0x3A8,0x2AC0}` 每帧 `+0x8E8/+6/−6/−0x8E8`（收敛）+ 末尾再回填一次 + `kbd_flush`；sfx 在 find 之前 |
+
+**陷阱 / 伪代码伪影**：
+- **探针不是 callee，且不分配帧（新的关键发现）**：`0x3702F` = `xchg [esp+4],eax; call 0x37042; mov eax,[esp+4];
+  ret 4`——`0x37042` 各条路径全是 `ret`，**不改 esp**。故 `push size; call 0x3702F` 只做守卫页探测，
+  函数帧来自显式的 `push ebx/esi/edi/ebp` + `sub esp,0x18`。这解释了 Hex-Rays 把 `0x1741C` 的
+  `[esp+0x2C]/[esp+0x30]` 误当“未初始化局部”：按上述净效应，`[esp+0x30]` = `[esp0+8]` = **第 2 实参**。
+- **ABI 由调用点定案**：两台机器码的前言一致，`mov ebp,[esp+0x30]` 即第二实参，故签名 =
+  `(const int *a_tiles, const int *b_tiles)`（各 4 个 dword 的索引数组；调用点
+  `0x16F91..0x16F97`、`0x1BC72..0x1BC77` 用 `lea/push` 压入局部数组佐证）。Hex-Rays 在 `0x1741C`
+  **丢掉这两个实参的加载**，把 4 元素偏移表误标成 `retaddr/a1/a2/v7`，必须以反汇编为准。
+- **伪 callee（共享尾声）**：两个画家尾部 `jmp 0x13FCC` 落在 `sub_13E9C` 体内（`add esp,0x18; pop×4; ret`）
+  → 普通 `return`；`function-map` 因此误列 `sub_13E9C`。真依赖只有本簇 4 个 + 上列已还原资产。
+- **块基点 vs 补片基点**：暂存块基点 = `+0x8088 + 24*(dword_53AB9−1) + 10944*(dword_53ABD−1)`（视图原点
+  左上隔一格），补片基点 = `+0x8088 + 24*dword_53AB9 + 10944*dword_53ABD`（恰好差一格 = 10968 字节）。
+- **索引表**：`0x51E9F` = `{7,5,6,4}`（镜像常量），`0x53EF2` 镜像里全 0（运行时填）；tile 偏移 =
+  `*(dword_53A89 + 4*(3*a[j]+2*b[j]))`，tile 指针 = `dword_53A89 + 该偏移`，每帧 4 张（机器每轮
+  重读 `dword_53A89`，C 侧同）。
+- **堆**：`dword_53A71` 是 `fd2_globals.h` 里的 `uint32_t` 标量 → 用 `guest_malloc/guest_free`（同 `0x3706E/0x3776E`）。
+- **返回值**：两者尾声 eax 残留最后一次 `memmove` 的结果，两个调用点均不读，C 侧声明 `void`。
+- 无对拍器，标“已还原未验证”。
+
+### 21) 队员图形动画视图助手簇 → `src/game/figure_view.c/.h`（本轮，3 函数）
+
+仍待还原的驱动器 `sub_2CF30`（0x2CF30，2269B）播放队员的 FIGANI.DAT 动画并铺 BG.DAT 卷动背景 +
+TAI.DAT 交替肖像；本轮取其三个闭包就绪的 callee（第四个 callee `0x2E95B` 只在 CRT `fread` 包装
+`sub_373CA` 上重读 FD2.TMP，属库区，本批不收）：
+
+- `0x30E25` → `figure_bg_pick(count,units)`（u2）：从 `byte_52470[dword_53C03]` 起，倒序扫 `units[]`
+  的 80 字节记录，经 `map_cell_info` 取格信息，凡 `rec_skip(unit)==0 || sel==0` 就用其字节 6 作 BG 子图
+  索引；返回该索引（`sub_2FF01` 用它选 `res_load(BG.DAT,...)`）。
+- `0x2F4D4` → `figure_bg_scroll(unit,figure,screen,tmp,bg)`（u3）：两趟 i=9..0 把三张 BG 条带
+  `dword_5413F[(i)%3]` / `[(i+2)%3]` 经 `rle_decode` 铺进 640 步长工作缓冲（第二趟落点 +320），每步
+  `gfx_copy_rows` 从 `work+32*i` 发 320×200 窗到屏；中间清两缓冲→解当前 bg 到 320 步长屏→
+  `ui_status_panel_at(screen,unit)`→`res_blit(figure,0,work,640,-1)`。
+- `0x30E9D` → `figure_play(unit,mode,figure,base,tmp,screen,bg,tai)`（u3，840B）：按 `mode` 选
+  `dword_53A6D` 调色条带下标（8/32/33→19、>3→15、否则 11）；逐 `figure` 子精灵
+  （数=figure[2]，偏移=figure[4i+8]）→音效/姿态切换（`rec_sub_table5`+状态面板+非菜单模式画
+  bg/tai 并置 `flash=6`）→逐帧把 320 步长缓冲合成进 640 缓冲、按记录 +6 决定 `figure[i]`/`base[frame]`
+  先后、发框到 VGA、`outp` 调色闪 6 帧、推进 base 帧计/`svc_wait_ticks(1)`。
+
+**伪代码/语义要点**：
+- **算符顺序即 ABI**：本批三次调用都用离线反汇编的压栈序定了实参顺序（尤其 `0x30E9D` 的两次
+  `rle_decode_lut` 首参是 `a7`(a8)；`0x2F4D4` 的 `sub_2FACD(a3,a1)`＝`ui_status_panel_at(screen,unit)`）。
+- **`_EAX` 类型**：`dword_53A6D` 在 `fd2_globals.h` 是 `uint8_t*`，调色条带按 32 位读
+  `dword_53A6D + *(uint32_t*)(dword_53A6D+4*stride+6)`（同 `map.c`/`reveal.c` 约定）。
+- **chkstk**：三者皆 `push size; call 0x3702F`，丢弃。
+- **返回**：`0x2F4D4`/`0x30E9D` 的 eax 残留被调用点忽略，C 侧声明 `void`；`0x30E25` 返回索引，声明 `int`。
+- 无对拍器，标“已还原未验证”。
+
+### 22) 地图视图缩放 / 仪表帧缓冲助手簇（本轮，4 函数）
+
+本轮 closure-ready 头名的四个 u3 游戏函数（新模块 `map_zoom.c/.h` + 三个已还原模块追加）：
+
+| 原址 | 新名 | 模块 | 要点 |
+|---|---|---|---|
+| `0x1E739` | `ui_meter_fixed(dst,pitch,count)` | ui_meter.c | 固定宽仪表：正 count 画左帽 23 → 身 24 → 右帽 25 → 空格 29（到位置 69）→ 尾帽 30（位置 70）；count<=0 画全空 29..29 后尾帽 30（末位 69）。两个分支总长 71/70 的不一致原样保留。 |
+| `0x1F558` | `map_zoom_draw(x,y,zoom,cells)` | **map_zoom.c（新）** | 地图缩放过渡帧：定点中心 (x,y)、`zoom`/128 倍、13×8 格窗左上 = 中心 − (156·zoom, 96·zoom)/3072；清 `dword_53A49` 后在 +0x504 逐行按 `cells[row*64+col]` 最近邻放大 312×192（每 24 输出列进一格、每输出列源字节步进 `zoom`/128）。 |
+| `0x2282F` | `map_action_grow_y_cost` | map_action.c | `funcs_1541F[18]`：`dword_53EC4=0` → `rec_sub_table5(index,18)` → `map_action_grow_y(index,count,list)`。 |
+| `0x265EC` | `scene_map_view_draw` | scene_core.c | `scene_apply_state` 交互分支每帧重绘地图视图（0x26434/0x2647E）：`memmove(dword_53A5D→dword_53A49,0x25680)` → `rle2_blit(dword_53A49+0x1A20C, dword_53F5A, 456)` → `vm_run(dword_53A7D, dword_53F4A+495, dword_53A49+0x1ACC4,456,…)` → 记录格光标精灵 `dword_53A61[frame]`（frame 3→1）→ `gfx_copy_rows(0xA0504,320,dword_53A49+0x8088,456,312,192)`。 |
+
+- **入口定位**：`dword_53F56 = tbl_ptr(&fd2_data2[0x238D],31,dword_53C03,-31)`（同 scene_core 既有写法），其首字节 `v2` 与 `dword_53F4A` 共定 `byte_52363/52375[6*v2+dword_53F4A]` 的格坐标。
+
+**陷阱 / 伪代码伪影**：
+- **伪 callee（共享尾声）**：`0x1F558` 尾 `jmp 0x18888` 落进 `dlg_draw_number`(0x187D6) 体内尾声（`add esp,0x1C; pop×4; ret`）→ 普通 `return`；`function-map` 误列 `sub_187D6`。
+- **`__CFSHL__`**：`0x1F558` 的 `/128`（`sar/shl/sbb/sar` 惯用法）与 `/3072`、`%3072`（`idiv`）在 Hex-Rays 里被渲染成 `__CFSHL__`/`__CFSHR__`；两输入先归一到 `[0,3072)` 非负，C 侧用普通 `/`、`%`（int）。
+- **指针表 ABI**：`0x1F558` 的 `a4` 是调用方建的 64×64 个 32 位“源基址”表（`cells[row*64+col]`，指向 `dword_53A5D` 工作缓冲，行距固定 64），C 侧按 `const uint32_t *` 读并以 `(uintptr_t)` 还原为指针；建表方 `0x2000A`/`0x21548` 仍待还原（尾随 `memmove(0xA0000,dword_53A49,0xFA00)` 发布）。
+- **entry-18 两次**：`0x226EA`(entry17=x) 与 `0x2282F`(entry18=y) 机器码都 `push 0x12`（同扣 0x619FD 第 18 项），`0x22960`(entry19) `push 0x13`；原样保留（`map_action.h` 注释已更正）。
+- **返回值/别名约束**：`0x265EC` 尾声 eax 残留 `gfx_copy_rows`，三个调用点均不读，但 `fd2_funcs.h` 原型为 `int`，故 `scene_core.h` 以 `#define sub_265EC scene_map_view_draw` 保持 `int` 返回 0（沿用该头既有别名模式）。
+- **chkstk**：四者皆 `push size; call 0x3702F`，丢弃。
+- 无对拍器，标“已还原未验证”。
+
+### 23) 地图状态叠加帧（本轮，2 函数）→ `map_status.c/.h`（新）
+
+本轮 closure-ready 头名是 `0x1E7F6`(u4)——§22 拉出 `0x1E739` 后它才就绪；其唯一 caller `0x1E611`(u1)
+的其余 callee 均已在册，故作为同簇整体拉出。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1E611` | `map_status_frame(pos,actor,target)` | 地图视图状态帧：`map_render_view(dword_53A49+0x8088,456,13,8,dword_53AA9,dword_53AAD)` → `dlg_portraits_refresh()` → 目标记录精灵 `res_draw_subimage(dword_53AD1,view,456,pos0-4,pos1-4,48)` → 上方 55 段 `ui_meter_fixed(view+456*(pos1+2)+pos0+3,456,55)` → 目标 HP 表 `map_status_gauge(dword_53A49+0x7964,456,target,pos)`；`pos[2]!=-1` 时再画 actor 精灵并 `map_status_gauge(...,actor,pos+2)`；末 `gfx_copy_rows(0xA0504,320,view,456,312,192)` 发布。 |
+| `0x1E7F6` | `map_status_gauge(dst,pitch,rec,pos)` | 记录 HP 表：读 `record+0x40` 当前 / `+0x42` 最大（均 u16），当前为 0 直接返回；否则 `ui_meter_fixed(dst+pos0+pitch*(pos1+6)+7, pitch, 69*cur/max+1)`。 |
+
+- **入口定位**：`pos` 为 4 个 int 的屏幕像素块 `{x0,y0,x1,y1}`，`pos[0..1]` 属 `target`（call 站点第 3 实参 `dword_53C4B`），`pos[2..3]` 属 `actor`（第 2 实参）；由 `0x1EB05` 填（`&dword_53A30`）。
+
+**陷阱 / 伪代码伪影**：
+- **伪 callee（共享尾声）**：`0x1E611` 尾 `jmp 0x11D2C` 落进 `map_view_update`(0x11CAC，已验证) 的共享尾声，实为 `gfx_copy_rows(0xA0504,320,view,456,312,192)` + `return`；`function-map` 误列 `sub_11CAC`（及其全部 callee）。
+- **`jle` vs `!=0`**：`0x1E7F6` 的 `movzx` u16 后 `test/jle`，值域 `[0,65535]`，故“当前==0 才返回”与 `!= 0` 等价。
+- **返回值**：`0x1E611` 的 `fd2_funcs.h` 原型为 `int`，但仅 eax 残留 `gfx_copy_rows`、无调用点读取，C 侧声明 `void`；`0x1E7F6` 同为 `void`。
+- **chkstk**：二者皆 `push size; call 0x3702F`，丢弃。
+- 无对拍器，标“已还原未验证”。
+
+### 24) 物品使用盒选择助手（本轮，2 函数）→ `src/game/box_popup.c`（追加）
+
+物品使用盒 `sub_1BFFE`（＝ `0x17E0B`/`0x1B9DE`/`0x17EEF`/`0x184C0` 的编排环）与商店菜单 `sub_2872B`
+共用的两条“物品可否被该队员使用 / 标记所选项”助手，均 closure-ready：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1C1C3` | `box_item_usable(rec,item)` | 取队员记录 +32 字节作索引，查物品类别表（`tbl_ptr(&fd2_data2[0x188A],7,byte+32,0)`，7 字节行）；若物品类型字节（物品表 0x602AD，同 `item_rec`）等于该行前 6 字节之一则返回 1，否则 0。 |
+| `0x1C142` | `box_item_select(rec,slot)` | 先 `rec_field_byte(rec,slot)` 取所选槽的物品牌；对 8 个槽（状态字节 +2*i+10）凡 0x40 位置位且物品牌与所选“同半区”（`>=0x80` 与 `<0x80` 同类）者清 0x40；再把所选槽置 0x40。返回 slot。 |
+
+**陷阱 / 伪代码伪影**：
+- **判据逻辑**：`0x1C142` 的清位条件在机器上先 `cmp ebx,0x80; jge`（有符号——但 ebx∈[0,255]，等价无符号），再 `movzx; cmp 0x80` 比物品牌；等价于 `(v3<0x80 && byte<0x80) || (v3>=0x80 && byte>=0x80)`，已逐指令核对 `1c142..1c1c2`。
+- **chkstk**：二者皆 `push size; call 0x3702F`，丢弃（`0x3702F` 不分配帧）；`pop esi/ebx` 为显式。
+- **返回值**：`0x1C142` 尾声 eax＝第二实参（slot），Hex-Rays 亦返 `a2`；`0x1C1C3` 返回 0/1。调用点 `1BFFE` 读取，C 侧均声明 `int`。
+- **归属**：追加进既有 `box_popup.c`（物品盒 `1BFFE` 的私有选择助手；`sub_2872B` 商店亦复用）。无对拍器，标“已还原未验证”。
+
+### 25) 人物图形视图的另两个同胞助手（本轮，2 函数）→ `src/game/figure_view.c/.h`（追加）
+
+`sub_2CF30` 家族（§21 的 `figure_view`）的另两个“人物动画演示”渲染器，分别被驱动器
+`sub_2EBE1`(0x2EBE1，2291B) 与 `sub_2FB2C`(0x2FB2C，744B) 调用；两者皆 closure-ready，
+真依赖全部已还原（`rle_decode`/`res_blit`/`gfx_copy_rows`/`ui_status_panel_at`/`svc_wait_ticks`）：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2F631` | `figure_bg_scroll_portrait(unit,figure,portrait,screen,work,bg)` | `figure_bg_scroll`(0x2F4D4) 的变体：先 `i=1..9` 轮转 `dword_5413F[i%3]` 解到 `work+320` 并逐帧发布；再 `memset` 两缓冲 → 在 `screen` 上解 `bg`(0,50) 与 `portrait`(164,157) → `ui_status_panel_at(screen,unit)` → `gfx_copy_rows(work+320,640,screen,320,320,200)` → `res_blit(figure,0,work+320,640,-1)` → 第二趟 `i=1..10` 轮转 `dword_5413F[(i+1)%3]` 解到 `work` 并逐帧发布。 |
+| `0x2FE14` | `figure_frame_run(figure,work,frames)` | 逐 `frames` 帧播放人物组 `figure`：每帧 `memset(work,0,0x1F400)` → 轮转 `dword_5413F[strip]`(strip=(strip+1)%3) 解到 `work`(640) → `res_blit(figure,sub,work,640,-1)` → `gfx_copy_rows(0xA0000,320,work,640,320,200)`；`figure[0]`=子精灵数、子精灵 `+6`=该子精灵帧数（`counter` 到则 `sub++`，回绕清零）→ `svc_wait_ticks(1)`。 |
+
+**陷阱 / 伪代码伪影**：
+- **ABI 由离线反汇编定案**：`0x2F631` 的 `mov ebp,[esp+0x24]`（chkstk 不分配帧 + 4 push 后）= 第 5 实参 = `work`；调用点 `0x2EBE1` 的压栈序列
+  `sub_2F631(unit, figure, portrait, screen, work, bg)` 与之吻合，且 `0x2F4D4` 同处调用为 `(unit,figure,screen,tmp,bg)`，故 `a3`=`portrait`（解在 (164,157)，同 `figure_play` 的 `tai`）。
+- **`0x2FE14` 的 `sub esp,8` 帧**：三个实参在 `[esp+0x1c/0x20/0x24]`（4 push + `sub esp,8` 后）；`res_blit` 的 5 个实参经 `push [esp+0x28]` 的求值时机核为 `(figure,sub,work,640,-1)`。
+- **`%3` 与 `counter 回绕`**：两处 `idiv 3`/`xor` 序列为无符号取余与“相等即清零”（`v4^=v5`/`v3^=v6`），因被除数非负，C 侧直接 `(x+1)%3`、`++counter==count` 且相等时置 0。
+- **chkstk**：二者皆 `push size; call 0x3702F`，丢弃（`0x3702F` 不分配帧）。
+- **返回值**：`fd2_funcs.h` 对 `0x2F631`/`0x2FE14` 的原型均为 `void`，Hex-Rays 亦为 `void`；调用点不读，C 侧声明 `void`。
+- 无对拍器，标“已还原未验证”。
+
+### 26) 队伍变更过渡的共享音效库加载/释放对 → `src/game/mosaic_reveal.c/.h`（本轮，2 函数）
+
+§17 留下的编排者 `0x1A30B`（队伍变更/肖像马赛克过渡）本轮只剩两个闭包就绪 callee——
+它在每段处理环（`0x1D80B`/`0x1D8BA`）前后成对调用它们：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1A7BD` | `reveal_bank_load` | `byte_53AF9 != 0` 时把 `dword_53B0F` 清 0 再 `res_load(aFdotherDat, NULL, 64)`；该全局是共享音效库（`0x1E98C` 把它当 `svc_play_sfx` 的 `bank` 实参用） |
+| `0x1A7F1` | `reveal_bank_free` | 同一 flag 门下释放 `dword_53B0F`（机器 `push ds:0x53B0F; call 0x3776E`）→ 走 `guest_free` 缝 |
+
+**陷阱 / 伪代码伪影**：
+- **`old_buffer` 是 NULL**：机器明确 `push 0` 作 `res_load` 第 2 实参（不是把 `dword_53B0F` 旧值传进去），
+  故每次都新分配；前一条 `mov ds:0x53B0F,0` 只是“载入期间清零”，C 侧照写以保序。
+- **chkstk**：两者皆 `push 0x10`/`push 8; call 0x3702F`，丢弃（`0x3702F` 不分配帧）。
+- **返回值**：两者 eax 残留（`res_load` 指针 / `free` 结果），调用点不读，C 侧声明 `void`。
+- **归属**：`0x1A30B` 的过渡即 `reveal_mosaic_out/in`（`push 0x52`/`0x50`），故两助手追加进
+  既有 `mosaic_reveal.c`（该模块仍无对拍器，保持“已还原未验证”）。
+
+### 27) 队伍名册成员助手 → `src/game/party_roster.c/.h`（本轮，2 函数）
+
+`0x2AF28`（队伍变更/编成屏，仍待还原）的两个闭包就绪 callee，即本轮 `function-map.csv`
+闭包就绪头名（均 u2、同 caller）：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2B439` | `party_member_present(count,id)` | 扫记录表 1（`dword_53A45`）槽 1..count 的 id 字节（+8），命中返回 1；未命中则播招募肖像序列（`msg_open_portrait(75)` → `vm_run(dword_53A7D,657,0xA951F,320,205,76,74,19,1)` → `dlg_blit_dato(dword_53A85,dword_53C67,0)` → `dword_53A51` 置 1 哨兵 → `dlg_wait_key(0)` → 清 0 → `msg_close_portrait`），返回 0。 |
+| `0x2B843` | `party_member_move_front(id)` | 扫表 1 找 id 字节命中的槽（全表扫、取最后一个匹配）；把表 2（`dword_53BF7`）的该记录搬到槽 1 并顺移紧凑其余槽（`guest_malloc(0xA00)` 暂存整表 → 三条 `memmove`）→ 释放暂存 + 释放 DATO 精灵库 `buf`（`dword_53A61`）→ `fopen(FDICON.B24,"rb")` 逐队员 `unit_entry_data(+7,fp)` 重建图集 → `fclose`（返回 fclose 结果，调用点不读）。 |
+
+**陷阱 / 伪代码伪影**：
+- **Hex-Rays 索引折算**：`0x2B439` 的 `dword_53A45 + 80*i + 88` 实为槽 `i+1` 的 `+8` 字节
+  （机器 `lea ebx,[edx+1]; ... shl 4` 得 `80*(i+1)`），C 侧直接写槽 1..count。
+- **无符号字节比较**：两者对记录 +8 与实参 id 均用 `movzx`（零扩展 `cmp`），故 C 侧 `(uint8_t)id`；id>255 永不命中。
+- **`dword_53AD9`**：机器 `movzx; inc` ⇒ `(uint32_t)(uint8_t)id + 1`（32 位写入）。
+- **`dword_53A51` 哨兵**：`0x2B439` 等待键期间把它置 1、随后清 0（`dlg_wait_key` 读它选文本基址），
+  与 `scene_core.c` 同写法——此路径是“哨兵”用法而非地图格表用法。
+- **`buf`（0x53A61）释放**：机器 `push ds:0x53A61; call 0x3776E`，走 `guest_free` 缝
+  （该单元由 `res_load` 的 `guest_malloc` 分配）；`dword_53BF7` 由 boot.c 初始化、此处不释放。
+- **fopen/fclose**：机器直接调 CRT `0x37324/0x3759C`；本 C 用 `fopen(aFdiconB24_6,aRb_10)`
+  （即 `fd2_data1` 的 `"FDICON.B24"`/`"rb"`）与 libc `fclose`（同 `scene_core.c` 的 FDICON 重载段）。
+- **chkstk**：二者皆 `push size; call 0x3702F`，丢弃。
+- 无对拍器，标“已还原未验证”。
+
+### 28) 地图视口记录/单位精灵叠加 → `src/game/map_sprites.c/.h`（本轮，2 函数）
+
+`map.c` 的 0x1C2DA/0x1C4CC（队伍图标绘制族）的**同胞**，闭包就绪头名（均 u2、同族）：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1CB94` | `map_draw_record_layer(base,count,list,frame)` | `map_render_view(base+0x8088,456,13,8,ox,oy)` → 扫全表记录（`dword_53BEB`、步长 80），跳过 +5 bit0 置位者与视口外者；视口内记录：索引在 `list`（`count` 项）中者 → `rle2_blit_trans(dst, overlay, 456)`（overlay = 0x53AD1 动画库第 `frame` 帧；驱动 0x1CAC7 传 74/75 交替），否则按 kind 字节与 `dword_53C0B` 从 0x53A61 库取 `sprite24_plain`。单次合成，不循环。 |
+| `0x1CD17` | `map_blink_units(unused,colour,count,list)` | `guest_malloc(0x25680)` 存底图 → 10 帧：回存底图 → 逐个 `list` 记录按视口内坐标 `sprite24_ramp(spr,dst,456,byte_52006[colour],7-i%8)` 闪烁 → `gfx_copy_rows(0xA0504,320,view,456,312,192)`+`svc_wait_ticks(1)` → 末尾回存底图 + `guest_free`。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声**：`0x1CB94` 尾 `jmp 0x1317D` 是 `0x1300D` **体内**的共享尾声（`add esp,0xc; pop*4; ret`）⇒ 纯返回，IDA 的
+  `sub_1300D` 是**伪 callee**（同 map_action/map_cursor 已记录的同一尾声）。`0x1CD17` 尾 `jmp 0x1C4BC` 先压 `v14` 再进
+  共享尾声（该处 `call 0x3776E`=guest_free）⇒ 语义等价于 `guest_free(scratch); return;`。
+- **视口原点**：伪代码把 `0x53AA9`/`0x53AAD` 合成 `qword_53AA9`；机器分两次读 **32 位 dword**（`mov eax,ds:0x53aa9` /
+  `ds:0x53aad`）并用**有符号**边界比较。C 侧按 `(int)dword_53AA9` + `dword_53AAD` 与 `int` 比较还原。
+- **未初始化寄存器局部**：`0x1CB94` 伪代码的 `v16`/`v17`（ebp 系）实为形参 base 与第 4 参 frame（反汇编读 `[esp+0x20]`/`[esp+0x2c]`），C 侧直接用形参。
+- **常数**：`dst = view + 24*(x-ox) + 10944*(y-oy) - 0xAB0`（末项 2736 = 24×114）；精灵库索引 `12*kind + (dword_53C0B==3 ? 2 : dword_53C0B)`。
+- **表只读**：`0x1CD17` 的色基机器先拷 `0x52006` 起 30 字节到栈局部 `v13` 再索引（只读、无写），C 侧等价写 `byte_52006[colour]`。
+- **chkstk**：两者皆 `push size; call 0x3702F`，丢弃。
+- **归属**：新建模块。`map.c` 系**已验证**模块，按 playbook 不改动，仅在伞头加 `map_sprites.h`（字母序插在
+  `map_scroll.h` 与 `map_status.h` 之间）。
+- 无对拍器，标“已还原未验证”。
+
+### 29) 物品子菜单循环（本轮，1 函数）→ `src/game/box_popup.c`（追加，物品盒家族闭合）
+
+§24 收尾的 `box_item_usable`/`box_item_select` 之后，物品盒（DATO）编排环 `0x1BFFE` 成为本轮
+闭包就绪的游戏函数头名（u2，324B）；它的全部 callee 均已在册（`0x17E0B`/`0x1B9DE`/`0x17EEF`/
+`0x184C0`/`0x1C142`/`0x1C1C3`/`0x18409` 及 `rec_field_byte`(0x1B722)/`rec_slot_free`(0x1B8A6)/
+`unit_metrics`(0x1B750)），故按“同模块簇”直接拉出，物品盒模块现闭合：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x1BFFE` | `box_run(rec)` | `box_open_anim(rec)` + `dword_53C57=0` → 内层 `do{ v1=box_input(rec,0); }while(v1==0)`；`v2=rec_field_byte(rec,dword_53C57)`；若 `v1==-1 || rec_slot_free(rec)==0` → 12 步 `fb_slide_step` 滑出 + `memmove(0xA0000,dword_53C5F,0xFA00)` + 释放三块 0xFA00 暂存 → 返回；否则若 `box_item_usable(rec,v2)!=0` → `box_item_select` + `unit_metrics` + 把屏存进 `dword_53A49` → `box_open_init`/`box_items_draw` 重铺箱面 → 回贴屏，继续环。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声（伪 callee）**：尾 `jmp 0x10C49` 落在 `0x10B4E` 体内它自己的尾声
+  （`add esp,0x4; pop edi; pop esi; pop ebx; ret`）。该 `add esp,0x4` 恰好清掉**最后一次**
+  `guest_free(0x53C63)` 压入的实参——前两次 free 各自带 `add esp,0x4`，故本函数净栈平衡，
+  跳转即普通 `return`，**不是**对 `sub_10B4E/sub_10C50` 的调用；`function-map` 亦未误列。
+- **返回值**：机器 eax 残留最后一次 `guest_free` 的结果；两个调用点（`0x1BFC6` 压 `ebp`；
+  `0x28F30` 压 `dword_53C57`）均不读，C 侧声明 `void`（签名 `(int rec)`）。
+- **chkstk**：`push 0x20; call 0x3702F`（`0x3702F` 不分配帧），丢弃。
+- **归属**：追加进既有 `box_popup.c`（`fd2_game.h` 伞头已含该模块头，无需改动）。两个 caller
+  `0x1BBDC`（物品盒驱动，`sub_53C57==2` 分支）与 `0x28EFE`（商店菜单）仍待还原。无对拍器，
+  标“已还原未验证”。
+
+### 30) 存档场景加载 + 章节开场 → `src/game/scenario_load.c/.h`（本轮，1 函数）
+
+`scenario_menu`（0x25EBB，已还原）第三分支与地图驱动器 `0x19DF7`（待还原）共用的
+“读 FD2.SAV → 载入章节资源 → 播放开场”整链；也是 module-map §2 的“存档唯一入口”。
+本轮 `function-map.csv` 闭包就绪游戏函数头名（u2，1552B；真闭包＝自身——callee 全在册，
+含被伪列出的 `sub_22AF6`）。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x10010` | `scenario_load()` | 读 FD2.SAV(0x59CB) → `util_deobfuscate` → `util_sum_tail4` 与尾 dword（+0x59C7）比对，不符则播“读档失败”卡（`msg_open_portrait(75)`+`vm_run(436,…)`+`dlg_blit_dato`+`dlg_wait_key`+`ev4_196CB`）。随后：`memmove` 队伍表（源 +0x8A3，0xA00）→ `res_load` FDOTHER[0]/FDFIELD[3·s+2] → 释放并重分配 'p'(0x53A55, 0x8A3) 拷入 → `world_load_tiles` → FDTXT[s+1]/FDFIELD[3s]/FDSHAP[2·p[0]][] → `util_fix_records` → 记录表 dword_53A45 重分配 0x1E00、拷入 80·records 与 0x20 额外块 → 释放 'buf'(0x53A61) 并以 FDICON.B24 经 `unit_entry_data` 重建图集（`dword_53BDF=0`）→ `fwrite` FD2.TMP(0x32A00) → 从 +0x30C3 的 18 字节场景字段写一批全局（dword_53BEF/53C03/53AB9/53ABD/53BFB/53BF3、`qword_53AA9`/`qword_53AB1`、byte_53AF9/51AAB/51E61/51E62）→ 释放两缓冲 → `bgm_play`/`map_view_update(1)`/`pal_fade_in` → 开场两段（9 步带淡入，x=84，j>6 画数字；4 步地图窗淡入，k=2/3/4/9）→ `map_view_update(0)`/`j___delay(200)`/`kbd_flush`。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声（伪 callee）**：尾 `jmp 0x22BBE` 落在 `sub_22AF6`（`item_apply`）体内的共享尾声
+  （`add esp,0x4; pop ebp/edi/esi/ebx; ret`；与 `0x10010` 前言 `push ebx/esi/edi/ebp; sub esp,4`
+  完全同帧）⇒ 普通 `return`；`function-map` 遂误列 `sub_22AF6`。
+- **qword 伪视图**：Hex-Rays 把相邻 dword `0x53AA9/0x53AAD`、`0x53AB1/0x53AB5` 并成
+  `qword_53AA9`/`qword_53AB1`；机器分两次写 32 位零扩展字节，C 侧按两字节打包进 64 位单元
+  （`(uint64_t)field[3] | ((uint64_t)field[4]<<32)`）。
+- **宏视图**：`dword_53A5D` 展开为 `uint8_t *`（非 `**`），`res_load` 返回值直接赋入。
+- **OOM 三路径同形**：`word_53A8D=3; int386(0x10,&word_53A8D,&word_53A8D); printf(msg); exit(1);`
+  折叠为文件内静态 `oom_exit`（三段消息 aOutOfMemory/_0/_1 见 dsi 0x04/0x23/0x37）。
+- **字符串**：FD2.SAV 的 name/mode 无 `fd2_globals` 宏（dsi 0x1B/0x18），模块内以
+  `(const char*)&fd2_data1[...]` 直取；FDICON/TMP 用既有 aFdiconB24/aFd2Tmp。
+- **图集重建**：'buf'(0x53A61) 先 `guest_free`（未置空），随后 `unit_entry_data` 因 `dword_53BDF==0`
+  重新 `guest_malloc(0x32A00)`；FD2.TMP 的 `fwrite` 用重建后的图集。
+- **chkstk**：`push 0x3C; call 0x3702F`（不分配帧，仅探守卫页），丢弃；CRT fopen/fread/fwrite/fclose
+  → libc（同 scene_core），malloc/free → `guest_malloc`/`guest_free`。
+- 无对拍器，标“已还原未验证”。
+
+### 31) 商店/地点菜单列表行绘制 → `src/game/shop_rows.c/.h`（本轮，3 函数）
+
+`0x2670E`（地点菜单，待还原）派生的商店屏家族（`0x279BC`→`0x2872B/28CBD/28F65`→
+`0x27738/275E6`；`0x2AF28`→`0x2A29D`；`0x2AA00`→`0x2A857`）共用的三个行绘制器；
+本轮 `function-map.csv` 闭包就绪游戏函数头名（三者的 callee 全在册，真闭包＝自身）。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x272D0` | `shop_item_rows(count,items,cursor,dst,half_price)` | 最多 6 条（两列，列偏移 148，行基 26）物品行：按 `tbl_ptr(0x602AD,23)` 物品项的 `[0]` 选类型块 59/60/61；名字流 `idx+181`；按类型画子块 64/65/66/67（其余走 `res_blit6` t41）配带符号 16 位数字（`[+1]/[+5]/[+14]`，base 42，3 位）；末块 t15 + 5 位数字（`[+19..20]`，base 119），`half_price` 时数字取 `3*v>>2`。 |
+| `0x2A0C2` | `shop_party_bar_rows(count,dst,cursor,members)` | 最多 3 条队伍行：单位精灵（bank 0x53A61，帧 `12*rec + dword_53F72`，`==3`→1）、名字 `rec[8]+1`、标签 `rec[31]+140`/`rec[32]+150`、末条 t15 + 5 位数字 `rec[33] * (int16)word_52399[rec[32]-1]`（base 119）。 |
+| `0x2A694` | `shop_party_equip_rows(count,dst,cursor,members,equip)` | 最多 3 条队伍行：同单位精灵与前三条流，第 4 条流经设备表 `tbl_ptr(0x615FE,2,idx,-64)`（`(idx-0x20)*2`）取 `[0]+150`；行基 26，名字列 +40/+130/+175/+239。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声（伪 callee）**：`0x2A0C2` 尾 `jmp 0x26E30` 是 `add esp,0x14; pop ebp/edi/esi/ebx; ret`
+  的共享尾声，与本函数前言（`push ebx/esi/edi/ebp; sub esp,0x14`）同帧 ⇒ 普通 `return`（写进 C，不模拟跳转）。
+- **返回值**：三函数 Hex-Rays 声明 `int`，但返回的只是最后一次 callee 的 eax 残留，调用点均不读
+  ⇒ C 侧声明 `void`。
+- **原始表访问器**：`0x4E8BC`（物品项 base 0x602AD/stride 23）与 `0x4E7DD`（设备 base 0x615FE/stride 2/offset -64）
+  按 playbook 改用 `tbl_ptr`；`sprite24_plain49(0x4E29C)`/`dlg_frame_tile(0x1685C)`/`res_blit6(0x16886)`/
+  `dlg_draw_number(0x187D6)`/`vm_run(0x15F84)` 用语义名。
+- **有符号度**：物品项 `[+1]/[+5]/[+14]` 与 `word_52399[]` 均为**带符号 16 位**（机器 `movsx`），
+  `[+19..20]`/`word_52399[tier]` 的 `tier=rec[32]-1` 为**无符号字 / 有符号索引（可为 -1）**。
+- 无对拍器，标“已还原未验证”；caller（`0x275E6/27738/2A29D/2A857`）仍待还原。
+
+### 32) 商店/地点菜单的交互列表屏 → `src/game/shop_screen.c/.h`（本轮，4 函数）
+
+§31 行绘制器（`shop_item_rows`/`shop_party_bar_rows`/`shop_party_equip_rows`）的三/四个调用者——
+商店屏家族（`0x2872B/28CBD/28F65`、`0x2A43E`、`0x2AA00`）共用的整屏“暂存 + 键循环”；本轮
+`function-map.csv` 闭包就绪游戏头名（四者 callee 全在册，真闭包＝自身）。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x27738` | `shop_items_paint(count,items,half_price)` | 物品屏一次性铺屏：三块 `guest_malloc(0xFA00)` → 快照 VGA → `rle2_blit(53C63+35845, 53F66+[53F66+70], 320)` 铺面板 → `shop_item_rows(count,items,53C57,53C63,half_price)` → 6 条 `msg_blit_band(13i+112,53C5B,53C63)`。**无键循环、不释放**（共享暂存由别处释放）。 |
+| `0x275E6` | `shop_items_run(count,items,half_price)` | 物品屏键循环（`status_screen_run(1)`）：右/左（4D/4B）逐格移动光标 `dword_53C57`（钳在 0..count-1）、上/下翻页（48/50）走 2 格；每步越窗（下 `cursor-53F4E>=6`、上 `cursor<53F4E`）时 `dword_53F4E` 相应 ±2 并 `screen_band_forward/backward()`，随后 `shop_item_rows` 重绘到 `0xA0000`。回车/空格返 1、Esc 返 -1。 |
+| `0x2A29D` | `shop_party_run(count,members)` | 队伍屏键循环（`status_screen_run(2)`）+ `shop_party_bar_rows`；上/下（48/50）逐格移动、越窗 `dword_53F4E` ±1。写 `dword_53F62=members`、`dword_53F5E=count`。返 1/-1。 |
+| `0x2A857` | `shop_party_equip_run(count,members,equip)` | 同上，但第 4 条标签流取自设备数组：`shop_party_equip_rows(count,dst,cursor,members,equip)`。返 1/-1。 |
+
+**陷阱 / 伪代码伪影**：
+- **ABI 由离线反汇编定案（chkstk 骗过反编译器）**：`0x2A29D`/`0x2A857` 的 Hex-Rays 原型被削成 `int(int)`，
+  其中 `v5=[ebp+8]`/`v6=[ebp+Ch]` 被当“未初始化局部”。机器前言 `push ebx/esi/edi/ebp` 后
+  `mov edi,[esp+0x14]`（第 1 实参）/`mov ebp,[esp+0x18]`（第 2 实参）；`0x2A857` 的第 3 实参在
+  `push [esp+0x1c]`（2A694 调用点）。故签名 `(count, members)` / `(count, members, equip)`。
+  `0x275E6`/`0x27738` 的第 3 实参按 `movzx eax,BYTE PTR [esp+0x18]`/`[esp+0x10]` 定为 **字节** `half_price`。
+- **共享尾声（伪 callee）**：`0x2A29D`/`0x2A857` 尾 `jmp 0x26A73` 落在邻函数体内
+  （`mov eax,esi; pop ebp; pop edi; pop esi; pop ebx; ret`），与本函数四寄存器帧同帧 ⇒ 普通
+  `return esi`（循环结果），已写进 C（不模拟跳转）。
+- **chkstk**：四者皆 `push size; call 0x3702F`——`0x3702F` 不分配帧（仅探守卫页），丢弃。
+- **有符号度**：光标/窗口 `dword_53C57`/`dword_53F4E` 为 32 位，机器用 `jl/jle/jge`（有符号），
+  C 侧显式 `(int32_t)` 转型（同 `menu_select.c` 约定）。
+- **调用点互证**：`0x2872B` 先 `push 0;push items;push count;call 0x27738`（一次性铺屏）再同样压参 `call 0x275E6`
+  （进循环）；`0x2A43E` 以 `(count,members)` 调 `0x2A29D`；`0x2AA00` 以三参调 `0x2A857`。
+- **归属**：新建模块；三块 0xFA00 暂存仍走 `guest_malloc`（`menu_select.c`/`msg.c`/`box_popup.c` 共用同一全局）。
+- 无对拍器，标“已还原未验证”；caller（`0x2872B/28CBD/28F65/2A43E/2AA00`）仍待还原。
+
+### 33) 地图视图 / 形状库助手簇（本轮，3 函数）→ `map_shape.c/.h`（新）+ `map_sprites.c`/`map_status.c` 追加
+
+本轮 `function-map.csv` 闭包就绪游戏头名三个 u2（真闭包＝自身；三个都属地图视图渲染族）：
+
+| 原址 | 新名 | 模块 | 要点 |
+|---|---|---|---|
+| `0x1399C` | `map_shape_lib_decode` | **map_shape.c（新）** | 把当前的 `dword_53A5D` 形状库（头 `{u16 24,u16 24,u16 count}` + `count` 个 u32 流偏移（+6 起）+ RLE 流）解码为**连续的原始 24×24 位图库**（新头 + `count`×576B），返回新指针；调用方 `0x2000A`/`0x21548` 把旧指针存起、把新指针写回 `dword_53A5D`，再建 64×64 指针表供 `map_zoom_draw` 采样。 |
+| `0x1CAC7` | `map_record_layer_blink` | map_sprites.c | 两次 `map_draw_record_layer`（帧 74 画入 `dword_53A49`、帧 75 画入 `guest_malloc(0x25680)` 暂存）→ 4 轮交替把两幅 312×192 窗发布到 `0xA0504`（每半轮 `j___delay(90)`）→ `map_view_update(0)` + 释放暂存。 |
+| `0x1EC2A` | `map_status_anchor` | map_status.c | 记录 `rec` 在当前地图视图里的两 int `{x,y}` 锚点（`24*(rec[0]-dword_53AA9)+4`、`24*(rec[1]-dword_53AAD)`），再按 `rec[3]` 分支向 320×200 框内微调；驱动 `0x1EB05`（`0x1548E` 的状态叠加层）调用两次填 `dword_53A30`/`dword_53A38` 的 actor/target 两半 `pos`。 |
+
+**陷阱 / 伪代码伪影**：
+- **共享尾声（伪 callee）**：`0x1399C` 尾 `jmp 0x10C49` 落在 `0x10B4E`（`unit_sprites_build`）体内的共享尾声
+  （`add esp,4; pop edi; pop esi; pop ebx; ret`）⇒ 普通 `return`（eax = 新库指针）；`0x1CAC7` 尾 `jmp 0x14B72`
+  落在 `ev5_14B16`（0x14B16）体内共享尾声（`add esp,4; pop esi; pop ebx; ret`）⇒ 普通 `return`。两者均写进 C，不模拟跳转。
+- **OOM 尾不同形**：`0x1399C` 的失败路径是 `push aOutOfMemoryAtR(0x50122); jmp 0x10056`——即
+  `printf; exit(1)`，**不含** `scenario_load` 的 `word_53A8D/int386(0x10)` 文本模式切换（后者在 `0x10034`）。
+- **ABI（chkstk 骗过反编译器）**：`0x1CAC7` 的机器帧只读第 3/4 实参（`[esp+0x1c]` 两次＝`count`/`list`），
+  **第 1/2 实参从不读**；两次调用均为 `map_draw_record_layer(base, count, list, 74/75)`（`base` 先 `dword_53A49` 后暂存）。
+- **无符号字节比较**：`0x1EC2A` 的 `rec[3]` 判据机器为 `movzx; cmp 2; jge`，值域 0..255，C 侧写 `r[3] < 2u`；
+  `dword_53AA9` 机器按 **32 位 dword** 读进 24 位算式（`(int)dword_53AA9` 取 qword 视图低位），`dword_53AAD` 为 `int32_t`。
+- **返回值**：三者尾声 eax 均被调用点忽略（`0x1399C` 例外——调用方把 eax 存回 `dword_53A5D`），
+  故 `0x1CAC7`/`0x1EC2A` 声明 `void`、`0x1399C` 声明 `uint8_t *`。
+- **chkstk**：三者皆 `push size; call 0x3702F`（不分配帧），丢弃。
+- **归属**：`map_sprites.h`/`map_status.h` 已在伞头；新增 `map_shape.h`，伞头字母序插在 `map_scroll.h` 与 `map_sprites.h` 之间。
+- 无对拍器，标“已还原未验证”。
+
+### 验证与台账
+
+- `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
+- `function-map.csv`：待还原 **208 → 205 → 201 → 198 → 194 → 192 → 190 → 188 → 186 → 185 → 183 → 181 → 180 → 179 → 176 → 172 → 169**（本批 −3；186→185 系 `0x2BF83`(fx_advance) 台账补登），已还原未验证 **115 → 118 → 122 → 125 → 129 → 131 → 133 → 135 → 137 → 138 → 140 → 142 → 143 → 144 → 147 → 151 → 154**（本批 +3）。
+
+### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
+
+本轮 §13 已拉出 `0x12EAA/1300D/13185/13315/13488/13A44`（它们是 `0x14B78` 与 `0x18890` 的直接 callee），
+故 `0x14B78`(u8) 的真闭包已缩小，但仍含 `146D1/14237/1DEBE/15055/15311/1548E/1567E/1598A…`，>8 函数，暂跳。
+`0x1C75E`(u7，链 `1C81F`→`14121`→`14B78`，同上跳过)、`0x14EF0/2E9A8`(u6)。
+本轮 §17 已拉出 `0x1F42D` 及其两个 caller `0x1F1CC`/`0x1F30A` 与私有 helper `0x4EB59`；
+本轮 §18 已拉出 `0x2921A` 及其同簇的 `0x26A0D/28B41/26A7A/26B91`；
+本轮 §19 已拉出 `0x1B6B7`/`0x149F8`（`map_records`）与 `0x22866`（`map_action`）；
+本轮 §20 已拉出 `0x175A9`/`0x17643`/`0x1741C`/`0x176B4`（`map_cursor`），故其 5 个驱动器
+（`0x16F55/0x1728C/0x18D8C/0x19DF7/0x1BBDC`）只剩 `0x177FC`+`0x17898` 与 `0x16F55` 自身；
+调用量排序下，`function-map.csv` 的闭包就绪头名是 `0x3645D`(u4)，但它是 CRT `read` 包装（尾调 `sub_3CF50`=`lseek`，
+库区不投资源，同 module-map §2）；`0x2E95B`(u3) 同样因需 CRT `fread`（`sub_373CA`）而暂跳。
+本轮 §21 已把同属 `sub_2CF30` 的 `0x2F4D4/30E25/30E9D`(u3/u2) 作为一簇拉出。
+本轮 §22 已拉出当前 closure-ready 头名四个 u3：`0x1E739`/`0x1F558`/`0x2282F`/`0x265EC`。
+本轮 §23 已拉出 `0x1E7F6`(u4) 及其 caller `0x1E611`（`map_status`），故地图状态叠加族只剩
+`0x1E856`(u2，仍待 `0x1E98C`/`0x1ECC7`)。
+本轮 §24 已拉出 `0x1C142`/`0x1C1C3`（`box_popup` 物品选择助手，同 caller `1BFFE`/`2872B`）。
+本轮 §25 已拉出 §21 `figure_view` 家族的另两个同胞 `0x2F631`/`0x2FE14`(u2)（驱动器 `0x2EBE1`/`0x2FB2C`）。
+本轮 §26 已拉出闭包就绪头名 `0x1A7BD`/`0x1A7F1`(u2，`0x1A30B` 的音效库加载/释放对)。
+本轮 §27 已拉出闭包就绪头名 `0x2B439`/`0x2B843`(u2，同 caller `sub_2AF28` 的队伍名册助手)。
+本轮 §28 已拉出闭包就绪头名 `0x1CB94`/`0x1CD17`(u2，`map.c` 的 0x1C2DA/0x1C4CC 同族；地图视口记录精灵族现只剩调用者 `0x1CAC7` 与格坐标 `0x1EC2A`)。
+本轮 §29 已拉出闭包就绪头名 `0x1BFFE`(u2，物品盒编排环，`box_popup` 家族闭合；其 caller `0x1BBDC`/`0x28EFE` 仍待还原)。
+本轮 §30 已拉出 `0x10010`(u2，FD2.SAV 存档加载/章节开场链；真闭包＝自身)，故当前闭包就绪
+游戏头名新增 `0x1399C`(u2，此前被 `0x10010` 挡住的闭包)，另有 `0x1EC2A`(u2，格坐标/标记锚点)
+/`0x272D0`/`0x2A0C2`/`0x2A694`(u2，名册行绘制；同一 `sub_2670E`/`2872B`… 商店屏家族)
+/`0x1CAC7`(u2，§28 `map_draw_record_layer` 的驱动器)；
+本轮 §31 已把 §30 列出的商店屏行绘制三件套 `0x272D0`/`0x2A0C2`/`0x2A694`(u2) 整体拉出
+（`src/game/shop_rows.c`，真闭包＝自身），闭包就绪游戏头名转为 `0x1399C`(u2)、`0x1EC2A`(u2)、
+`0x1CAC7`(u2)，及商店屏族里仍被上游挡住的 `0x275E6`/`0x27738`/`0x2A29D`/`0x2A857`；
+本轮 §32 已把这四个行绘制器的调用者（整屏“暂存 + 键循环”）`0x275E6`/`0x27738`/`0x2A29D`/`0x2A857`(u3/u3/u1/u1)
+作为同族整体拉出（`src/game/shop_screen.c`，真闭包＝自身），故闭包就绪游戏头名转为
+`0x1399C`(u2)、`0x1EC2A`(u2)、`0x1CAC7`(u2)；商店屏族的下一层调用者 `0x2872B`/`0x28CBD`/`0x28F65`/
+`0x2A43E`/`0x2AA00` 仍待还原；
+本轮 §33 已把这个头名三元组 `0x1399C`/`0x1CAC7`/`0x1EC2A`(u2) 整体拉出（`map_shape` 新建 + `map_sprites`/`map_status` 追加），
+闭包就绪游戏头名转为 `0x15880`(u1)、`0x15DA2`(u1)，其后同层 u1 的小簇（同 caller）仍以
+`0x22470`/`0x22547`/`0x22656`(sub_22253，拉出后 u5 的 `sub_22253` 即闭包就绪) 为最优候选；
+CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0x36FAC` 小库函数按既定策略跳过；
+另有多组同 caller 的小簇（均 u1）：`0x1C9DD`(sub_20C6F)、`0x22470`/`0x22547`/`0x22656`(sub_22253)、
+`0x2AC7D`/`0x2AE0E`/`0x2FB2C`(sub_2AA00)、`0x1E98C`/`0x1ECC7`(sub_1E856)、`0x1B1E7`(sub_19DF7)。
+
+**台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
+`src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交
+`4d27e6e` 补入 `0x2BF83 sub_2BF83 game/fx.h` 并重跑生成器，该项现转为“已还原未验证”。
+（`0x344B4` 已由 §16 连同其上游 `0x34366`/`0x33FAF` 整簇拉出；`0x2DF01/1FF79/1F73F` 已由 §14 拉出。）
+策略不变：**按 callee 簇整体拉出**，并先剔除共享尾声造成的伪 callee（可用 Ghidra 结构反编译辅助）。
+（`0x2921A`＝地点菜单退场缩放（上批 §11 遗留）；`0x1B1E7`(地图队伍面板编排者，6 个 callee 已在 §12 还原）
+现已闭包就绪，惟其内层读未初始化的 ebp，需先定性 tick 基线。）
+
+---
+
 ## 0-C. 下一步（按 module-map P0 执行）
 
 1. **P0 主状态机链**：`sub_25EBB`/`sub_117E7`/`sub_26152`/`sub_22E5C` + `funcs_25E23` 剩余 ~19 项

@@ -11,6 +11,40 @@
 0x3aca3 AIL_allocate_sequence_handle lib/ail.h
 
 # P0 scene core
+0x182AD sub_182AD game/fb_slide.h
+0x18312 sub_18312 game/fb_slide.h
+0x1839B sub_1839B game/fb_slide.h
+0x18409 sub_18409 game/fb_slide.h
+0x17D6F sub_17D6F game/ui_meter.h
+0x18795 sub_18795 game/ui_meter.h
+0x18C6D sub_18C6D game/ui_meter.h
+0x2FACD sub_2FACD game/ui_meter.h
+0x219AD sub_219AD game/reveal.h
+0x22046 sub_22046 game/reveal.h
+0x24618 sub_24618 game/reveal.h
+0x2189A sub_2189A game/reveal.h
+0x21EB1 sub_21EB1 game/reveal.h
+0x26CE4 sub_26CE4 game/screen_fx.h
+0x27816 sub_27816 game/screen_fx.h
+0x278E7 sub_278E7 game/screen_fx.h
+0x26EDA sub_26EDA game/status_screen.h
+0x27079 sub_27079 game/status_screen.h
+0x2810B sub_2810B game/status_screen.h
+0x17E0B sub_17E0B game/box_popup.h
+0x17EEF sub_17EEF game/box_popup.h
+0x17FC0 sub_17FC0 game/box_popup.h
+0x184C0 sub_184C0 game/box_popup.h
+0x1B932 sub_1B932 game/box_popup.h
+0x1B9DE sub_1B9DE game/box_popup.h
+0x1C142 sub_1C142 game/box_popup.h
+0x1C1C3 sub_1C1C3 game/box_popup.h
+0x115B6 sub_115B6 game/map_interact.h
+0x12DAC sub_12DAC game/map_interact.h
+0x14742 sub_14742 game/map_interact.h
+0x13FD4 sub_13FD4 game/item_use.h
+0x1C916 sub_1C916 game/item_use.h
+0x1DA16 sub_1DA16 game/item_use.h
+0x22AF6 sub_22AF6 game/item_use.h
 0x25EBB sub_25EBB game/scene_core.h
 0x117E7 sub_117E7 game/scene_core.h
 0x26152 sub_26152 game/scene_core.h
@@ -158,9 +192,11 @@
 0x2B996 sub_2B996 game/fx.h
 0x2BB33 sub_2BB33 game/fx.h
 0x2BD6C sub_2BD6C game/fx.h
+0x2BF83 sub_2BF83 game/fx.h
 0x2BFD9 sub_2BFD9 game/fx.h
 0x2C217 sub_2C217 game/fx.h
 0x2C441 sub_2C441 game/fx.h
+0x2C67D sub_2C67D game/fx.h
 0x2CAFC sub_2CAFC game/fx.h
 0x2CCF4 sub_2CCF4 game/fx.h
 0x2CE1A sub_2CE1A game/fx.h
@@ -370,3 +406,126 @@
 0x1AA1D sub_1AA1D game/ev_script.h
 0x1DB65 sub_1DB65 game/map_units.h
 0x19953 sub_19953 game/map_window.h
+0x26E38 sub_26E38 game/menu_select.h
+0x27D33 sub_27D33 game/menu_select.h
+
+# map party-status panel helpers (0x1B1E7 orchestrator still pending)
+0x1AF1E sub_1AF1E game/party_panel.h
+0x1AF99 sub_1AF99 game/party_panel.h
+0x1B019 sub_1B019 game/party_panel.h
+0x1B0AD sub_1B0AD game/party_panel.h
+0x1B14B sub_1B14B game/party_panel.h
+0x1B41D sub_1B41D game/party_panel.h
+
+# map view scroll steps (single-cell record move + camera follow)
+0x12EAA sub_12EAA game/map_scroll.h
+0x1300D sub_1300D game/map_scroll.h
+0x13185 sub_13185 game/map_scroll.h
+0x13315 sub_13315 game/map_scroll.h
+0x13488 sub_13488 game/map_scroll.h
+0x13A44 sub_13A44 game/map_scroll.h
+
+# opening / continue-screen helpers (0x1F894 orchestrator still pending)
+0x1F73F sub_1F73F game/title_screen.h
+0x1FF79 sub_1FF79 game/title_screen.h
+0x2DF01 sub_2DF01 game/title_screen.h
+
+# map action-effect handlers (dispatched by sub_20C6F and funcs_1541F)
+0x21082 sub_21082 game/map_action.h
+0x226EA sub_226EA game/map_action.h
+0x22721 sub_22721 game/map_action.h
+0x22960 sub_22960 game/map_action.h
+0x22997 sub_22997 game/map_action.h
+0x22C04 sub_22C04 game/map_action.h
+
+# password / code-entry screen (0x117E7 unlocks it; dead wrong-password bailout)
+0x33FAF sub_33FAF game/password.h
+0x34366 sub_34366 game/password.h
+0x344B4 sub_344B4 game/password.h
+
+# party-portrait mosaic reveal transition (0x1A30B orchestrator still pending)
+0x4EB59 sub_4EB59 game/mosaic_reveal.h
+0x1F42D sub_1F42D game/mosaic_reveal.h
+0x1F1CC sub_1F1CC game/mosaic_reveal.h
+0x1F30A sub_1F30A game/mosaic_reveal.h
+
+# 0x1A30B party-change loop brackets its handler run (0x1D80B/0x1D8BA) with
+# this load/free pair around the shared SFX bank pointer dword_53B0F
+0x1A7BD sub_1A7BD game/mosaic_reveal.h
+0x1A7F1 sub_1A7F1 game/mosaic_reveal.h
+
+# location/place-menu helpers (drivers 0x2670E/0x279BC/0x2872B/0x28CBD/0x29300/0x29DAA/0x2A43E still pending)
+0x26A0D sub_26A0D game/place_menu.h
+0x2921A sub_2921A game/place_menu.h
+0x28B41 sub_28B41 game/place_menu.h
+0x26A7A sub_26A7A game/place_menu.h
+0x26B91 sub_26B91 game/place_menu.h
+
+# map action / record-list helpers (drivers 0x20C6F / 0x1CFF0 / 0x15055 / 0x1567E / 0x1548E / 0x18D8C still pending)
+0x22866 sub_22866 game/map_action.h
+0x1B6B7 sub_1B6B7 game/map_records.h
+0x149F8 sub_149F8 game/map_records.h
+
+# map cursor direction-patch animation (drivers 0x16F55/0x1728C/0x18D8C/0x19DF7/0x1BBDC still pending)
+0x175A9 sub_175A9 game/map_cursor.h
+0x17643 sub_17643 game/map_cursor.h
+0x1741C sub_1741C game/map_cursor.h
+0x176B4 sub_176B4 game/map_cursor.h
+
+# unit figure/animation view helpers (driver 0x2CF30 still pending; sibling 0x2E95B is a CRT-fread wrapper, left out)
+0x30E25 sub_30E25 game/figure_view.h
+0x2F4D4 sub_2F4D4 game/figure_view.h
+0x30E9D sub_30E9D game/figure_view.h
+
+# figure-view siblings used by the drivers 0x2EBE1 / 0x2FB2C
+0x2F631 sub_2F631 game/figure_view.h
+0x2FE14 sub_2FE14 game/figure_view.h
+
+# map view / zoom / gauge frame-buffer helpers (drivers 0x2000A, 0x21548 and the
+# map status overlay family 0x1E611/1E7F6/1E856 still pending)
+0x1E739 sub_1E739 game/ui_meter.h
+0x1F558 sub_1F558 game/map_zoom.h
+0x2282F sub_2282F game/map_action.h
+0x265EC sub_265EC game/scene_core.h
+
+# map-view status frame: record sprites + HP gauges (driver 0x1548E still pending;
+# sibling 0x1E856 shares ui_meter_fixed and is still pending)
+0x1E7F6 sub_1E7F6 game/map_status.h
+0x1E611 sub_1E611 game/map_status.h
+
+# party-roster membership helpers (callees of the party-change screen 0x2AF28, still pending)
+0x2B439 sub_2B439 game/party_roster.h
+0x2B843 sub_2B843 game/party_roster.h
+
+# map-view record/unit sprite overlays (drivers 0x1CAC7 and the action router
+# 0x20C6F/0x21227 still pending; siblings of map.c's 0x1C2DA/0x1C4CC)
+0x1CB94 sub_1CB94 game/map_sprites.h
+0x1CD17 sub_1CD17 game/map_sprites.h
+
+# item sub-menu loop that drives the box_popup helpers (callers 0x1BBDC / 0x28EFE still pending)
+0x1BFFE sub_1BFFE game/box_popup.h
+
+# scenario (FD2.SAV) load + chapter intro (caller scenario_menu 0x25EBB is already
+# restored and calls it under its IDA name; map driver 0x19DF7 still pending)
+0x10010 sub_10010 game/scenario_load.h
+
+# shop/place-menu list row painters (callers 0x275E6/0x27738/0x2A29D/0x2A857
+# still pending; part of the sub_2670E shop-screen family)
+0x272D0 sub_272D0 game/shop_rows.h
+0x2A0C2 sub_2A0C2 game/shop_rows.h
+0x2A694 sub_2A694 game/shop_rows.h
+
+# interactive list screens of the shop/place-menu family (they drive the
+# shop_rows painters above; their callers 0x2872B/0x28CBD/0x28F65/0x2A43E/
+# 0x2AA00 are still pending)
+0x275E6 sub_275E6 game/shop_screen.h
+0x27738 sub_27738 game/shop_screen.h
+0x2A29D sub_2A29D game/shop_screen.h
+0x2A857 sub_2A857 game/shop_screen.h
+
+# map-view helper cluster (all three are the top closure-ready game functions
+# by usage; their drivers 0x2000A/0x21548, 0x2111A/0x213B7 and 0x1EB05 are
+# still pending)
+0x1399C sub_1399C game/map_shape.h
+0x1CAC7 sub_1CAC7 game/map_sprites.h
+0x1EC2A sub_1EC2A game/map_status.h
