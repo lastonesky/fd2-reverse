@@ -92,6 +92,38 @@ idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}�
 
 ---
 
+## 0-F. 309 已验证资产迁入（本轮完成）
+
+**结果**：`port/src/game` 的 31 对 `.c/.h` + `guest_mem.*` + `dos.h/platform.h/le.h` → `port3/src/`；
+**双 profile 零错误、`-Werror` 全绿、伞头自测通过**（`tools/check_compile.sh [--full]`）。
+
+**新增基础设施（可重复）**
+
+| 工具/产物 | 作用 |
+|---|---|
+| `tools/extract_data_types.py` → `analysis/data_type_overrides.csv` | 从 port/ **模块源**（不含检查器）提取声明：147 条（lvalue/ptr），同地址多声明按“指针优先”打分消解，30 条冲突已标注 |
+| `analysis/data_type_overrides.manual.csv` | **按符号名**覆盖（同一地址两个名字语义不同：`byte_53D34[i]` 需字节指针视图、`(&dword_53D34)[i]` 需标量 lvalue） |
+| `tools/migrate_port_assets.py` | 拷贝 + 剥离两种数据宏声明（305 处）+ 冻结文件级补丁（`world_load_alias.inc`） |
+| `src/include/fd2_aliases.h` | **298 条 IDA名→语义名**（11 条 c_name 是 `static` 文件内助手如 `tbl_6238D`，**不生成别名**） |
+| `src/game/fd2_game.h` | 伞头（globals+funcs+aliases+全部模块头） |
+| `src/game/guest_mem.h/.c` | 沿用 port/ 堆缝（standalone=libc，hybrid=游戏堆） |
+
+**生成器强化**：数据宏不再为「迁移函数名」（`migrated_names`）与「源里定义为函数的任何名字」（`_FD_DEF_RE` 扫描，含 static 助手）生成——退出宏/函数撞名。
+
+**过渡期宽容（已记录，去 guest 阶段清理）**：`-Wno-int-conversion/-Wno-int-to-pointer-cast/-Wno-pointer-to-int-cast`。
+原因：port/ 各文件对同一指针单元有 uint32_t/指针两种写法，统一后部分赋值靠过渡期隐式转换（32 位下位级等价，假设 B）。检查脚本头注释已说明。
+
+**本轮登记的待确认项**
+
+1. **`0x16559` ABI**：机器码仅压 1 个实参（`0x262D8`），port/'s `dlg_blit_dato` 取 3 参且 `dlgcheck` 800 例通过（其调用点传 `(dword_53A85, dword_53C67, idx)`）。`scene_core.c` 暂按 port/ 签名调用并注释；需动态阶段定论。
+2. 11 个 `static` 表访问器（`tbl_4E7DD/4E7F2/4E809/4E821/4E838/4E84F/4E866/4E87D/4E88E/4E8A5/4E8BC`）：调用方改用已迁入的 `tbl_ptr(base,stride,index,offset)`（`scene_core.c` 已示范 0x4E809→base 0x6238D/stride 31/offset -31）。
+3. `world_load.c` 的 IDA 短名 `p`/`buf` → 模块内别名（`world_load_alias.inc`）。
+
+**下一步**：P0 handler batch 2（idx[2] `sub_230F2` / idx[4] `sub_231F9` —— 现已被迁入的 `scene_place_records` 解锁）
+→ `funcs_25E3A` 余 10 项 → 解释器簇。
+
+---
+
 ## 0-C. 下一步（按 module-map P0 执行）
 
 1. **P0 主状态机链**：`sub_25EBB`/`sub_117E7`/`sub_26152`/`sub_22E5C` + `funcs_25E23` 剩余 ~19 项

@@ -22,8 +22,7 @@
  * owned by other modules (verified assets or yet-to-migrate ones); this file
  * only calls them by name.
  */
-#include "../include/fd2_globals.h"
-#include "../include/fd2_funcs.h"
+#include "fd2_game.h"
 #include "scene_states.h"
 
 #include <stdint.h>

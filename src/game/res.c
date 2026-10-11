@@ -1,67 +1,107 @@
-/* res.c - resource loader - hand-restored from 0x111BA (phase 1, static only).
+/* res.c - FD2 LMI container resource loader (source translation of 0x111BA).
  *
- * Original: int __cdecl sub_111BA(int name, int p, int a3)   [235 bytes]
- * Real ABI: cdecl, 3 stack args (callers do `add esp,0Ch`), returns a pointer
- * (eax), which on the 32-bit target is interchangeable with int - we restore
- * the honest types here (see fd2_funcs.h for the raw positional prototype).
+ * See game/res.h for the contract. The original is 235 bytes that only
+ * sequence the Watcom CRT (fopen/fseek/fread/malloc/free/fclose) plus the
+ * `sub_3702F` stack probe; this is the straight C equivalent.
  *
- * Translation notes (every decision traceable to bytes):
- *  - `push 20h; call 0x3702F` prologue is the Watcom stack probe, NOT an
- *    argument - dropped (0x3702F = __chkstk thunk, `retn 4`).
- *  - `shl eax,2; add eax,6` = offset-table slot `4*index + 6`, computed in
- *    32-bit registers - kept as uint32_t so wrap-around inputs behave the
- *    same as the machine code.
- *  - the 8 bytes at that slot are two uint32 offsets: [start, end),
- *    resource size = end - start (read into a 2-word array; the original
- *    mallocs 8 bytes, reads, copies both words, then frees).
- *  - 0x373CA is Watcom's stdio read core used as fread(buf, 1, n, fp)
- *    (both call sites: fseek first, then read) -> libc fread.
- *  - both error paths end in `jmp loc_1005E` = the shared fatal tail
- *    `push 1; jmp exit` (mode-3 restore + message happen at the printf
- *    sites we already translated) -> exit(1).
- *  - free(oldbuf) happens BEFORE fopen: even a failing reload frees the old
- *    buffer. Kept in that order (callers depend on it).
+ * Two adaptations make this safe to run *inside* the game (not just in the
+ * check harness): the buffers live on the game's heap (guest_mem.h) and the
+ * size is published to the game's global at 0x53BFF, not to a C variable -
+ * the game reads that address.
  */
+#include "res.h"
+#include "guest_mem.h"
+#include "rle.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 
-#include "res.h"
-
-void *res_load(const char *filename, void *oldbuf, int index)
+void *res_load(const char *filename, void *old_buffer, int index)
 {
-    FILE *fp;
-    uint32_t offs[2];
-    uint32_t start, end, n;
-    void *buf;
+    FILE     *f;
+    uint32_t *entry;
+    uint32_t  start;
+    uint32_t  size;
+    void     *buf;
 
-    if (oldbuf != NULL)
-        free(oldbuf);                       /* 0x111CF */
+    if (old_buffer)
+        guest_free(old_buffer);
 
-    fp = fopen(filename, "rb");             /* 0x111E1 */
-    if (fp == NULL) {
-        printf("\n\n File not found %s!!! \n\n", filename);   /* 0x111F8, 2 args */
-        exit(1);                            /* 0x11200 -> loc_1005E */
+    f = fopen(filename, "rb");
+    if (!f) {
+        printf("\n\n File not found %s!!! \n\n", filename);
+        exit(1);
     }
 
-    /* slot = 4*index + 6 (uint32 math, 0x11213..0x1121A) */
-    fseek(fp, (uint32_t)index * 4u + 6u, SEEK_SET);           /* 0x1121F */
-    if (fread(offs, 1, 8, fp) != 8) {                         /* 0x1122D = 0x373CA */
-        /* original ignores the read result - kept as-is */
-    }
-    start = offs[0];                        /* mov edi,[ebx]  0x11235 */
-    end   = offs[1];                        /* mov eax,[ebx+4] 0x11237 */
-    n = end - start;                        /* sub eax,edi     0x1123A */
-    /* original mallocs 8 bytes for the pair, copies, frees (0x11205..0x11247) */
+    entry = (uint32_t *)guest_malloc(8);
+    fseek(f, 4L * index + 6, SEEK_SET);
+    fread(entry, 1, 8, f);
 
-    buf = malloc(n);                        /* 0x11250 */
-    if (buf == NULL) {
-        printf("Out of Memory at Load %s Number:%d!!\n", filename, index);  /* 3 args */
-        exit(1);                            /* 0x11273 -> loc_1005E */
+    start = entry[0];
+    size  = entry[1] - entry[0];
+    guest_free(entry);
+    guest_store_u32(RES_SIZE_ADDR, size);   /* what the game reads */
+
+    buf = guest_malloc(size);
+    if (!buf) {
+        printf("Out of Memory at Load %s Number:%d!!\n", filename, index);
+        exit(1);
     }
 
-    fseek(fp, start, SEEK_SET);             /* 0x1127C */
-    fread(buf, 1, n, fp);                   /* 0x1128E = 0x373CA */
-    fclose(fp);                             /* 0x11297 */
-    return buf;                             /* 0x1129F eax=ebx */
+    fseek(f, (long)start, SEEK_SET);
+    fread(buf, 1, size, f);
+    fclose(f);
+
+    return buf;
+}
+
+/* 0x2EB9F - blit sub-image `index` of an LMI buffer.
+ *
+ *   hdr = buf + *(u32 *)(buf + 8 + 4*index);     offset table starts at +8
+ *   w   = *(u16 *)hdr;  h = *(u16 *)(hdr + 2);
+ *   rle_decode(hdr + 9, w, h, dst, pitch, mode);
+ *
+ * The 9-byte header (w, h, plus 5 bytes the decoder does not need here) and
+ * the RLE stream are the format rle_decode already handles. */
+void res_blit(void *buf, int index, void *dst, int pitch, int mode)
+{
+    uint8_t *hdr = (uint8_t *)buf + *(uint32_t *)((uint8_t *)buf + 4 * index + 8);
+    uint16_t w   = *(uint16_t *)hdr;
+    uint16_t h   = *(uint16_t *)(hdr + 2);
+
+    rle_decode(hdr + 9, w, h, dst, pitch, mode);
+}
+
+/* 0x16886 - blit sub-image `index` of an LMI buffer whose offset table starts
+ * at +6, always at (0,0):
+ *
+ *     rle_decode(buf + *(u32 *)(buf + 4*index + 6), 0, 0, dst, pitch, -1);
+ *
+ * (0x2EB9F/res_blit is the +8 variant that also takes x/y.) */
+void res_blit6(void *dst, int pitch, void *buf, int index)
+{
+    uint8_t *src = (uint8_t *)buf + *(uint32_t *)((uint8_t *)buf + 4 * index + 6);
+
+    rle_decode(src, 0, 0, dst, pitch, -1);
+}
+
+/* 0x15F0E - save background + draw a sub-image over it. */
+typedef void (*saverect_fn)(void *, int, int, const void *, int, int);
+typedef void (*rle2trans_fn)(void *, const void *, int);
+#define ORIG_SAVERECT  ((saverect_fn) (uintptr_t)0x0004ECBFu)
+#define ORIG_RLE2TRANS ((rle2trans_fn)(uintptr_t)0x0004EBABu)
+
+void *res_draw_subimage(const void *tbl, void *surface, int stride,
+                        int base, int row, int index)
+{
+    const uint8_t *e = (const uint8_t *)tbl
+        + *(const uint32_t *)(const void *)((const uint8_t *)tbl
+                                            + (uint32_t)index * 4u + 6u);
+    int w = *(const int16_t *)e;
+    int h = *((const int16_t *)e + 1);
+    int off = row * stride + base;
+    void *rec = guest_malloc((size_t)w * (size_t)h + 8u);
+
+    ORIG_SAVERECT(rec, w, h, surface, off, stride);
+    ORIG_RLE2TRANS((uint8_t *)surface + off, e, stride);
+    return rec;
 }
