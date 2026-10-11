@@ -1691,10 +1691,27 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - **chkstk**：`push 0x90; call 0x3702F` 不分配帧，丢弃。
 - 无对拍器，标“已还原未验证”。
 
+### 66) 地图缩放过渡驱动器 `0x2000A` → `map_zoom_run`（本轮，1 函数）→ `src/game/map_zoom.c/.h`（追加）
+
+闭包就绪游戏头名里，游戏内容项为 `0x2000A`(u1)/`0x1BBDC`(u1)/`0x190AC`(u1)（CRT 包装 `0x3645D/2E95B/365DA/36C56` 按既定策略跳过，`0x2EBE1` 2291B 超预算）。本轮取 `0x2000A`：它是既有、注释里点名待还原的 `map_zoom` 模块驱动器，且是**已还原** `scene_event_tick`(0x117E7) 的直接 callee（`'I'`/`';'` 键进入），真闭包＝自身（`map_shape_lib_decode`(0x1399C)、`map_zoom_draw`(0x1F558)、`ev5_1F6EF`、`map_cell_info`(0x12E38)、`kbd_flush`(0x4E381)、`kbd_pending`(0x10620)、`map_view_update`(0x11CAC)、`int386` 全在册）。
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2000A` | `map_zoom_run` | 解码 0x53A5D 形状库（`map_shape_lib_decode`，先存旧指针）→ 建 64×64 源基址表（`dword_53A5D+6+576*cell[0]`）→ 7 帧放大（中心因子 `(k+1)/8`、缩放 `k*zoom_w/7+128`，`zoom_w`=640，`dword_53AC5>40` 时 scale=3/`zoom_w`=896）→ `kbd_flush` 后忙等到有键：每 ≥2 BIOS tick 画全部未标记记录（跳过 `+5&1`/`+7==0x79`/`+31==10`）与玩家格（`base[rec[6]]`／常量 24 加相位 `phase` 0..7 往复）并 `memmove(dword_53A49→0xA0000,0xFA00)` → `int386(0x16,…)` 取键 → 6 帧缩小（因子 `(m+1)/8`）→ 释放暂存、还原 `dword_53A5D`、`map_view_update(0)`，返回 0 |
+
+**陷阱 / 伪代码伪影**：
+- **未初始化 tick 基线**：机器 `last_tick`（栈 `[esp+0x30]`）在首次 `tick - last_tick` 前从未初始化（离线反汇编核实，仅 0x202de 在首次渲染后写回）；首个渲染分支因此依赖栈残值。按既有约定（`map_wait_key` 0x12DAC 的同一模式）初始化为 0 并注释。
+- **放大/缩小的中心-缩放因子错位**：两环的机器码都在 `idiv` 得到缩放后 `inc`，中心用自增后的计数器而缩放用自增前的（Hex-Rays 逐字呈现 `v11=v4*v17/7+128; ++v4; sub_1F558(v20+((v4*…)))`）——C 侧按机器写 `(k+1)` 中心 / `k` 缩放。
+- **`>>3` 截断有符号除 8**：`sbb eax,edx; sar eax,3`（`__CFSHL__` 伪影）= 截断的 `/8`；`idiv 7` = `/7`。均按机器用普通 `/`（有符号 int）。
+- **`qword_53AA9`→两个 dword**：`v20/v19` 分别读 `0x53AA9`（低 dword，globals 里 `dword_53AA9` 是 uint64_t）与 `0x53AAD`（`dword_53AAD`）；`a1`/`a2` 的 `dword_53AB1`/`dword_53AB5` 同理（Hex-Rays 合并成 `qword_53AA9`/`qword_53AB1`）。C 侧用 `(int)dword_53AA9` 与独立 `dword_53AAD` 取低/高 dword。
+- **chkstk / 堆缝**：`push 0x60; call 0x3702F` 丢弃；`malloc(0x4000)`/`free` 走 `guest_malloc`/`guest_free`。
+- **返回值**：机器尾 = `map_view_update` 的 eax 残值，唯一 caller `0x117E7` 不读（`scene_core.c` 直接 `sub_2000A(); return 0;`），C 侧返回 0。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **76 → 75**（本轮 §65 −1），已还原未验证 **247 → 248**（本轮 +1）。
+- `function-map.csv`：待还原 **75 → 74**（本轮 §66 −1），已还原未验证 **248 → 249**（本轮 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
