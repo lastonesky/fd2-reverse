@@ -1804,10 +1804,31 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
   （机器每次重新 `mov ds:0x53ab1/ab5`）。
 - 无对拍器，标“已还原未验证”。
 
+### 71) 全屏逐帧动画播放器 `0x24336` → `scene_cutscene_play`（本轮，1 函数）→ `src/game/scene_cutscene.c/.h`（新建）
+
+闭包就绪游戏头名中，`0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56` 为 CRT/库包装（既定策略跳过）、`0x2EBE1`(2291B)
+与 `0x1F894`(1765B) 超预算、`0x1B1E7`(内层读未初始化 ebp) 暂跳；其后第一个游戏内容项 `0x24336`(u1，384B)
+是**已还原** `scene_state_20`（funcs_25E23[20]，0x240FA）的唯一剩余待还原 callee，故整函数闭合、单独成批。
+它把 FDOTHER.DAT 条目 34 的 101 帧动画铺满 VGA：
+- 先 `ev2_135DD(14,8)` 滚视图；`guest_malloc(0xFA00)` 存当前屏幕、`res_blit(图,0,backdrop)` 作底图；
+- 帧 1..68：每帧把底图拷进 `dword_53A49`、`res_blit(图,i,dword_53A49,320,-1)`、拷上屏、`pal_anim_step()`、
+  `svc_wait_ticks(3)`、`kbd_flush()`；
+- `ani_play(0,15,0)` → `pal_fade_add(0,255,63)` → `j___delay(100)` → `pal_fade_add(0,255,0)` → `j___delay(500)`；
+- 帧 69..100：与上一循环相同的逐帧合成（无 DAC 动画）；
+- 释放两缓冲；共享尾声 `0x22BB7`（`map_view_update(0)` + 寄存器复原 + ret）。
+
+**陷阱 / 伪代码伪影**：
+- 尾部 `jmp 0x22BB7` 是**共享尾声**（`map_view_update(0)`），Hex-Rays 记为 JUMPOUT 并**丢掉该刷新**；C 侧按语义补回。
+- Watcom 栈探针 `push 0x28; call 0x3702F` 丢弃；`malloc/memmove/free` 是 CRT 入口 0x3706E/0x3771C/0x3776E，
+  走游戏堆 ⇒ C 侧 `guest_malloc/guest_free`。
+- 循环计数 `i` 是**同一个寄存器跨两循环**（1..68 再 69..100），故帧 68 只 blit 一次；`pal_anim_step` 仅首循环调用。
+- `function-map.csv` 的 callee 列含一个伪 callee `sub_22AF6`（机器码中无此调用），以离线反汇编为准，不入本批。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **71 → 70**（本轮 §70 −1），已还原未验证 **252 → 253**（本轮 +1）。
+- `function-map.csv`：待还原 **70 → 69**（本轮 §71 −1），已还原未验证 **253 → 254**（本轮 +1）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1924,6 +1945,10 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 本轮 §70 拉出闭包就绪游戏头名 `0x1BBDC`(u1，1058B，`0x18D8C` 调用的逐记录动作驱动器，新建 `map_action_ui`)；
 其后剩余闭包就绪游戏头名仍为 `0x1B1E7`(u1，内层读未初始化 ebp 暂跳)，及库包装 `0x3645D`/`0x2E95B`/`0x365DA`/
 `0x36C56`（按既定策略跳过）、`0x2EBE1`(u3，2291B 超预算)。
+本轮 §71 拉出 `0x24336`(u1，384B，`scene_state_20`(0x240FA) 唯一剩余待还原 callee，FDOTHER 条目 34 的
+101 帧全屏动画，新建 `scene_cutscene`)；其后剩余闭包就绪游戏头名仅 `0x1B1E7`(u1，内层读未初始化 ebp 暂跳)、
+`0x21DB2`(u0，255B，cos/sin 几何助手，可下批取)，及库包装 `0x3645D`/`0x2E95B`/`0x365DA`/`0x36C56`（按既定策略跳过）、
+`0x1F894`(u1，1765B)/`0x2EBE1`(u3，2291B) 超预算。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交

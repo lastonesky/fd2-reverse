@@ -755,3 +755,10 @@
 # map_action_router, 1 = party record reorder, 2 = box_run, other = drop a
 # slot).  Ends with the shared epilogue at 0x1BFF6.
 0x1BBDC sub_1BBDC game/map_action_ui.h
+
+# 0x24336 - the last pending callee of the leave handler scene_state_20
+# (funcs_25E23[20], 0x240FA): plays a 101-frame FDOTHER.DAT entry-34 animation
+# (res_blit frames 1..68 with DAC animation, then ani_play + palette fades,
+# then frames 69..100), freeing its buffers before the shared tail 0x22BB7
+# (map_view_update(0)).
+0x24336 sub_24336 game/scene_cutscene.h

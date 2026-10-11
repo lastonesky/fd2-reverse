@@ -65,6 +65,7 @@
 #include "scenario_load.h"
 #include "scene.h"
 #include "scene_core.h"
+#include "scene_cutscene.h"
 #include "scene_enter.h"
 #include "scene_states.h"
 #include "screen_fx.h"
