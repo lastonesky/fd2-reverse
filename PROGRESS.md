@@ -3313,3 +3313,14 @@ X11/GL/ALSA，`platform_posix.c` 也含 Linux 专有调用（`process_vm_readv`�
 **验证（WSL/Linux）**：`make -C host check` host+game 全 `errors=0`；`make engine`
 成功链接 `host/build/fd2engine`（2.4MB）。macOS 路径按 sokol 官方框架与本机无 Linux
 专有符号编译核对（本环境无 macOS 可实机验证）。
+
+### 7.13 运行多出 console 窗口：拿到的是 `-Console` 调试构建
+
+现象：运行时除游戏窗外还弹出一个 console 窗口。原因不是代码（无 `AllocConsole`），而是
+构建的**链接子系统**：`build.ps1 -Console` 用 `/SUBSYSTEM:CONSOLE`，双击时必然弹一个
+console；默认（不带 `-Console`）是 `/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup`，只显示
+游戏窗口，日志走 `FD2_LOG`（默认 `fd2engine.log`）。之前调试时构建过 `-Console` 并把它
+留在了 `build/`，所以看起来像是 bug。
+
+处理：重新用默认参数构建（`subsystem=WINDOWS GUI`，PE 子系统字头 = 2）；`build.ps1`
+在 `-Console` 说明里标注"仅调试、会弹 console 窗口"，并在结尾打印本次的 subsystem。

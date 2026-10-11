@@ -1,7 +1,14 @@
 # build.ps1 - build the port3 native engine as a 64-bit Windows executable.
 #
-#   pwsh -File build.ps1
-#   pwsh -File build.ps1 -Debug
+#   pwsh -File build.ps1            # release GUI build - NO console window
+#   pwsh -File build.ps1 -Debug     # release GUI build with symbols
+#   pwsh -File build.ps1 -Console   # DEBUG ONLY: CONSOLE subsystem -> a console
+#                                   # window pops up; run it from a terminal
+#                                   # if you do not want the extra window
+#
+# The default links /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup, so normal play
+# shows only the game window; diagnostics still go to FD2_LOG (default
+# fd2engine.log).  -Console is purely a development aid (live stdout/stderr).
 #
 # Unlike port/ this is a *native 64-bit* build: the game was de-guested
 # (C1..C4), so there is no LE loader, no fixed window and no /BASE trick - it
@@ -73,3 +80,8 @@ Write-Host "== building fd2engine.exe (x64, sokol/D3D11) =="
 cmd /c $cmdline
 if ($LASTEXITCODE -ne 0) { throw "build failed" }
 Write-Host "   -> $out\fd2engine.exe"
+if ($Console) {
+    Write-Host "      subsystem=CONSOLE (a console window will appear - debug build)"
+} else {
+    Write-Host "      subsystem=WINDOWS GUI (no console window; logs -> FD2_LOG)"
+}
