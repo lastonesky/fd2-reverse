@@ -3240,3 +3240,26 @@ if (!g_loop) g_total += rate;
 以后听感异常可直接对日志核对。
 
 **回归**：双 profile `-Werror` 全绿；Console 版实跑正常，日志显示 `tempo 535714 (112.000 BPM)`。
+
+### 7.10 仓库瘦身：移出 IDA/Ghidra 派生物与编译产物（历史改写）
+
+为发布/GitHub 做准备，把“可由原版程序或 IDA·Ghidra 重新获得”的大文件从**工作区与全部
+历史**中删除（`git filter-branch --index-filter`，22 个提交与 5 个 tag 哈希已改写）：
+
+- 原版段字节 `analysis/seg_*.bin`（252K+24K+16K）
+- 全量反编译 `analysis/decomp/**`（1366 文件，4.1M）、`analysis/disasm_fallback/**`、
+  `analysis/cseg01_disasm.txt`（3.9M）
+- IDA/脚本导出 `analysis/{arity,callgraph,data_items,data_type_overrides,decomp_failures,
+  dispatch_tables,funcmap,names,prototypes,reloc_suspects,strings}.{csv,json}` 等
+- 由段字节生成的 `src/fd2_image.c`（1.5M）+ 生成的 `function-map.csv`（0.4M）
+- 编译产物 `build/**`（106 文件，4.1M）
+
+保留：`analysis/data_type_overrides.manual.csv`、`analysis/prototype_overrides.csv`、
+`src/include/*.h`、`src/fd2_relocate.c` 等手工/小体积且编译必需的文件。
+
+结果：`.git` **30.7M → 1.4M**，整库 **60M → 7.0M**。`.gitignore` 已加入上述路径防回归；
+`EXTERNAL_ARTIFACTS.md` 记录了重新导出/重建路径。
+
+> ⚠ 副作用：当前检出**不能直接编译**——缺 `src/fd2_image.c`。需先从外部 IDB 重建
+> `analysis/seg_*.bin` → `python tools/gen_headers.py` 生成 `src/fd2_image.c` → `build.ps1`。
+> 历史改写前的完整仓库已备份为 `E:\FD2\port3-backup-<时间戳>.bundle`。
