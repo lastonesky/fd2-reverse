@@ -2418,10 +2418,40 @@ playbook 批选（闭包就绪、usage 降序、剔除 CRT/库包装）落到游
 - **伪 callee**：`0x14EF0`/`0x15311` 均仅误挂 `sub_3702F`(chkstk)；真依赖全部已还原。
 - 无对拍器，标“已还原未验证”。
 
+### 95) 记录行动分派器 + 两个回合扫描环 `0x13A9F`/`0x1D80B`/`0x1D8BA` → `map_record_action`/`map_turn_side1`/`map_turn_side0`（本轮，3 函数）→ `src/game/map_turn.c/.h`（新建）
+
+playbook 批选（闭包就绪、usage 降序、剔除 CRT/库包装与伪函数条目）落到游戏内容头名 `0x13A9F`(u3，1021B)——记录行动分派器；
+连同它单点解阻的两个无参调用者 `0x1D80B`(u1，175B)/`0x1D8BA`(u1，348B)（二者真闭包＝自身，唯一待还原 callee 就是 `0x13A9F`）。
+整簇 3 函数 1544B（≈1500 预算上沿）。逐指令核对了离线反汇编 `13a9f..13e9b`/`1d80b..1d8b9`/`1d8ba..1da15`。
+
+**函数语义**：
+- `0x13A9F` = `void map_record_action(int actor, int require_empty)`：记录 `dword_53A45[actor]` 的 +52 低 4 位＝行动码（0..11）；
+  `+5 & 5` 置位即空返回。各 case 由 `map_ai_decide`/`map_ai_pick_*` 定目标后提交走位（`map_move_to_marked`/`map_move_to_nearest`/
+  `map_move_toward`/`map_attack_run`/`map_ai_do_action`）、滑像（`dlg_portrait_glide`）、失败回退 `item_use`；case 3/5/9 用 +53/+54
+  目标格或 +61 标签经 `rec_find`/`map_find_tag_cell`；case 5 命中时按 `dword_53A55 + 3*slot` 的 3 字节条目（+0x53 类型/+0x54 16 位值）
+  写 record +49/+50，type==0 调 `rec_slot_claim`，再 `svc_play_sfx2(...,12,1)`+`ev4_12263`+置 +52=7；所有路径经末尾
+  `map_scroll_cell_tag(rec[0],rec[1],1)`→`rec_flag_or80`→`dlg_portrait_clear`→`map_view_update(0)`。
+- `0x1D80B` = `void map_turn_side1(void)`：遍历 `dword_53BEB` 条记录，对 +6==1 且 `(+5 & 0x81)==0 && +38==0` 者
+  `map_record_action(i,1)`；每条再按 `dword_51A8F` 派发场景处理器 `funcs_1199C`、按 `dword_53C03` 派发 `funcs_1197B`；`dword_53ECC!=0` 提前退出。
+- `0x1D8BA` = `void map_turn_side0(void)`：第一趟对 +6==0 记录先 `map_ai_pick_action_target(i,0)`+`map_ai_pick_item_target(i,0)`，
+  分数（`dword_53C23`/`dword_53C33`）≥6 才 `map_record_action(i,0)`；第二趟只跑 `map_record_action`；两趟同样派发两个处理器表并提前退出。
+
+**陷阱 / 伪代码伪影**：
+- **伪 callee（共享尾声）**：`0x13A9F` 的所有出口 `jmp 0x1317D`（落进 `0x13167` 体内 `map_scroll_cell_tag` 调用后的 `add esp,0Ch; pop×4; ret`）＝普通 return；
+  `function-map` 因此把 `sub_1300D` 误列为 callee；真依赖全部在册。三者的 chkstk `sub_3702F` 丢弃。
+- **返回 void**：`0x13A9F` 的 eax 终值无调用点读取，`fd2_funcs.h` 的 `int` 原型只是 chkstk 伪影；三者 C 侧均声明 `void`（`0x1D80B/0x1D8BA` 的 `int(void)` 同为伪影）。
+- **有符号比较**：case 11 与 `0x1D8BA` 的分数阈值机器用 `jge/jl`（有符号），C 侧显式 `(int32_t)` 转型。
+- **`dword_53A55`/`dword_53AD5` 标量→指针**：按 `map_event.c` 既有约定 `(uint8_t *)(uintptr_t)dword_53A55`、`dword_53AD5 + 3*tag(+0x53/+0x54)`。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
 - `function-map.csv`：待还原 **30 → 28**（本轮 §94 −2），已还原未验证 **293 → 295**（本轮 +2）。
+- `function-map.csv`：待还原 **28 → 25**（本轮 §95 −3），已还原未验证 **295 → 298**（本轮 +3）。
+- **闭包就绪游戏内容项**：本轮 §95 取走闭包就绪头名 `0x13A9F`（及其单点解阻的 `0x1D80B`/`0x1D8BA`）后，
+  闭包就绪游戏内容头名回落至 `0x1CFF0`(u1，1243B，行动菜单驱动)；`0x1A30B`(u2)/`0x13565`(u1) 等上游仍被 `0x1A813`/`0x1A866` 阻挡。
+  其余仅剩 CRT/库包装（`0x3645D`(u4)/`0x365DA`(u2)/`0x36C56`(u1)/`0x365AB`，既定策略跳过）与伪函数条目（`0x10000`/`0x36B00`）。
 - **已验证模块签名修复**：`ev5.c` 的 `ev5_1B653` `void→int`（见 §94 末条），经主管批准、零调用者、行为保持。
 - **闭包就绪游戏内容项**：本轮 §94 一并取走 `0x14EF0` 与 `0x15311` 后，闭包就绪游戏内容头名回落至
   `0x1CFF0`(u1，1243B，行动菜单驱动，`0x1CFF0` 的 callee `0x1D6C8` 已在 §59 还原) 与受它阻挡的

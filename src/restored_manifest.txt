@@ -953,3 +953,23 @@
 # Watcom stack probe and the returned eax is the free() result, none used.  No
 # differential harness.
 0x31529 sub_31529 game/ending_demo.h
+# map record turn loops + the record-action dispatcher.  0x13A9F executes
+# record `actor`'s pending action (the +52 low nibble, cases 0..11): the
+# map_ai_* scorers pick the move/attack, the case commits it and the tail
+# re-tags the cell (map_scroll_cell_tag), sets +5 bit 7 (rec_flag_or80),
+# clears the portrait and refreshes the view.  True closure = itself (all
+# callees in the manifest); the `int(int,int)` prototype is a chkstk artifact
+# and `jmp 0x1317D` is a shared epilogue (plain return), both dropped.
+0x13A9F sub_13A9F game/map_turn.h
+
+# 0x1D80B / 0x1D8BA - the per-record turn sweeps over status class 1 / class
+# 0, called argument-less by the party-change orchestrator 0x1A30B.  Each
+# record runs map_record_action, the funcs_1199C[dword_51A8F] scene handler
+# and the funcs_1197B[dword_53C03] per-state handler; both stop early when a
+# transition is pending (dword_53ECC != 0).  0x1D8BA first scores every
+# class-0 record (map_ai_pick_action_target / map_ai_pick_item_target) and
+# acts only when a score reaches 6, then does an action-only class-0 sweep.
+# The `int(void)` prototypes are chkstk artifacts; 0x3702F is the Watcom
+# stack probe, dropped.  No differential harness.
+0x1D80B sub_1D80B game/map_turn.h
+0x1D8BA sub_1D8BA game/map_turn.h

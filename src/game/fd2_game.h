@@ -47,6 +47,7 @@
 #include "map_shape.h"
 #include "map_sprites.h"
 #include "map_status.h"
+#include "map_turn.h"
 #include "map_units.h"
 #include "map_window.h"
 #include "map_zoom.h"
