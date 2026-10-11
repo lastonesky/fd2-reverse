@@ -1,13 +1,18 @@
-/* save_menu.c - the four-slot save/scenario selector (0x29AB2 / 0x29BCB).
- * See save_menu.h for the module overview and the ABI notes.  Direct
- * translation of the machine code; the offline disassembly
+/* save_menu.c - the FD2.SAV four-slot save/load family (0x2968D / 0x2986F /
+ * 0x29AB2 / 0x29BCB).  See save_menu.h for the module overview and the ABI
+ * notes.  Direct translation of the machine code; the offline disassembly
  * (analysis/cseg01_disasm.txt) is authoritative.
  */
 #include "fd2_game.h"
 #include "save_menu.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+
+/* 22987-byte FD2.SAV payload; the trailing dword (offset 0x59C7) is the
+ * util_sum_tail4 checksum stamped by save_slot_write. */
+#define SAVE_FILE_SIZE 0x59CBu
 
 /* 0x29AB2 */
 void save_slot_rows(int selected, int dst, int base)
@@ -89,4 +94,126 @@ int save_slot_select(int base, int wait_keys)
         if (ret != 0)
             return ret;
     }
+}
+
+/* 0x2968D */
+void save_slot_write(int wait_keys)
+{
+    uint8_t *buf;
+    FILE    *fp;
+    int      ret;
+
+    buf = (uint8_t *)guest_malloc(SAVE_FILE_SIZE);          /* 0x2969B */
+    fp  = fopen(aFd2Sav_5, aRb_5);                          /* FD2.SAV, rb */
+    if (fp != NULL) {
+        fread(buf, 1, SAVE_FILE_SIZE, fp);                  /* 0x373CA */
+        util_deobfuscate(buf, SAVE_FILE_SIZE);              /* 0x4DF28 */
+        fclose(fp);
+    } else {
+        memset(buf, 0xFF, SAVE_FILE_SIZE);
+    }
+
+    dword_53C57 = 0;
+    do {
+        ret = save_slot_select((int)(uintptr_t)buf, wait_keys);
+        if (ret != -1) {
+            uint8_t *slot = buf + 2600 * dword_53C57 + 12587;
+
+            memmove(slot, (const void *)(uintptr_t)dword_53BF7, 0xA00u);
+            slot += 0xA00;                                  /* +2560 header */
+            slot[0] = (uint8_t)dword_53C03;                 /* state id     */
+            slot[1] = (uint8_t)dword_53BFB;
+            *(uint32_t *)(slot + 2) = dword_53BF3;
+            slot[6] = byte_51AAB;
+            slot[7] = byte_53AF9;
+            slot[8] = byte_51E61;
+            slot[9] = byte_51E62;
+
+            fp = fopen(aFd2Sav_6, aWb_2);                   /* FD2.SAV, wb */
+            *(uint32_t *)(buf + SAVE_FILE_SIZE - 4) =       /* 0x59C7 */
+                (uint32_t)util_sum_tail4(buf, SAVE_FILE_SIZE);
+            util_deobfuscate(buf, SAVE_FILE_SIZE);
+            fwrite(buf, 1, SAVE_FILE_SIZE, fp);             /* 0x377A3 */
+            fclose(fp);
+            util_deobfuscate(buf, SAVE_FILE_SIZE);
+
+            if (byte_523E7[dword_53C03] == 0) {
+                msg_close_portrait();
+                msg_open_portrait(byte_52387[0]);
+                vm_run(dword_53A7D, 660, 693452, 320, 205, 76, 74, 19, 1);
+                dlg_blit_dato(dword_53A85, dword_53C67, 0);
+                dlg_wait_key(0);
+            }
+        }
+        msg_close_portrait();
+    } while (ret != -1);
+
+    guest_free(buf);
+}
+
+/* 0x2986F */
+void save_slot_load(void)
+{
+    uint8_t *buf;
+    FILE    *fp;
+    int      ret;
+    int      i;
+
+    buf = (uint8_t *)guest_malloc(SAVE_FILE_SIZE);          /* 0x29881 */
+    fp  = fopen(aFd2Sav_7, aRb_6);                          /* FD2.SAV, rb */
+    if (fp != NULL) {
+        fread(buf, 1, SAVE_FILE_SIZE, fp);
+        util_deobfuscate(buf, SAVE_FILE_SIZE);
+        fclose(fp);
+    } else {
+        memset(buf, 0xFF, SAVE_FILE_SIZE);
+    }
+
+    dword_53C57 = 0;
+    do {
+        ret = save_slot_select((int)(uintptr_t)buf, 1);
+        msg_close_portrait();
+        if (ret != -1) {
+            uint8_t *slot = buf + 2600 * dword_53C57 + 12587;
+            uint8_t  id   = slot[2560];                     /* scenario id  */
+
+            if (id != 0xFF) {
+                if (byte_523E7[id] != 0) {
+                    msg_open_portrait(byte_52387[0]);
+                    vm_run(dword_53A7D, 479, 693452, 320, 205, 76, 74, 19, 1);
+                } else {
+                    memmove((void *)(uintptr_t)dword_53BF7, slot, 0xA00u);
+                    slot += 0xA00;                          /* +2560 header */
+                    dword_53C03 = slot[0];
+                    dword_53BFB = slot[1];
+                    dword_53BF3 = *(uint32_t *)(slot + 2);
+                    byte_51AAB   = slot[6];
+                    byte_53AF9   = slot[7];
+                    byte_51E61   = slot[8];
+                    byte_51E62   = slot[9];
+
+                    if (dword_53A61 != NULL)
+                        guest_free(dword_53A61);            /* free 'buf'  */
+                    fp = fopen(aFdiconB24_3, aRb_7);        /* FDICON.B24 */
+                    dword_53BDF = 0;
+                    for (i = 0; i < (int)dword_53BFB; ++i)
+                        unit_entry_data(
+                            *(uint8_t *)(uintptr_t)(dword_53BF7 + 80 * i + 7),
+                            fp);                            /* 0x11019    */
+                    fclose(fp);
+                    dword_53F56 = (uint32_t)(uintptr_t)tbl_ptr(
+                        (void *)&fd2_data2[0x238D], 31,
+                        (int)dword_53C03, -31);             /* 0x4E809    */
+                    ret = -1;
+                    msg_open_portrait(byte_52387[0]);
+                    vm_run(dword_53A7D, 478, 693452, 320, 205, 76, 74, 19, 1);
+                }
+                dlg_blit_dato(dword_53A85, dword_53C67, 0);
+                dlg_wait_key(0);
+                msg_close_portrait();
+            }
+        }
+    } while (ret != -1);
+
+    guest_free(buf);
 }

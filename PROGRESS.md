@@ -1631,10 +1631,30 @@ party 行绘制同族第四员：驱动 `0x27F4A` 快照 VGA、逐行调 `0x2825
 - **chkstk**：`push 0x20; call 0x3702F`（`0x29BCB`）、`push 0x38; call 0x3702F`（`0x29AB2`）不分配帧，丢弃。
 - 无对拍器，标“已还原未验证”。
 
+### 63) FD2.SAV 存档/读档驱动器（本轮，2 函数）→ `src/game/save_menu.c/.h`（追加）
+
+§62 已还 `save_slot_select`/`save_slot_rows`（槽选择屏）；其两侧的读写驱动器仍未还原，且二者闭包全在册
+（仅 `save_slot_select` + 已还原资产），故本批按“槽族整体闭合”一并拉出：
+
+| 原址 | 新名 | 要点 |
+|---|---|---|
+| `0x2968D` | `save_slot_write(wait_keys)` | `guest_malloc(0x59CB)` → `fopen("FD2.SAV","rb")`→`fread`→`util_deobfuscate`；失败则 `memset(0xFF)`。循环：`save_slot_select(buf, wait_keys)`，非 −1 时把当前队伍表 `dword_53BF7`(0xA00) 与 10B 状态头（`dword_53C03/53BFB/53BF3`、`byte_51AAB/53AF9/51E61/51E62`）写入选中槽（`12587+2600*idx`），再 `open("wb")`、`[0x59C7]=util_sum_tail4`、`util_deobfuscate`、`fwrite`、`fclose`、复 `util_deobfuscate`；`byte_523E7[dword_53C03]==0` 时播存档完成图（`msg_*`+`vm_run(660)`+`dlg_blit_dato`+`dlg_wait_key`）；循环尾 `msg_close_portrait`；`guest_free`。 |
+| `0x2986F` | `save_slot_load(void)` | 同上读图；循环：`save_slot_select(buf, 1)` → `msg_close_portrait`；非 −1 且槽 id≠0xFF：若 `byte_523E7[id]!=0` 播不兼容图（`vm_run(479)`），否则 `memmove` 队伍表、回填状态头、`guest_free(dword_53A61 'buf')`、重建 `FDICON.B24` 图集（`unit_entry_data`）、`dword_53F56=tbl_ptr(...0x4E809)`、`ret=-1`、播载入完成图（`vm_run(478)`）；随后 `dlg_blit_dato`/`dlg_wait_key`/`msg_close_portrait`；`guest_free`。 |
+
+**陷阱 / 伪代码伪影**：
+- **CRT 文件对映射 libc**：机器 `0x37324`(fopen)/`0x373CA`(fread)/`0x377A3`(fwrite)/`0x3759C`(fclose)/`0x3771C`(memmove)/`0x37910`(memset) 直接写 `<stdio.h>/<string.h>`，与 `scenario_load.c` 同约定。
+- **堆缝**：`0x3706E`/`0x3776E`（malloc/free）走 `guest_malloc`/`guest_free`（`0x59CB` 镜像 + `dword_53A61` 图集）。
+- **`0x16559` 单参 ABI**：机器仅压 1 个实参（idx=0），按已还原资产约定写 `dlg_blit_dato(dword_53A85, dword_53C67, 0)`（§0-F 待动态阶段定论）。
+- **`0x4E809` 表访问器**：非函数名 `tbl_6238D`，按 `tables.h` 写 `tbl_ptr((void*)&fd2_data2[0x238D], 31, (int)dword_53C03, -31)`（同 `scene_core.c`）。
+- **`buf` 短名**：`0x2986F` 的 `buf` 是全局 `dword_53A61`（非局部），直接引用该宏。
+- **返回值**：`0x2968D` 尾返回 `guest_free` 残值（无调用点读），声明 `void`；`0x2986F` 机器 `int` 返回同为 `free` 残值，无调用方使用，声明 `void`。
+- **chkstk**：`push 0x38/0x34; call 0x3702F` 不分配帧，丢弃。
+- 无对拍器，标“已还原未验证”。
+
 ### 验证与台账
 
 - `tools/check_compile.sh --full`：双 profile 0 错误、`-Werror` 双 profile 全绿、伞头自检 OK。
-- `function-map.csv`：待还原 **81 → 79**（本轮 §62 −2），已还原未验证 **242 → 244**（本轮 +2）。
+- `function-map.csv`：待还原 **79 → 77**（本轮 §63 −2），已还原未验证 **244 → 246**（本轮 +2）。
 
 ### P1 余量（下一批候选，按 `function-map.csv` usage 排序）
 
@@ -1732,6 +1752,10 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 本轮 §62 借“伪 callee 校正”拉出 `0x29BCB`(u3) 及其唯一待还原 callee `0x29AB2`（新建 `save_menu`）——`0x29AB2` 的
 `jmp 0x28B3C` 只是 `0x2872B` 体内共享尾声，并非调用；此后存放档/场景槽选择屏闭合，`0x28F65`(u2，仍待 `0x29300`)/
 `0x29DAA`(u1，仍待 `0x28F65/29300/29620`) 等商店族头名相应前移。
+本轮 §63 继而把 `0x2968D`(u2)/`0x2986F`(u1) 两个 FD2.SAV 读写驱动器作为同族追加到 `save_menu`，
+故 §62 的槽选择屏及两侧读写一并闭合（`0x29300`(u1，仍待 `0x26996…` 等)/`0x2670E`(u1)/`0x2B777`(u1)
+仍为待还原调用者）；下一闭包就绪游戏头名回落至 `0x1B1E7`(u1)/`0x1BBDC`(u1)/`0x2000A`(u1)/`0x2872B`(u1)
+与库包装 `0x3645D`(u4)/`0x2E95B`(u3)/`0x365DA`(u2)/`0x36C56`(u1)（按既定策略跳过）。
 
 **台账发现（已解决）**：§26 曾记 `function-map.csv` 把 `0x2BF83`(u2) 列为待还原，而它其实已是
 `src/game/fx.c` 的 `fx_advance`（`fx.h` 已声明），只是漏登 `restored_manifest.txt`；已由台账提交

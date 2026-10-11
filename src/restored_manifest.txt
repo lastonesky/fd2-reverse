@@ -712,3 +712,8 @@
 # in shared epilogues (0x28B3C / 0x26A73) that are plain returns.
 0x29AB2 sub_29AB2 game/save_menu.h
 0x29BCB sub_29BCB game/save_menu.h
+
+# save/load game drivers around the selector: 0x2968D writes the live scene
+# into the chosen FD2.SAV slot, 0x2986F republishes the chosen slot.
+0x2968D sub_2968D game/save_menu.h
+0x2986F sub_2986F game/save_menu.h
