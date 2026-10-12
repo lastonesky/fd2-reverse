@@ -40,7 +40,8 @@ const void *map_units_move_reveal(int dst_x, int dst_y, void *scratch,
  * (cx, cy).  Only `scratch`, `cx` and `cy` are read; the other four keep the
  * driver's 7-argument ABI.  Returns the last tick reading. */
 int map_units_move_settle(int unused1, int unused2, void *scratch,
-                          int cx, int cy, const void *unused3, int unused4);
+                          int cx, int cy, const void *unused3,
+                          const void *unused4);
 
 /* 0x22253 - play the whole walk/reveal/settle move at cell (at_x, at_y) for
  * record `rec`, whose cell bytes are set to (rec_x, rec_y) in the process. */

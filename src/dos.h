@@ -34,7 +34,7 @@ typedef struct dos_ctx {
  * same family put an object there too (FDPS has obj2 at 0x70000, only 0x54
  * bytes). dos_choose_lowmem() slides the window above the game's objects -
  * every use goes through these macros, so call sites stay unchanged. */
-extern uint32_t dos_lowmem_base;          /* chosen before dos_init_lowmem() */
+extern uintptr_t dos_lowmem_base;          /* chosen before dos_init_lowmem() */
 
 #define DOS_LOWMEM_BASE   (dos_lowmem_base)
 #define DOS_LOWMEM_SIZE   0x00010000u

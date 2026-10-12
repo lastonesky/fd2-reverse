@@ -395,6 +395,10 @@ def gen_funcs(protos, restored):
     for addr, name, size, sig in protos:
         if name in CRT_SKIP or name in AIL_BOUNDARY_SKIP or name in CRT_BOUNDARY_SKIP or name in restored:
             continue  # standard header or restored module provides it
+        # Watcom CRT/library internals keep their own header or are mapped to libc;
+        # declaring them here collides with the platform CRT (MSVC _fsopen/unlink/...).
+        if not re.match(r'^(sub_|nullsub_|j_|jpt_|funcs_|unk_|tbl_|str_|asc_|off_|dword_|word_|byte_|AIL_|fd2_)', name):
+            continue
         if '@' in name:
             out.append('/* %s @ %s : %s  <- MANUAL (non-C identifier) */' % (name, addr, sig))
             manual.append(name); continue
@@ -431,6 +435,9 @@ def gen_funcs(protos, restored):
 
 # ---------------------------------------------------------------- image
 def gen_image(bins):
+    # NOTE: for a normal build the data image is produced by
+    # tools/prepare_image.py (it only needs FD2.EXE, not the IDA exports).
+    # This generator is the IDA-export path; both emit the same data-only file.
     def carr(b):
         lines = []
         for i in range(0, len(b), 16):
@@ -442,21 +449,32 @@ def gen_image(bins):
            '#include "include/fd2_globals.h"', '#include <string.h>', '',
            '#ifndef FD2_GUEST_FIXED']
     for sname, base, binf in SEGMENTS:
+        # The cseg01 CODE segment is dead in the native build: 51 generated
+        # macros reference fd2_code, but none of them is used by src/game or
+        # host, and its 258 KB turned fd2_image.c into ~1.5 MB of hex.  Emit
+        # the DATA segments only; fd2_data1/fd2_data2 are still required.
+        if sname == 'cseg01':
+            continue
         b = bins[binf]; arr = ARR[sname]
         out.append('/* %s @0x%X : %d bytes */' % (sname, base, len(b)))
-        if sname == 'cseg01':
-            out.append('uint8_t %s[0x%X] = {' % (arr, len(b)))
-            out.append(carr(b)); out.append('};')
-        else:
-            out.append('static const uint8_t %s_init[0x%X] = {' % (arr, len(b)))
-            out.append(carr(b)); out.append('};')
-            out.append('uint8_t %s[0x%X];' % (arr, len(b)))
+        out.append('static const uint8_t %s_init[0x%X] = {' % (arr, len(b)))
+        out.append(carr(b)); out.append('};')
+        out.append('uint8_t %s[0x%X];' % (arr, len(b)))
         out.append('')
     out += ['uint8_t fd2_lowmem[0x100000];', '',
             'void fd2_data_init(void)', '{']
     for sname, base, binf in SEGMENTS:
         if sname != 'cseg01':
             out.append('    memcpy(%s, %s_init, sizeof(%s));' % (ARR[sname], ARR[sname], ARR[sname]))
+            # BSS: the IDA export pads uninitialised data with 0xFF, but the LE
+            # loader leaves it zero.  Zero from the start of the trailing 0xFF
+            # run.  Do NOT round up to a page: that left the first partial page
+            # (dseg02 [0x4000,0x5000)) as 0xFF, which blocked every sound effect.
+            b = bins[binf]; nz = len(b)
+            while nz > 0 and b[nz-1] == 0xFF:
+                nz -= 1
+            if nz < len(b):
+                out.append('    memset(%s + 0x%X, 0, sizeof(%s) - 0x%X);' % (ARR[sname], nz, ARR[sname], nz))
     out += ['    /* fd2_lowmem: BDA mirror; BIOS tick counter at 0x46C (40:6C) */', '}',
             '#else /* FD2_GUEST_FIXED: image comes from the guest loader */',
             'void fd2_data_init(void) { /* guest loader owns image init */ }',

@@ -146,15 +146,15 @@ void figure_play(int unit, int mode, const void *figure, const void *base,
             gfx_copy_rows((void *)(uintptr_t)VGA_FRAME, 320, work, 320, 320,
                           200);
             if (flash != 0) {
-                outp(0x3C8, 0);
-                outp(0x3C9, byte_51AAD[mode]);
-                outp(0x3C9, byte_51AD1[mode]);
-                outp(0x3C9, byte_51AF5[mode]);
+                fd2_outp(0x3C8, 0);
+                fd2_outp(0x3C9, byte_51AAD[mode]);
+                fd2_outp(0x3C9, byte_51AD1[mode]);
+                fd2_outp(0x3C9, byte_51AF5[mode]);
                 j___delay(30);
-                outp(0x3C8, 0);
-                outp(0x3C9, 0);
-                outp(0x3C9, 0);
-                outp(0x3C9, 0);
+                fd2_outp(0x3C8, 0);
+                fd2_outp(0x3C9, 0);
+                fd2_outp(0x3C9, 0);
+                fd2_outp(0x3C9, 0);
                 --flash;
             }
             if (++counter ==
@@ -435,26 +435,26 @@ int figure_attack_play(int attacker, int defender, const uint8_t *figure,
 
                 if (s[4] == 1 && v33 == v32) {
                     if (out[2] != 0) {
-                        outp(0x3C8, 0);
-                        outp(0x3C9, 1);
-                        outp(0x3C9, 0x20);
-                        outp(0x3C9, 0);
+                        fd2_outp(0x3C8, 0);
+                        fd2_outp(0x3C9, 1);
+                        fd2_outp(0x3C9, 0x20);
+                        fd2_outp(0x3C9, 0);
                         j___delay(20);
-                        outp(0x3C8, 0);
-                        outp(0x3C9, 0);
-                        outp(0x3C9, 0);
-                        outp(0x3C9, 0);
+                        fd2_outp(0x3C8, 0);
+                        fd2_outp(0x3C9, 0);
+                        fd2_outp(0x3C9, 0);
+                        fd2_outp(0x3C9, 0);
                     }
                     if (out[1] != 0) {
-                        outp(0x3C8, 0);
-                        outp(0x3C9, 0x3F);
-                        outp(0x3C9, 0x3F);
-                        outp(0x3C9, 0x3F);
+                        fd2_outp(0x3C8, 0);
+                        fd2_outp(0x3C9, 0x3F);
+                        fd2_outp(0x3C9, 0x3F);
+                        fd2_outp(0x3C9, 0x3F);
                         j___delay(20);
-                        outp(0x3C8, 0);
-                        outp(0x3C9, 0);
-                        outp(0x3C9, 0);
-                        outp(0x3C9, 0);
+                        fd2_outp(0x3C8, 0);
+                        fd2_outp(0x3C9, 0);
+                        fd2_outp(0x3C9, 0);
+                        fd2_outp(0x3C9, 0);
                         j___delay(40);
                     }
                 }
@@ -838,8 +838,8 @@ void figure_party_show(int unit, int mode, int count, const uint8_t *units)
     int            dmg;           /* v24  clamped unit_damage result          */
     uint8_t        posture_n;     /* v35  8 for mode 28 else 1                */
     uint8_t        posture_i;     /* v34  postures drained so far             */
-    uint8_t        step;          /* v33  shake index (5 on a posture)        */
-    int            blit_mode;     /* v32  res_blit mode (33 on a posture)     */
+    uint8_t        step    = 0;   /* v33  shake index (5 on a posture)        */
+    int            blit_mode = -1;/* v32  res_blit mode (33 on a posture)     */
 
     memcpy(shake, &unk_52656, sizeof(shake));
 
@@ -1302,6 +1302,14 @@ void figure_effect_play(int unit, int mode, int count, const uint8_t *units)
 
         groups[j] = res_load(aFiganiDat, groups[j], 3 * r[7]);
     }
+    /* Defensive: an effect can still reach here with an empty target list
+     * (range 0 filters everything out).  The original then read groups[0]
+     * from an uninitialised stack slot; the port zeroes it and would
+     * res_blit(NULL).  Fall back to the actor's own plate so
+     * figure_attack_scroll/figure_play have a valid buffer (count stays 0,
+     * so nothing is damaged). */
+    if (count == 0)
+        groups[0] = fig_a;
 
     if (rec[6] != 0)
         i = tbc[mode];

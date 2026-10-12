@@ -45,12 +45,12 @@ void pal_fade_range(int start, int end, int sub)
     while (start <= end) {
         int k;
 
-        outp(0x3C8, start);
+        fd2_outp(0x3C8, start);
         for (k = 0; k < 3; k++) {
             int v = dword_53A65[start * 3 + k] - sub;
             if (v < 0)
                 v = 0;
-            outp(0x3C9, v);
+            fd2_outp(0x3C9, v);
         }
         start++;
     }
@@ -83,12 +83,12 @@ void pal_fade_add(int start, int end, int add)
     while (start <= end) {
         int k;
 
-        outp(0x3C8, start);
+        fd2_outp(0x3C8, start);
         for (k = 0; k < 3; k++) {
             int v = dword_53A65[start * 3 + k] + add;
             if (v > 63)
                 v = 63;
-            outp(0x3C9, v);
+            fd2_outp(0x3C9, v);
         }
         start++;
     }
@@ -121,10 +121,10 @@ void pal_anim_step(void)
             byte_60002 = 0;
         p = pal_anim_data + 3 * byte_60002;
         for (i = 0; i < 16; i++, idx++) {
-            outp(0x3C8, idx);
-            outp(0x3C9, *p++);
-            outp(0x3C9, *p++);
-            outp(0x3C9, *p++);
+            fd2_outp(0x3C8, idx);
+            fd2_outp(0x3C9, *p++);
+            fd2_outp(0x3C9, *p++);
+            fd2_outp(0x3C9, *p++);
         }
         word_60000 = pal_tick_word();
     }
@@ -142,15 +142,15 @@ void pal_flash_entry(int index)
 
     svc_play_sfx((const void *)(uintptr_t)dword_53B13, 0, 1);
     for (i = 0; i < 4; i++) {
-        outp(0x3C8, 0);
-        outp(0x3C9, byte_51AAD[index]);
-        outp(0x3C9, byte_51AD1[index]);
-        outp(0x3C9, byte_51AF5[index]);
+        fd2_outp(0x3C8, 0);
+        fd2_outp(0x3C9, byte_51AAD[index]);
+        fd2_outp(0x3C9, byte_51AD1[index]);
+        fd2_outp(0x3C9, byte_51AF5[index]);
         svc_wait_ticks(1);
-        outp(0x3C8, 0);
-        outp(0x3C9, 0);
-        outp(0x3C9, 0);
-        outp(0x3C9, 0);
+        fd2_outp(0x3C8, 0);
+        fd2_outp(0x3C9, 0);
+        fd2_outp(0x3C9, 0);
+        fd2_outp(0x3C9, 0);
         svc_wait_ticks(1);
     }
 }

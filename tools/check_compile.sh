@@ -5,7 +5,7 @@
 #   --full : also the generated sources + a header self-test, with -Werror
 set -u
 cd "$(dirname "$0")/.." || exit 1
-CC=${CC:-gcc}
+CC=${CC:-cc}
 FLAGS="-fsyntax-only -std=c99"
 WARN="-Wall -Wextra"
 
@@ -30,6 +30,9 @@ $CC $FLAGS -DFD2_GUEST_FIXED $WARN $TOLERANT src/game/*.c src/fd2_native.c src/f
 echo "errors: $($CC $FLAGS -DFD2_GUEST_FIXED $TOLERANT src/game/*.c src/fd2_native.c src/fd2_dispatch.c 2>&1 | grep -c 'error:')"
 
 if [ "${1:-}" = "--full" ]; then
+  hr
+  echo "########## prepare data-segment image (needs FD2.EXE; see prepare_image.py) ##########"
+  python3 tools/prepare_image.py --quiet || { echo "prepare_image failed"; exit 1; }
   hr
   echo "########## -Werror: all modules + generated (both profiles) ##########"
   for P in "" "-DFD2_GUEST_FIXED"; do

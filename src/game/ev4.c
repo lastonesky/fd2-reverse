@@ -32,7 +32,7 @@ typedef void     (*delay_fn)(int ms);               /* 0x3790A */
 typedef void *(*tbl_fn)(int sel);                   /* 0x4EB48 */
 typedef int      (*wait_fn)(int n);                 /* 0x17AA9 */
 
-extern uint32_t dos_lowmem_base;
+extern uintptr_t dos_lowmem_base;
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(dos_lowmem_base + (off)))
 
 

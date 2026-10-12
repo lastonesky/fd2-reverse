@@ -77,15 +77,15 @@ int rec_slot_find(int index, int want_high);
 
 /* 0x1CA89 - word +68 -= byte 5 of entry `tidx` of the 7-byte table at 0x619FD;
  * returns the record address (the machine code returns it in EAX). */
-uint32_t rec_sub_table5(int index, int tidx);
+void rec_sub_table5(int index, int tidx);
 
 /* 0x13512 / 0x32975 - flag writers; both return 80*index, not the address. */
 int rec_flag_or80(int index);
 int rec_flag_set1(int index);
 
 /* 0x34D64 / 0x35009 - no arguments (the dispatch pushes one that is unused). */
-uint32_t rec_status_mask_records(void);
-uint32_t rec_status_set_record14(void);
+void rec_status_mask_records(void);
+void rec_status_set_record14(void);
 
 /* 0x1C269 - collect the indices of the set bits in record[index] bytes
  * +26..+30 (bit b of byte i -> index 8*i+b). Returns the count; `out` may be

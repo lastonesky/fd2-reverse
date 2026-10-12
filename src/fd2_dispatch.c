@@ -42,12 +42,12 @@ void (*funcs_1199C[90])(void) = {
 };
 
 void (*funcs_1541F[28])(void) = {
-    (void (*)(void))sub_21206, (void (*)(void))sub_2134B, (void (*)(void))sub_21364, (void (*)(void))sub_2137D, (void (*)(void))sub_21396,
-    (void (*)(void))sub_21449, (void (*)(void))sub_21462, (void (*)(void))sub_2147B, (void (*)(void))sub_21494, (void (*)(void))sub_214AD,
-    (void (*)(void))sub_21527, (void (*)(void))sub_2185F, (void (*)(void))sub_21A9E, (void (*)(void))sub_21AD9, (void (*)(void))sub_21B99,
-    (void (*)(void))sub_2211C, (void (*)(void))sub_22153, (void (*)(void))sub_226EA, (void (*)(void))sub_2282F, (void (*)(void))sub_22960,
-    (void (*)(void))sub_22A85, (void (*)(void))sub_22BC6, (void (*)(void))sub_22BE1, (void (*)(void))sub_2218A, (void (*)(void))sub_22153,
-    (void (*)(void))sub_22C04, (void (*)(void))sub_22CBF, (void (*)(void))sub_22E41,
+    (void (*)(void))map_action_entry00, (void (*)(void))map_action_entry01, (void (*)(void))map_action_entry02, (void (*)(void))map_action_entry03, (void (*)(void))map_action_entry04,
+    (void (*)(void))map_action_entry05, (void (*)(void))map_action_entry06, (void (*)(void))map_action_entry07, (void (*)(void))map_action_entry08, (void (*)(void))map_action_entry09,
+    (void (*)(void))map_action_entry10, (void (*)(void))map_action_entry11, (void (*)(void))map_action_entry12, (void (*)(void))map_action_entry13, (void (*)(void))map_action_entry14,
+    (void (*)(void))map_action_entry15, (void (*)(void))map_action_entry16, (void (*)(void))map_action_grow_x_cost, (void (*)(void))map_action_grow_y_cost, (void (*)(void))map_action_widen_cost,
+    (void (*)(void))map_action_entry20, (void (*)(void))map_action_entry21, (void (*)(void))map_action_entry22, (void (*)(void))map_units_move_deploy, (void (*)(void))map_action_entry16,
+    (void (*)(void))map_action_clear_flag, (void (*)(void))map_action_entry26, (void (*)(void))map_action_entry27,
 };
 
 void (*funcs_25E23[30])(void) = {
@@ -70,12 +70,12 @@ void (*funcs_25E3A[30])(void) = {
 
 void (*funcs_30469[10])(void) = {
     (void (*)(void))fx_dots7, (void (*)(void))fx_dots8, (void (*)(void))fx_blob, (void (*)(void))fx_dots12, (void (*)(void))fx_dots6,
-    (void (*)(void))fx_dots6b, (void (*)(void))sub_2C67D, (void (*)(void))fx_dots3, (void (*)(void))fx_dots16, (void (*)(void))fx_toggle,
+    (void (*)(void))fx_dots6b, (void (*)(void))fx_dots5, (void (*)(void))fx_dots3, (void (*)(void))fx_dots16, (void (*)(void))fx_toggle,
 };
 
 void (*funcs_37012[10])(void) = {
-    (void (*)(void))sub_36E3D, (void (*)(void))sub_36E57, (void (*)(void))sub_36E65, (void (*)(void))sub_36EA7, (void (*)(void))sub_36EE0,
-    (void (*)(void))sub_36F08, (void (*)(void))sub_36F24, (void (*)(void))sub_36F69, (void (*)(void))sub_36F82, (void (*)(void))sub_36FAC,
+    (void (*)(void))ani_pal_fill, (void (*)(void))ani_pal_copy, (void (*)(void))ani_pal_rle, (void (*)(void))ani_pal_blocks, (void (*)(void))ani_fb_fill,
+    (void (*)(void))ani_fb_copy, (void (*)(void))ani_fb_rle, (void (*)(void))ani_fb_pixels, (void (*)(void))ani_fb_fill_runs, (void (*)(void))ani_fb_copy_runs,
 };
 
 #endif /* !FD2_GUEST_FIXED */

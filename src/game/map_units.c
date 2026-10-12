@@ -200,7 +200,8 @@ const void *map_units_move_reveal(int dst_x, int dst_y, void *scratch,
  * cx, cy) are read, the other four are kept for the 7-argument ABI that
  * 0x22253 uses and left unnamed.  Returns the last tick reading in EAX. */
 int map_units_move_settle(int unused1, int unused2, void *scratch,
-                          int cx, int cy, const void *unused3, int unused4)
+                          int cx, int cy, const void *unused3,
+                          const void *unused4)
 {
     int i, r = 0;
 
@@ -283,8 +284,7 @@ void map_units_move_play(int rec, int rec_x, int rec_y, int at_x, int at_y)
         j___delay(10);
     }
 
-    map_units_move_settle(at_x, at_y, scratch, cx, cy, sprite,
-                          (int)(intptr_t)last);
+    map_units_move_settle(at_x, at_y, scratch, cx, cy, sprite, last);
     guest_free(scratch);
     guest_free(dato);
 }

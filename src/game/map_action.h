@@ -71,8 +71,8 @@
  * field at byte `field` of the record, queue that number with glyph base 94,
  * refresh and pop the view, recompute record `rec`'s metrics and remove
  * `slot` from its equipment list.  `table_idx` selects the icon shape bank. */
-int map_action_add_field(int a1, int value, int field, int slot, int count,
-                         const uint8_t *list, int table_idx);
+void *map_action_add_field(int a1, int value, int field, int slot, int count,
+                           const uint8_t *list, int table_idx);
 
 /* 0x22721 - flag record +34 (x-enlarge) for each target whose +34 is empty and
  * grow the record's +72 metric by (word * dbl_50210 + 1); otherwise queue the

@@ -95,7 +95,7 @@ void world_load_party(int slot)
         "FDTXT.DAT", (void *)(uintptr_t)dword_53A79, slot + 1);
     dword_53A59 = res_load(
         "FDFIELD.DAT", (void *)(uintptr_t)dword_53A59, 3 * slot + 2);
-    p = (uint32_t)(uintptr_t)res_load(
+    p = res_load(
         "FDFIELD.DAT", (void *)(uintptr_t)p, 3 * slot + 1);
     dword_53A51 = res_load(
         "FDFIELD.DAT", (void *)(uintptr_t)dword_53A51, 3 * slot);

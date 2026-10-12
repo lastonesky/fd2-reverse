@@ -26,8 +26,8 @@ uint16_t gfx_pen_stride; /* original word_627A3 @ 0x627A3 */
 uint8_t  gfx_pen_fg;     /* original byte_627A5 @ 0x627A5 */
 uint8_t  gfx_pen_fill;   /* original byte_627A6 @ 0x627A6 */
 uint8_t  gfx_pen_shadow; /* original byte_627A7 @ 0x627A7 */
-uint32_t gfx_pen_dest;   /* original dword_627A8 @ 0x627A8 */
-uint32_t gfx_glyph_tab;  /* original dword_627AC @ 0x627AC */
+void       *gfx_pen_dest;   /* original dword_627A8 @ 0x627A8 */
+const void *gfx_glyph_tab;  /* original dword_627AC @ 0x627AC */
 uint32_t gfx_glyph_idx;  /* original dword_627B0 @ 0x627B0 */
 
 /* Scanline phase-offset table, original byte_627C8 @ 0x627C8 (read-only:
@@ -141,9 +141,9 @@ void gfx_draw_glyph(const void *glyph_table, int index, void *dest, int stride,
     int             st = (uint16_t)stride;      /* original: bp = word */
     const uint8_t  *g;
 
-    gfx_glyph_tab  = (uint32_t)(uintptr_t)glyph_table;
+    gfx_glyph_tab  = glyph_table;
     gfx_glyph_idx  = (uint32_t)index;
-    gfx_pen_dest   = (uint32_t)(uintptr_t)dest;
+    gfx_pen_dest   = (void *)dest;
     gfx_pen_stride = (uint16_t)stride;
     gfx_pen_fg     = (uint8_t)fg;
     gfx_pen_shadow = (uint8_t)shadow;

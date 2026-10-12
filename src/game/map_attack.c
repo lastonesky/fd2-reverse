@@ -35,9 +35,7 @@ void map_attack_sprite(int attacker, int defender)
                        + 80u * (uint32_t)defender;
     const uint8_t *eff =
         item_entry(rec_field_byte(attacker, rec_slot_find(attacker, 0)));
-    const uint8_t *script =
-        (const uint8_t *)(uintptr_t)tbl_u32((const void *)&fd2_data2[0x1955],
-                                            eff[0]);
+    const uint8_t *script = (const uint8_t *)tbl_off61955(eff[0]);
     int count  = script[0];
     int x      = 24 * (int)(r[0] - (uint32_t)dword_53AA9) + 4;
     int y      = 24 * (int)(r[1] - (uint32_t)dword_53AAD);
@@ -79,7 +77,10 @@ int map_attack_resolve(int attacker, int defender)
     int v7, v24;
     int v26, v27, v28, v22, v21, v20, v19, v29, v25;
     uint8_t v30;
-    int v1, v23;
+    /* v1 = damage dealt.  Only set inside the hit roll below, but read when
+     * booking experience even when the roll fails; the original reads the
+     * same uninitialised stack slot there, so default to "no damage". */
+    int v1 = 0, v23;
 
     byte_53C6B = 1;
     v26 = *(const uint16_t *)(const void *)(v2 + 0x48);

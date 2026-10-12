@@ -48,7 +48,7 @@
 void ev_rec13_set1(void);
 
 /* 0x348EA - one shot: status(24,27,7) + sub-stream 3, set the flag. */
-uint32_t ev_status24_27(void);
+void ev_status24_27(void);
 
 /* 0x34A6C - status(7,36,7) + sub-stream 8; if any of records 7..36 has flag
  * bit 0 clear, run sub-stream 11 as well. */
@@ -57,23 +57,21 @@ void ev_status7_36(void);
 /* 0x34B2F - when record 8's flag bit 0 is clear, run sub-stream 2. */
 void ev_flag8_gate(void);
 
-/* 0x34CF1 - when record `idx` byte +6 is set: status(9,27,0), set the flag and
- * return dword_53AD5; otherwise return that byte (0). */
-uint32_t ev_rec6_gate(int idx);
+/* 0x34CF1 - when record `idx` byte +6 is set: status(9,27,0) and set the flag. */
+void ev_rec6_gate(int idx);
 
-/* 0x34D92 - sub-stream 2, then status_mask_records(); returns its EAX. */
-uint32_t ev_mask_records(void);
+/* 0x34D92 - sub-stream 2, then status_mask_records(). */
+void ev_mask_records(void);
 
-/* 0x34F74 - sub-stream 2, clear byte +52 of records 12 and 13;
- * returns dword_53A45 + 1040 (record 13). */
-uint32_t ev_clear_status12_13(void);
+/* 0x34F74 - sub-stream 2, clear byte +52 of records 12 and 13. */
+void ev_clear_status12_13(void);
 
 /* 0x35123 - when idx == 0, fewer than eight slots are free and the one-shot
  * flag is clear: claim slot (0, 89), run sub-stream 11, set the flag. */
 void ev_slot8_claim(int idx);
 
-/* 0x35191 - one shot: status(16,71,<flag byte, 0>) + sub-stream 1, set flag. */
-uint32_t ev_status16_71(void);
+/* 0x35191 - one shot: status(16,71,0) + sub-stream 1, set flag. */
+void ev_status16_71(void);
 
 /* 0x351E6 - sub-stream 6, clear byte +53 of records 64..73, then
  * status(64,73,3) and status(35,49,0); returns the second call's EAX. */

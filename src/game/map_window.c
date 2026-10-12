@@ -71,7 +71,7 @@ int map_window_run(void)
         memmove(buf + ROW_STRIDE * (uint32_t)i + BUF_OFF_1,
                 save + 320u * (uint32_t)i, 0x140u);
 
-    if ((uint32_t)dword_53A51 > 1) {
+    if ((uintptr_t)dword_53A51 > 1) {
         sub_1297D();
         sub_11EEE(buf + VIEW_SRC_OFF, 456, 13, 8,
                   (int)qword_53AA9, (int)(qword_53AA9 >> 32));
@@ -99,7 +99,7 @@ int map_window_run(void)
                 if (++dword_53C13 == 4)
                     dword_53C13 = 0;
                 dword_53C17 = (uint32_t)tick_word();
-                if ((uint32_t)dword_53A51 > 1) {
+                if ((uintptr_t)dword_53A51 > 1) {
                     sub_1297D();
                     sub_11EEE(buf + VIEW_SRC_OFF, 456, 13, 8,
                               (int)qword_53AA9, (int)(qword_53AA9 >> 32));
@@ -123,7 +123,7 @@ int map_window_run(void)
                         sub_4EBFF(save + dword_53C67, (int16_t *)src, 320);
                     idle = 1;
                 }
-                if ((uint32_t)dword_53A51 <= 1) {
+                if ((uintptr_t)dword_53A51 <= 1) {
                     for (i = 0; i < 200; ++i)
                         memmove(buf + ROW_STRIDE * (uint32_t)i + BUF_OFF_1,
                                 save + 320u * (uint32_t)i, 0x140u);

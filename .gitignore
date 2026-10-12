@@ -1,0 +1,35 @@
+host/build/
+*.o
+
+build/
+
+# --- 不属于本仓库的派生物（体积大 + 可由原版程序/IDA/Ghidra 重新获得）---------
+# 重建仓库后若要编译/重生成头文件，必须先按 EXTERNAL_ARTIFACTS.md 从外部 IDB
+# 重新导出这些文件；它们不再入库（见该文件“已移出 git”一节）。
+analysis/decomp/
+analysis/disasm_fallback/
+analysis/cseg01_disasm.txt
+analysis/seg_*.bin
+analysis/arity.json
+analysis/callgraph.csv
+analysis/compile_errors.txt
+analysis/data_items.csv
+analysis/data_type_overrides.csv
+analysis/decomp_failures.csv
+analysis/dispatch_tables.csv
+analysis/funcmap.csv
+analysis/names.csv
+analysis/prototype_heal_log.json
+analysis/prototypes.csv
+analysis/reloc_suspects.csv
+analysis/strings.csv
+function-map.csv
+
+# Generated at build time by tools/prepare_image.py from the original EXE.
+# This is copyrighted game data - never commit the segments or the image:
+analysis/seg_*.bin
+src/fd2_image.c
+
+# The original executable may sit in the repo root during development, but it
+# is the user's own copy and must never be committed:
+/FD2.EXE

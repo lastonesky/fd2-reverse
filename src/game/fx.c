@@ -82,6 +82,11 @@ typedef uint32_t (*rand_fn)(void);
 #define FX_TABLE_DOTS3  0x0005261Eu   /* 10 dwords, bias +130 */
 #define FX_TABLE_DOTS16 0x00052646u   /* 16 bytes                  */
 
+/* The tables above are read-only data in dseg02 (0x50000-based).  On the
+ * native host the raw guest address is not mapped, so every read goes through
+ * the mirror - the same fix as the C3 VGA/curtain sweep. */
+#define FX_TBL(a) ((const void *)&fd2_data1[(a) - 0x50000u])
+
 /* Byte 6 of character record `rec` (80-byte records; 0 biases the table). */
 static uint8_t fx_rec_flag(int rec)
 {
@@ -107,9 +112,9 @@ int fx_dots7(int rec, const void *buf, void *dst, int pitch, int selector)
     int     r = 0;
     int     i;
 
-    memcpy(dir, (const void *)(uintptr_t)FX_TABLE_DOTS7_DIR, sizeof dir);
-    memcpy(pos, (const void *)(uintptr_t)FX_TABLE_DOTS7_POS, sizeof pos);
-    memcpy(row, (const void *)(uintptr_t)FX_TABLE_DOTS7_ROW, sizeof row);
+    memcpy(dir, FX_TBL(FX_TABLE_DOTS7_DIR), sizeof dir);
+    memcpy(pos, FX_TBL(FX_TABLE_DOTS7_POS), sizeof pos);
+    memcpy(row, FX_TBL(FX_TABLE_DOTS7_ROW), sizeof row);
     if (fx_rec_flag(rec) == 0) {
         for (i = 0; i < 7; ++i)
             pos[i] += 148;
@@ -166,8 +171,8 @@ int fx_dots8(int rec, const void *buf, void *dst, int pitch, int selector)
     int     r = 0;
     int     i;
 
-    memcpy(pos, (const void *)(uintptr_t)FX_TABLE_DOTS8_POS, sizeof pos);
-    memcpy(row, (const void *)(uintptr_t)FX_TABLE_DOTS8_ROW, sizeof row);
+    memcpy(pos, FX_TBL(FX_TABLE_DOTS8_POS), sizeof pos);
+    memcpy(row, FX_TBL(FX_TABLE_DOTS8_ROW), sizeof row);
     if (fx_rec_flag(rec) == 0) {
         for (i = 0; i < 8; ++i)
             pos[i] += 148;
@@ -336,9 +341,9 @@ int fx_dots12(int rec, const void *buf, void *dst, int pitch, int selector)
     int     r = 0;
     int     i;
 
-    memcpy(v19, (const void *)(uintptr_t)FX_TABLE_DOTS12_V19, sizeof v19);
-    memcpy(v21, (const void *)(uintptr_t)FX_TABLE_DOTS12_V21, sizeof v21);
-    memcpy(v20, (const void *)(uintptr_t)FX_TABLE_DOTS12_V20, sizeof v20);
+    memcpy(v19, FX_TBL(FX_TABLE_DOTS12_V19), sizeof v19);
+    memcpy(v21, FX_TBL(FX_TABLE_DOTS12_V21), sizeof v21);
+    memcpy(v20, FX_TBL(FX_TABLE_DOTS12_V20), sizeof v20);
     if (fx_rec_flag(rec) == 0) {
         for (i = 0; i < 12; ++i)
             v19[i] += 20;
@@ -408,7 +413,7 @@ int fx_dots6b(int rec, const void *buf, void *dst, int pitch, int selector)
     int     r = 0;
     int     i;
 
-    memcpy(pos, (const void *)(uintptr_t)FX_TABLE_DOTS6B, sizeof pos);
+    memcpy(pos, FX_TBL(FX_TABLE_DOTS6B), sizeof pos);
     if (fx_rec_flag(rec) == 0) {
         for (i = 0; i < 10; ++i)
             pos[i] += 143;
@@ -473,7 +478,7 @@ int fx_dots6(int rec, const void *buf, void *dst, int pitch, int selector)
     int     r = 0;
     int     i;
 
-    memcpy(pos, (const void *)(uintptr_t)FX_TABLE_DOTS6, sizeof pos);
+    memcpy(pos, FX_TBL(FX_TABLE_DOTS6), sizeof pos);
     if (fx_rec_flag(rec) == 0) {
         for (i = 0; i < 10; ++i)
             pos[i] += 143;
@@ -533,7 +538,7 @@ int fx_dots3(int rec, const void *buf, void *dst, int pitch, int selector)
     int     r = 0;
     int     k;
 
-    memcpy(pos, (const void *)(uintptr_t)FX_TABLE_DOTS3, sizeof pos);
+    memcpy(pos, FX_TBL(FX_TABLE_DOTS3), sizeof pos);
     if (fx_rec_flag(rec) == 0) {
         for (k = 0; k < 10; ++k)
             pos[k] += 130;
@@ -599,7 +604,7 @@ int fx_dots16(int rec, const void *buf, void *dst, int pitch, int selector)
     int     j;
 
     (void)rec;
-    memcpy(tbl, (const void *)(uintptr_t)FX_TABLE_DOTS16, sizeof tbl);
+    memcpy(tbl, FX_TBL(FX_TABLE_DOTS16), sizeof tbl);
 
     switch ((uint8_t)selector) {
     case 0:
@@ -724,8 +729,8 @@ int fx_dots5(int rec, const void *buf, void *dst, int pitch, int selector)
     uint8_t *c4  = (uint8_t *)byte_540C4;
     int      n;
 
-    memcpy(v15, (const void *)(uintptr_t)FX_TABLE_DOTS5_X, sizeof v15);
-    memcpy(v18, (const void *)(uintptr_t)FX_TABLE_DOTS5_Y, sizeof v18);
+    memcpy(v15, FX_TBL(FX_TABLE_DOTS5_X), sizeof v15);
+    memcpy(v18, FX_TBL(FX_TABLE_DOTS5_Y), sizeof v18);
     v23 = 30;
     if (v25 == 0) {
         v23 = 90;

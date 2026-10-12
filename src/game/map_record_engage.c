@@ -36,7 +36,7 @@
 #include <string.h>
 
 /* runtime-mapped BDA mirror (the machine's absolute 0x46C immediate). */
-extern uint32_t dos_lowmem_base;
+extern uintptr_t dos_lowmem_base;
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(dos_lowmem_base + (off)))
 
 /* live map cursor target, read fresh at each use exactly as the machine does. */

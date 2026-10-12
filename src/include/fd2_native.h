@@ -31,6 +31,8 @@ extern  void *dword_53ED0;   /* AIL sequence handle      (0x53ED0, was 4B cell) 
 extern  void *dword_53ED8;   /* AIL MDI driver           (0x53ED8) */
 #undef  dword_53EDC
 extern  void *dword_53EDC;   /* AIL DIG driver           (0x53EDC) */
+#undef  dword_53EE0
+extern  void *dword_53EE0;   /* FDMUS.DAT track buffer   (0x53EE0) */
 #undef  dword_53EE4
 extern  void *dword_53EE4;   /* AIL sample handle 1      (0x53EE4) */
 #undef  dword_53EE8
@@ -87,6 +89,14 @@ extern  uint8_t *dword_53A69;   /* FDSHAP resource          (0x53A69) */
 extern  uint8_t *dword_53A79;   /* FDTXT resource           (0x53A79) */
 #undef  dword_53A45
 extern  uint8_t *dword_53A45;   /* record sprite layer      (0x53A45) */
+/* 0x53A18: five stage buffers returned by dlg_open_box and consumed by
+ * dlg_close_box.  The machine stores the five 4-byte pointers at 0x53A18,
+ * 0x53A1C, 0x53A20, 0x53A24, 0x53A28 - back to back with the scalar cells
+ * dword_53A2C..dword_53A40.  A mirror-based `void **` view would stride 8
+ * bytes and clobber those neighbours on a 64-bit host, so it is a real
+ * array. */
+#undef  dword_53A18
+extern  void *dword_53A18[5];  /* dlg_open_box stage buffers (0x53A18) */
 #undef  dword_53A71
 extern  uint8_t *dword_53A71;   /* map cursor window save   (0x53A71) */
 #undef  dword_53A85

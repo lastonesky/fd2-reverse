@@ -6,9 +6,8 @@
  * It frees `old_buffer`, opens the container, reads the 8-byte directory
  * entry at file offset 4*index + 6 (two little-endian u32: start, end),
  * allocates (end - start) bytes, seeks to `start`, reads the resource and
- * returns the buffer. The size is also stored in the original global
- * dword_53BFF (0x53BFF), which the *game* reads - so it is written through
- * guest_store_u32(), not to a C variable.
+ * returns the buffer. The size is also stored in the game global dword_53BFF
+ * (0x53BFF), which the *game* reads.
  *
  * Heap: both the freed `old_buffer` and the returned buffer live on the
  * **game's** heap (guest_malloc/guest_free -> Watcom CRT 0x3706E/0x3776E), so
@@ -30,9 +29,6 @@
 #define GAME_RES_H
 
 #include <stdint.h>
-
-/* where res_load publishes the resource size (original dword_53BFF) */
-#define RES_SIZE_ADDR 0x00053BFFu
 
 void *res_load(const char *filename, void *old_buffer, int index);
 

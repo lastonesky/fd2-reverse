@@ -15,15 +15,15 @@
 #define SAVE_FILE_SIZE 0x59CBu
 
 /* 0x29AB2 */
-void save_slot_rows(int selected, uint8_t *dst, int base)
+void save_slot_rows(int selected, uint8_t *dst, const uint8_t *base)
 {
     int i;
 
     for (i = 0; i < 4; ++i) {
         uint8_t *v5  = dst + (320 * (19 * i + 119));
         int     fg   = (i == selected) ? 201 : 205;
-        int     slot = 2600 * i + base + 12587;
-        uint8_t id   = *(const uint8_t *)(uintptr_t)(slot + 2560);
+        const uint8_t *slot = base + (2600 * i + 12587);
+        uint8_t id = slot[2560];
 
         dword_53AE1 = i + 1;
         vm_run(dword_53A7D, 549,v5 + 10, 320, fg, 76, 0, 0, 0);
@@ -37,7 +37,7 @@ void save_slot_rows(int selected, uint8_t *dst, int base)
 }
 
 /* 0x29BCB */
-int save_slot_select(int base, int wait_keys)
+int save_slot_select(const uint8_t *base, int wait_keys)
 {
     int ret = 0;
     int i;
@@ -115,7 +115,7 @@ void save_slot_write(int wait_keys)
 
     dword_53C57 = 0;
     do {
-        ret = save_slot_select((int)(uintptr_t)buf, wait_keys);
+        ret = save_slot_select(buf, wait_keys);
         if (ret != -1) {
             uint8_t *slot = buf + 2600 * dword_53C57 + 12587;
 
@@ -171,7 +171,7 @@ void save_slot_load(void)
 
     dword_53C57 = 0;
     do {
-        ret = save_slot_select((int)(uintptr_t)buf, 1);
+        ret = save_slot_select(buf, 1);
         msg_close_portrait();
         if (ret != -1) {
             uint8_t *slot = buf + 2600 * dword_53C57 + 12587;

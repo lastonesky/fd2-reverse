@@ -76,7 +76,7 @@ int menu_list_select(void)
                    *(const uint32_t *)(uintptr_t)(dword_53F66 + 70u)),
               320);
 
-    status_names_draw(dword_53C57, (int)dword_53C63);
+    status_names_draw(dword_53C57, dword_53C63);
 
     for (i = 5; i >= 0; --i)
         msg_blit_band(13 * i + 112, (void *)(uintptr_t)dword_53C5B,
@@ -106,7 +106,7 @@ int menu_list_select(void)
                 dword_53F4E -= 2;
                 screen_band_backward();
             }
-            status_names_draw(dword_53C57, 655360);
+            status_names_draw(dword_53C57, VGA_P(655360u));
             break;
         case 80:                                  /* page down */
             if ((int32_t)(dword_53BFB - 2) <= (int32_t)dword_53C57)
@@ -118,7 +118,7 @@ int menu_list_select(void)
                 dword_53F4E += 2;
                 screen_band_forward();
             }
-            status_names_draw(dword_53C57, 655360);
+            status_names_draw(dword_53C57, VGA_P(655360u));
             break;
         case 28:                                  /* Enter */
         case 57:                                  /* Space */
