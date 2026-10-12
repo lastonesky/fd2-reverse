@@ -7,8 +7,35 @@
  *
  * Everything is sized from the render_desc: the quad covers the whole client
  * area, so the window can be resized freely (the GDI path draws at a fixed
- * integer scale). Sampling is NEAREST, which is what makes the output
- * pixel-identical to the GDI reference. */
+ * integer scale). The CPU never scales; the fragment shader does.
+ *
+ * ---------------------------------------------------------------------------
+ * Upscale modes ("plan A" HD presentation)
+ * ---------------------------------------------------------------------------
+ * The source is only 320x200, so the final look is decided entirely by the
+ * scaler. The mode is chosen once at init from FD2_UPSCALE:
+ *
+ *   nearest  - the original pixel-exact NEAREST path (reference / A-B tests)
+ *   linear   - plain bilinear (smooth, soft - rarely what pixel art wants)
+ *   sharp    - sharp-bilinear: bilinear with the texel-crossing steepened so
+ *              edges stay crisp instead of turning to mush  (default)
+ *   bicubic  - Catmull-Rom 4x4, smooth gradients, good for photo-ish art
+ *
+ * All smoothing is done by hand from a single NEAREST sampler (4 taps for
+ * bilinear, 16 for bicubic) so D3D11 and GL produce the same result and no
+ * sampler-filter state has to be rebuilt. FD2_UPSCALE=nearest restores the
+ * byte-identical reference output.
+ *
+ * The source aspect ratio (320:200 = 8:5) is preserved when the window is
+ * resized: the draw is confined to a centered viewport with that aspect and
+ * the remaining area stays at the (black) clear colour. FD2_ASPECT=off
+ * stretches to fill the client area again.
+ *
+ * This layer is independent of the game: an HD asset pack (plan B) or a
+ * high-res internal framebuffer (plan C) would feed bigger frames through the
+ * same render_present() seam, and the upscaler can then be switched back to
+ * nearest (or the source size grows and the scale factor shrinks) without
+ * touching the game code. */
 
 #include <string.h>
 #include <stdio.h>
@@ -28,7 +55,8 @@
  * vertically flipped; FD2_TESTPATTERN=1 replaces the guest frame with a
  * static high-contrast pattern (green ramps with the row, white block
  * top-left, red block bottom-right) so the answer has no animation noise.
- * Off by default: the cost is one getenv per frame. */
+ * Off by default: the cost is one getenv per frame. Only meaningful in
+ * nearest mode (a smoothing filter legitimately changes the pixels). */
 static void gl_readback_check(const uint32_t *bgra, int w, int h)
 {
     static long frames;
@@ -80,7 +108,12 @@ static void gl_readback_check(const uint32_t *bgra, int w, int h)
  * sokol cannot cross-compile, so both variants live here and the right one is
  * picked from sg_query_backend(). macOS/Metal would need a third one (MSL),
  * which is what sokol-shdc is for; we only add it when macOS becomes a
- * target (§13.1 cost list). */
+ * target (§13.1 cost list).
+ *
+ * The vertex shader is fixed; the fragment shader is generated once at init
+ * so the upscale mode and the source size are compile-time constants (no
+ * cbuffer / uniform-block plumbing to get wrong across backends). */
+
 static const char *HLSL_VS =
     "struct vs_in  { float2 pos : POSITION; float2 uv : TEXCOORD0; };\n"
     "struct vs_out { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
@@ -89,15 +122,6 @@ static const char *HLSL_VS =
     "    o.pos = float4(i.pos, 0.0, 1.0);\n"
     "    o.uv  = i.uv;\n"
     "    return o;\n"
-    "}\n";
-
-static const char *HLSL_FS =
-    "Texture2D tex : register(t0);\n"
-    "SamplerState smp : register(s0);\n"
-    "float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {\n"
-    "    float4 c = tex.Sample(smp, uv);\n"
-    "    /* source bytes are BGRA (32bpp BI_RGB) sampled as RGBA -> swizzle */\n"
-    "    return float4(c.b, c.g, c.r, 1.0);\n"
     "}\n";
 
 static const char *GLSL_VS =
@@ -110,20 +134,202 @@ static const char *GLSL_VS =
     "    uvv = uv;\n"                 /* v is flipped in the fragment stage */
     "}\n";
 
+/* Fallback fragment shader used only if the generated one fails to compile:
+ * the original, pixel-exact NEAREST blit. */
+static const char *HLSL_FS =
+    "Texture2D tex : register(t0);\n"
+    "SamplerState smp : register(s0);\n"
+    "float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {\n"
+    "    float4 c = tex.Sample(smp, uv);\n"
+    "    return float4(c.b, c.g, c.r, 1.0);\n"
+    "}\n";
+
 static const char *GLSL_FS =
     "#version 330\n"
     "in vec2 uvv;\n"
     "out vec4 frag;\n"
     "uniform sampler2D tex_smp;\n"
     "void main() {\n"
-    /* NO v flip: sokol-gfx uploads image rows as-is, so texel v=0 is the first
-     * uploaded row (the top scanline) exactly like D3D11's convention - the
-     * quad already maps uv.y=0 to the top. Flipping here made the GL window
-     * 180-degrees upside down while --screenshot (shared layer) stayed right;
-     * see docs/PITFALLS.md §8-67. */
     "    vec4 c = texture(tex_smp, uvv);\n"
     "    frag = vec4(c.b, c.g, c.r, 1.0);\n"
     "}\n";
+
+/* Upscale modes. Keep the numbering in sync with the shader's MODE. */
+enum { UP_NEAREST = 0, UP_LINEAR = 1, UP_SHARP = 2, UP_BICUBIC = 3 };
+static int g_up_mode = UP_SHARP;
+static int g_keep_aspect = 1;      /* letterbox instead of stretching */
+
+static int eq_ci(const char *a, const char *b)
+{
+    while (*a && *b) {
+        int ca = *a, cb = *b;
+        if (ca >= 'A' && ca <= 'Z') ca += 'a' - 'A';
+        if (cb >= 'A' && cb <= 'Z') cb += 'a' - 'A';
+        if (ca != cb) return 0;
+        a++; b++;
+    }
+    return *a == 0 && *b == 0;
+}
+
+static void parse_upscale(void)
+{
+    const char *s = getenv("FD2_UPSCALE");
+
+    if (!s || !*s)
+        return;                                   /* keep the default (sharp) */
+    if (eq_ci(s, "nearest") || eq_ci(s, "off") || eq_ci(s, "0"))
+        g_up_mode = UP_NEAREST;
+    else if (eq_ci(s, "linear") || eq_ci(s, "bilinear"))
+        g_up_mode = UP_LINEAR;
+    else if (eq_ci(s, "sharp") || eq_ci(s, "hd") || eq_ci(s, "1"))
+        g_up_mode = UP_SHARP;
+    else if (eq_ci(s, "bicubic") || eq_ci(s, "catmull"))
+        g_up_mode = UP_BICUBIC;
+    else
+        printf("sokol: unknown FD2_UPSCALE='%s' (nearest/linear/sharp/bicubic),"
+               " using sharp\n", s);
+}
+
+static void parse_aspect(void)
+{
+    const char *s = getenv("FD2_ASPECT");
+
+    if (!s || !*s)
+        return;                                   /* keep the default (on) */
+    if (eq_ci(s, "off") || eq_ci(s, "0") || eq_ci(s, "stretch"))
+        g_keep_aspect = 0;
+}
+
+/* Largest iw:ih-aspect rectangle that fits in sw x sh, centred. */
+static void fit_viewport(int sw, int sh, int iw, int ih,
+                         int *vx, int *vy, int *vw, int *vh)
+{
+    double ar = (double)iw / (double)ih;
+    int w, h;
+
+    if ((double)sw / (double)sh > ar) {
+        h = sh;
+        w = (int)((double)sh * ar + 0.5);
+    } else {
+        w = sw;
+        h = (int)((double)sw / ar + 0.5);
+    }
+    if (w > sw) w = sw;
+    if (h > sh) h = sh;
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    *vw = w; *vh = h;
+    *vx = (sw - w) / 2;
+    *vy = (sh - h) / 2;
+}
+
+static const char *mode_name(int mode)
+{
+    switch (mode) {
+    case UP_NEAREST: return "nearest";
+    case UP_LINEAR:  return "linear";
+    case UP_SHARP:   return "sharp";
+    case UP_BICUBIC: return "bicubic";
+    default:         return "?";
+    }
+}
+
+/* HLSL/GLSL fragment source with MODE/TEXW/TEXH defined. `hlsl` selects the
+ * language; `mode` is the UP_* value; w/h are the source frame size. */
+static void build_fragment_shader(char *dst, size_t cap, int hlsl,
+                                  int mode, int w, int h)
+{
+    static const char *GLSL_FMT =
+        "#version 330\n"
+        "#define MODE %d\n"
+        "#define TEXW %d.0\n"
+        "#define TEXH %d.0\n"
+        "#define SHARP 2.0\n"
+        "in vec2 uvv;\n"
+        "out vec4 frag;\n"
+        "uniform sampler2D tex_smp;\n"
+        "vec4 tap(vec2 t) { return texture(tex_smp, (t + vec2(0.5)) / vec2(TEXW, TEXH)); }\n"
+        "vec4 blerp(vec2 p) {\n"
+        "    vec2 b = floor(p); vec2 f = p - b;\n"
+        "    vec4 a = mix(tap(b), tap(b + vec2(1.0, 0.0)), f.x);\n"
+        "    vec4 c = mix(tap(b + vec2(0.0, 1.0)), tap(b + vec2(1.0, 1.0)), f.x);\n"
+        "    return mix(a, c, f.y);\n"
+        "}\n"
+        "float cat(float x) {\n"
+        "    float a = abs(x);\n"
+        "    if (a < 1.0) return (1.5 * a - 2.5) * a * a + 1.0;\n"
+        "    if (a < 2.0) return ((-0.5 * a + 2.5) * a - 4.0) * a + 2.0;\n"
+        "    return 0.0;\n"
+        "}\n"
+        "vec4 bicubic(vec2 p) {\n"
+        "    vec2 q = p - vec2(0.5); vec2 b = floor(q); vec2 f = q - b;\n"
+        "    vec4 acc = vec4(0.0);\n"
+        "    for (int j = -1; j <= 2; j++)\n"
+        "        for (int i = -1; i <= 2; i++) {\n"
+        "            float wt = cat(f.x - float(i)) * cat(f.y - float(j));\n"
+        "            acc += tap(b + vec2(float(i), float(j))) * wt;\n"
+        "        }\n"
+        "    return acc;\n"
+        "}\n"
+        "void main() {\n"
+        "    vec2 p = uvv * vec2(TEXW, TEXH);\n"
+        "    vec4 c;\n"
+        "    if (MODE == 0) c = tap(floor(p));\n"
+        "    else if (MODE == 1) c = blerp(p - vec2(0.5));\n"
+        "    else if (MODE == 2) {\n"
+        "        vec2 b = floor(p); vec2 f = p - b;\n"
+        "        f = clamp((f - vec2(0.5)) * SHARP + vec2(0.5), 0.0, 1.0);\n"
+        "        c = blerp(b + f - vec2(0.5));\n"
+        "    } else c = bicubic(p);\n"
+        "    frag = vec4(c.b, c.g, c.r, 1.0);\n"
+        "}\n";
+
+    static const char *HLSL_FMT =
+        "#define MODE %d\n"
+        "#define TEXW %d.0\n"
+        "#define TEXH %d.0\n"
+        "#define SHARP 2.0\n"
+        "Texture2D tex : register(t0);\n"
+        "SamplerState smp : register(s0);\n"
+        "float4 tap(float2 t) { return tex.Sample(smp, (t + 0.5) / float2(TEXW, TEXH)); }\n"
+        "float4 blerp(float2 p) {\n"
+        "    float2 b = floor(p); float2 f = p - b;\n"
+        "    float4 a = lerp(tap(b), tap(b + float2(1.0, 0.0)), f.x);\n"
+        "    float4 c = lerp(tap(b + float2(0.0, 1.0)), tap(b + float2(1.0, 1.0)), f.x);\n"
+        "    return lerp(a, c, f.y);\n"
+        "}\n"
+        "float cat(float x) {\n"
+        "    float a = abs(x);\n"
+        "    if (a < 1.0) return (1.5 * a - 2.5) * a * a + 1.0;\n"
+        "    if (a < 2.0) return ((-0.5 * a + 2.5) * a - 4.0) * a + 2.0;\n"
+        "    return 0.0;\n"
+        "}\n"
+        "float4 bicubic(float2 p) {\n"
+        "    float2 q = p - float2(0.5, 0.5); float2 b = floor(q); float2 f = q - b;\n"
+        "    float4 acc = float4(0.0, 0.0, 0.0, 0.0);\n"
+        "    for (int j = -1; j <= 2; j++)\n"
+        "        for (int i = -1; i <= 2; i++) {\n"
+        "            float wt = cat(f.x - (float)i) * cat(f.y - (float)j);\n"
+        "            acc += tap(b + float2((float)i, (float)j)) * wt;\n"
+        "        }\n"
+        "    return acc;\n"
+        "}\n"
+        "float4 main(float4 pos : SV_Position, float2 uvv : TEXCOORD0) : SV_Target {\n"
+        "    float2 p = uvv * float2(TEXW, TEXH);\n"
+        "    float4 c;\n"
+        "    if (MODE == 0) c = tap(floor(p));\n"
+        "    else if (MODE == 1) c = blerp(p - float2(0.5, 0.5));\n"
+        "    else if (MODE == 2) {\n"
+        "        float2 b = floor(p); float2 f = p - b;\n"
+        "        f = clamp((f - float2(0.5, 0.5)) * SHARP + float2(0.5, 0.5), 0.0, 1.0);\n"
+        "        c = blerp(b + f - float2(0.5, 0.5));\n"
+        "    } else c = bicubic(p);\n"
+        "    return float4(c.b, c.g, c.r, 1.0);\n"
+        "}\n";
+
+    const char *fmt = hlsl ? HLSL_FMT : GLSL_FMT;
+    snprintf(dst, cap, fmt, mode, w, h);
+}
 
 static const float QUAD[6 * 4] = {
     /* x, y, u, v   (v = 0 is the top row on D3D) */
@@ -135,14 +341,14 @@ static const float QUAD[6 * 4] = {
     -1.0f,  1.0f, 0.0f, 0.0f,
 };
 
-static sg_image   g_img;
-static sg_view    g_view;
-static sg_sampler g_smp;
-static sg_buffer  g_vbuf;
-static sg_shader  g_shd;
+static sg_image    g_img;
+static sg_view     g_view;
+static sg_sampler  g_smp;
+static sg_buffer   g_vbuf;
+static sg_shader   g_shd;
 static sg_pipeline g_pipe;
-static int        g_ok;
-static int        g_w = 320, g_h = 200;
+static int         g_ok;
+static int         g_w = 320, g_h = 200;
 
 static const char *backend_name(sg_backend b)
 {
@@ -157,19 +363,78 @@ static const char *backend_name(sg_backend b)
     }
 }
 
+/* Create g_shd/g_pipe for the given source pair. Returns 1 only when both the
+ * shader and the pipeline are in SG_RESOURCESTATE_VALID, so a runtime shader
+ * compile failure (a bad HLSL/GLSL backend, a driver that drops the shader)
+ * cannot silently present a black window. */
+static int make_program(const char *vs, const char *fs)
+{
+    sg_shader_desc sd;
+    sg_pipeline_desc pd;
+    sg_environment env = sglue_environment();
+
+    memset(&sd, 0, sizeof sd);
+    sd.vertex_func.source = vs;
+    sd.vertex_func.entry  = "main";
+    sd.fragment_func.source = fs;
+    sd.fragment_func.entry  = "main";
+    sd.attrs[0].base_type      = SG_SHADERATTRBASETYPE_FLOAT;
+    sd.attrs[0].glsl_name       = "pos";
+    sd.attrs[0].hlsl_sem_name   = "POSITION";
+    sd.attrs[0].hlsl_sem_index  = 0;
+    sd.attrs[1].base_type      = SG_SHADERATTRBASETYPE_FLOAT;
+    sd.attrs[1].glsl_name       = "uv";
+    sd.attrs[1].hlsl_sem_name   = "TEXCOORD";
+    sd.attrs[1].hlsl_sem_index  = 0;
+    sd.views[0].texture.stage       = SG_SHADERSTAGE_FRAGMENT;
+    sd.views[0].texture.image_type  = SG_IMAGETYPE_2D;
+    sd.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    sd.views[0].texture.hlsl_register_t_n = 0;
+    sd.samplers[0].stage      = SG_SHADERSTAGE_FRAGMENT;
+    sd.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
+    sd.samplers[0].hlsl_register_s_n = 0;
+    sd.texture_sampler_pairs[0].stage      = SG_SHADERSTAGE_FRAGMENT;
+    sd.texture_sampler_pairs[0].view_slot  = 0;
+    sd.texture_sampler_pairs[0].sampler_slot = 0;
+    sd.texture_sampler_pairs[0].glsl_name  = "tex_smp";
+    sd.label = "fd2 blit";
+    g_shd = sg_make_shader(&sd);
+    if (sg_query_shader_state(g_shd) != SG_RESOURCESTATE_VALID)
+        return 0;
+
+    memset(&pd, 0, sizeof pd);
+    pd.shader                 = g_shd;
+    pd.layout.buffers[0].stride = 16;
+    pd.layout.attrs[0].buffer_index = 0;
+    pd.layout.attrs[0].offset = 0;
+    pd.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
+    pd.layout.attrs[1].buffer_index = 0;
+    pd.layout.attrs[1].offset = 8;
+    pd.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
+    pd.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+    pd.cull_mode      = SG_CULLMODE_NONE;
+    pd.colors[0].pixel_format = env.defaults.color_format;
+    pd.sample_count   = env.defaults.sample_count;
+    pd.label          = "fd2 blit";
+    g_pipe = sg_make_pipeline(&pd);
+    return sg_query_pipeline_state(g_pipe) == SG_RESOURCESTATE_VALID;
+}
+
 int render_init(const render_desc *desc)
 {
     sg_environment env;
     sg_image_desc id;
     sg_buffer_desc bd;
-    sg_shader_desc sd;
-    sg_pipeline_desc pd;
-    const char *vs, *fs;
+    const char *vs;
+    char fs_buf[8192];
+    int hlsl;
 
     if (desc && desc->logical_w > 0 && desc->logical_h > 0) {
         g_w = desc->logical_w;
         g_h = desc->logical_h;
     }
+    parse_upscale();
+    parse_aspect();
 
     env = sglue_environment();
     {
@@ -204,7 +469,9 @@ int render_init(const render_desc *desc)
     {
         sg_sampler_desc smd;
         memset(&smd, 0, sizeof smd);
-        /* NEAREST is required for pixel parity with the GDI reference */
+        /* NEAREST: all smoothing is done by hand in the fragment shader, so
+         * the hardware filter must not add its own. Keeps nearest mode (and
+         * the GL readback orientation check) pixel-exact. */
         smd.min_filter = SG_FILTER_NEAREST;
         smd.mag_filter = SG_FILTER_NEAREST;
         smd.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
@@ -222,60 +489,29 @@ int render_init(const render_desc *desc)
     g_vbuf = sg_make_buffer(&bd);
 
     /* pick the shader language the active backend can actually compile */
-    if (sg_query_backend() == SG_BACKEND_D3D11 ||
-        sg_query_backend() == SG_BACKEND_METAL_MACOS) {
-        vs = HLSL_VS; fs = HLSL_FS;          /* D3D11 compiles HLSL source */
-    } else {
-        vs = GLSL_VS; fs = GLSL_FS;          /* GL backends need GLSL      */
+    hlsl = (sg_query_backend() == SG_BACKEND_D3D11 ||
+            sg_query_backend() == SG_BACKEND_METAL_MACOS);
+    vs = hlsl ? HLSL_VS : GLSL_VS;
+
+    build_fragment_shader(fs_buf, sizeof fs_buf, hlsl, g_up_mode, g_w, g_h);
+    if (!make_program(vs, fs_buf)) {
+        printf("sokol: '%s' upscale shader failed to build, falling back to "
+               "nearest\n", mode_name(g_up_mode));
+        g_up_mode = UP_NEAREST;
+        build_fragment_shader(fs_buf, sizeof fs_buf, hlsl, UP_NEAREST, g_w, g_h);
+        if (!make_program(vs, fs_buf) &&
+            !make_program(vs, hlsl ? HLSL_FS : GLSL_FS)) {
+            printf("sokol: shader creation failed\n");
+            return -1;
+        }
     }
 
-    memset(&sd, 0, sizeof sd);
-    sd.vertex_func.source = vs;
-    sd.vertex_func.entry  = "main";
-    sd.fragment_func.source = fs;
-    sd.fragment_func.entry  = "main";
-    sd.attrs[0].base_type      = SG_SHADERATTRBASETYPE_FLOAT;
-    sd.attrs[0].glsl_name       = "pos";
-    sd.attrs[0].hlsl_sem_name   = "POSITION";
-    sd.attrs[0].hlsl_sem_index  = 0;
-    sd.attrs[1].base_type      = SG_SHADERATTRBASETYPE_FLOAT;
-    sd.attrs[1].glsl_name       = "uv";
-    sd.attrs[1].hlsl_sem_name   = "TEXCOORD";
-    sd.attrs[1].hlsl_sem_index  = 0;
-    sd.views[0].texture.stage       = SG_SHADERSTAGE_FRAGMENT;
-    sd.views[0].texture.image_type  = SG_IMAGETYPE_2D;
-    sd.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-    sd.views[0].texture.hlsl_register_t_n = 0;
-    sd.samplers[0].stage      = SG_SHADERSTAGE_FRAGMENT;
-    sd.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
-    sd.samplers[0].hlsl_register_s_n = 0;
-    sd.texture_sampler_pairs[0].stage      = SG_SHADERSTAGE_FRAGMENT;
-    sd.texture_sampler_pairs[0].view_slot  = 0;
-    sd.texture_sampler_pairs[0].sampler_slot = 0;
-    sd.texture_sampler_pairs[0].glsl_name  = "tex_smp";
-    sd.label = "fd2 blit";
-    g_shd = sg_make_shader(&sd);
-
-    memset(&pd, 0, sizeof pd);
-    pd.shader                 = g_shd;
-    pd.layout.buffers[0].stride = 16;
-    pd.layout.attrs[0].buffer_index = 0;
-    pd.layout.attrs[0].offset = 0;
-    pd.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
-    pd.layout.attrs[1].buffer_index = 0;
-    pd.layout.attrs[1].offset = 8;
-    pd.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
-    pd.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-    pd.cull_mode      = SG_CULLMODE_NONE;
-    pd.colors[0].pixel_format = env.defaults.color_format;
-    pd.sample_count   = env.defaults.sample_count;
-    pd.label          = "fd2 blit";
-    g_pipe = sg_make_pipeline(&pd);
-
     g_ok = 1;
-    printf("sokol: backend=%s image=%dx%d img=%d view=%d sampler=%d vbuf=%d shader=%d pip=%d\n",
+    printf("sokol: backend=%s image=%dx%d img=%d view=%d sampler=%d vbuf=%d "
+           "shader=%d pip=%d upscale=%s\n",
            backend_name(sg_query_backend()), g_w, g_h,
-           g_img.id, g_view.id, g_smp.id, g_vbuf.id, g_shd.id, g_pipe.id);
+           g_img.id, g_view.id, g_smp.id, g_vbuf.id, g_shd.id, g_pipe.id,
+           mode_name(g_up_mode));
     return 0;
 }
 
@@ -342,11 +578,23 @@ void render_present(const uint32_t *bgra, int w, int h)
     binds.samplers[0]       = g_smp;
 
     sg_apply_pipeline(g_pipe);
+    /* Aspect-preserving letterbox: sg_begin_pass() reset the viewport to the
+     * whole framebuffer, so confine it to a centred 8:5 rectangle (the bars
+     * keep the black clear colour). */
+    {
+        int vx = 0, vy = 0, vw = pass.swapchain.width, vh = pass.swapchain.height;
+        if (g_keep_aspect && w > 0 && h > 0)
+            fit_viewport(pass.swapchain.width, pass.swapchain.height,
+                         w, h, &vx, &vy, &vw, &vh);
+        sg_apply_viewport(vx, vy, vw, vh, true);
+    }
     sg_apply_bindings(&binds);
     sg_draw(0, 6, 1);
     sg_end_pass();
 #if defined(SOKOL_GLCORE)
-    gl_readback_check(bgra, w, h);
+    if (g_up_mode == UP_NEAREST)         /* a smoother filter legitimately
+                                          * changes the pixels */
+        gl_readback_check(bgra, w, h);
 #endif
     sg_commit();
 }
