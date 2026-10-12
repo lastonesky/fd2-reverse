@@ -37,7 +37,15 @@ if (-not (Test-Path $sokol)) { throw "vendor/sokol missing (was host/ imported?)
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 
 $cfg    = if ($Debug) { "/Od /Zi /MDd" } else { "/O2 /MD" }
-$cflags = "/nologo /W3 /EHsc /GS- /D_CRT_SECURE_NO_WARNINGS $cfg"
+# /utf-8 : every source is UTF-8 (lots of Chinese comments).  Without it MSVC
+#          decodes them in the system code page (936) and emits C4819 on almost
+#          every file (and sokol_app.h).  Verified there are no non-ASCII string
+#          literals, so setting the execution charset too is safe.
+# /wd4018: signed/unsigned comparison warnings.  The restored game code compares
+#          small `int` loop counters with uint32_t globals by design; the POSIX
+#          build tolerates the same with -Wno-sign-compare (tools/check_compile.sh),
+#          so keep the two platforms consistent instead of casting every site.
+$cflags = "/nologo /W3 /utf-8 /wd4018 /EHsc /GS- /D_CRT_SECURE_NO_WARNINGS $cfg"
 $inc    = "/I `"$hostd`" /I `"$src`" /I `"$src\game`" /I `"$src\include`" /I `"$sokol`""
 
 $hostSrcs = @(
