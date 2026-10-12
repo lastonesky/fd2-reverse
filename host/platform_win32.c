@@ -11,6 +11,12 @@
  */
 #include "platform.h"
 
+/* CONDITION_VARIABLE / SleepConditionVariableCS are Vista+; make sure the SDK
+ * exposes them even when the toolchain left _WIN32_WINNT unset. */
+#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0600)
+#  undef _WIN32_WINNT
+#  define _WIN32_WINNT 0x0600
+#endif
 #include <windows.h>
 #include <io.h>        /* _get_osfhandle: CRT fd -> OS handle */
 #include <stdio.h>
@@ -483,6 +489,73 @@ void plat_mutex_lock(plat_mutex *m)
 void plat_mutex_unlock(plat_mutex *m)
 {
     if (m->h) LeaveCriticalSection((CRITICAL_SECTION *)m->h);
+}
+
+/* ---- condition variable + sub-ms sleep (stage 1) ---------------------- */
+
+void plat_cond_init(plat_cond *c)
+{
+    CONDITION_VARIABLE *cv = malloc(sizeof *cv);
+
+    if (!cv) return;                  /* c->h stays NULL: wait falls back */
+    InitializeConditionVariable(cv);
+    c->h = cv;
+}
+
+void plat_cond_destroy(plat_cond *c)
+{
+    if (c->h) {
+        free(c->h);                   /* CONDITION_VARIABLE needs no destroy */
+        c->h = NULL;
+    }
+}
+
+void plat_cond_wait(plat_cond *c, plat_mutex *m)
+{
+    if (c->h && m->h)
+        SleepConditionVariableCS((CONDITION_VARIABLE *)c->h,
+                                 (CRITICAL_SECTION *)m->h, INFINITE);
+    else if (m->h) {
+        /* no condvar (alloc failed): approximate with unlock/sleep/relock,
+         * the standard degraded form of a timed wait. */
+        LeaveCriticalSection((CRITICAL_SECTION *)m->h);
+        Sleep(1);
+        EnterCriticalSection((CRITICAL_SECTION *)m->h);
+    }
+}
+
+int plat_cond_timedwait(plat_cond *c, plat_mutex *m, unsigned ms)
+{
+    if (c->h && m->h) {
+        if (SleepConditionVariableCS((CONDITION_VARIABLE *)c->h,
+                                     (CRITICAL_SECTION *)m->h, (DWORD)ms))
+            return 0;
+        return 1;                     /* ERROR_TIMEOUT / any failure */
+    }
+    if (m->h) {
+        LeaveCriticalSection((CRITICAL_SECTION *)m->h);
+        Sleep(ms ? (DWORD)ms : 1);
+        EnterCriticalSection((CRITICAL_SECTION *)m->h);
+    }
+    return 1;
+}
+
+void plat_cond_signal(plat_cond *c)
+{
+    if (c->h) WakeConditionVariable((CONDITION_VARIABLE *)c->h);
+}
+
+void plat_cond_broadcast(plat_cond *c)
+{
+    if (c->h) WakeAllConditionVariable((CONDITION_VARIABLE *)c->h);
+}
+
+void plat_sleep_us(uint64_t us)
+{
+    /* Sleep() is millisecond-granular; timeBeginPeriod(1) is already active
+     * for the 18.2 Hz tick. Round up so a 0 < us < 1000 request still yields. */
+    if (us)
+        Sleep((DWORD)((us + 999u) / 1000u));
 }
 
 int32_t plat_atomic_read(volatile int32_t *p)

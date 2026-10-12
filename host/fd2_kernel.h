@@ -38,9 +38,22 @@ void fd2_engine_key_set_ascii(uint8_t ascii);
 /* Stop everything (game usually already returned). */
 void fd2_engine_shutdown(void);
 
-/* BDA keyboard ring, used by fd2_platform.c's INT 16h service. */
+/* BDA keyboard ring, used by fd2_platform.c's INT 16h service.  The ring is
+ * protected by one mutex shared by every producer/consumer thread. */
 void fd2_kbd_push(uint8_t scan, uint8_t ascii);
 int  fd2_kbd_pop(uint8_t *scan, uint8_t *ascii);       /* 0 = empty        */
 void fd2_kbd_wait(uint8_t *scan, uint8_t *ascii);      /* blocks           */
+void fd2_kbd_flush(void);                              /* tail = head      */
+
+/* Blocking timing waits (stage 1): park on the 18.2 Hz tick instead of the
+ * old busy-wait loops. `fd2_wait_tick` returns when the tick word changes;
+ * `fd2_wait_tick_or_key` also returns as soon as a key is pending. */
+void fd2_wait_tick(void);
+void fd2_wait_tick_or_key(void);
+
+/* Game thread: publish the finished frame and sleep `ms` while counting as
+ * "parked" (so the hang watchdog does not mistake a long j___delay() for a
+ * hang).  This is what the game's delay()/j___delay() call. */
+void fd2_delay_ms(unsigned ms);
 
 #endif /* FD2_HOST_KERNEL_H */

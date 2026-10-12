@@ -14,12 +14,13 @@
  */
 #include "kbd.h"
 #include "../dos.h"
+#include "../lib/crt.h"   /* fd2_kbd_flush: lock the shared ring */
 
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(DOS_LOWMEM_BASE + (off)))
 
 void kbd_flush(void)
 {
-    BDA_W(0x41C) = BDA_W(0x41A);
+    fd2_kbd_flush();          /* tail = head, under the host ring lock */
 }
 
 int kbd_pending(void)

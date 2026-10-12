@@ -3324,3 +3324,154 @@ console；默认（不带 `-Console`）是 `/SUBSYSTEM:WINDOWS /ENTRY:mainCRTSta
 
 处理：重新用默认参数构建（`subsystem=WINDOWS GUI`，PE 子系统字头 = 2）；`build.ps1`
 在 `-Console` 说明里标注"仅调试、会弹 console 窗口"，并在结尾打印本次的 subsystem。
+
+### 7.14 方案 A 落地：呈现层高清放大（`FD2_UPSCALE`）
+
+**目标**：在不碰游戏逻辑/资源的前提下，让 320×200 的原生画面在窗口里"高清化"。此前
+`render_sokol.c` 只有一条 NEAREST 路径（纹理 320×200，铺满窗口），放大会是硬块。
+
+**实现**（`host/render_sokol.c`，改动仅限呈现层）：
+- 呈现层的放大模式在 init 时由 **`FD2_UPSCALE`** 选定，默认 `sharp`：
+  | 值 | 行为 |
+  |---|---|
+  | `nearest` | 原来的逐像素 NEAREST（基准/对拍用；`FD2_UPSCALE=0/off` 同义） |
+  | `linear` | 普通双线性（平滑、偏软） |
+  | `sharp` | **sharp-bilinear**：双线性 + 把越过 texel 边界的过渡变陡（像素边保持锐利），默认 |
+  | `bicubic` | Catmull-Rom 4×4，渐变平滑 |
+- 所有平滑都在片元着色器里用**单张 NEAREST 采样器手工做**（双线性 4 tap、双三次 16 tap），
+  这样 D3D11 与 GL 结果一致，也不必重建采样器状态；`nearest` 模式与原来的字节级输出相同。
+- 片元着色器在 init 时**生成**：把 `MODE`/`TEXW`/`TEXH`/`SHARP` 作为 `#define` 常量写进去，
+  因此无需 uniform block / cbuffer（跨后端最容易出错的环节）。顶点着色器不变。
+- **失败兜底**（顺带修一个静默黑屏源）：`make_program()` 现在校验
+  `sg_query_shader_state` / `sg_query_pipeline_state` 是否为 `SG_RESOURCESTATE_VALID`；
+  生成着色器失败则退回生成版 `nearest`，再失败退回内置的原始 NEAREST 着色器。以前
+  着色器编译失败只会得到一个全黑窗口。
+- `FD2_GL_READBACK`（GL 方向自检）只在 `nearest` 模式下运行——平滑滤镜本来就会改变像素，
+  继续用它做逐像素比较没有意义。
+- **保持原始宽高比**：`sg_begin_pass()` 会把视口重置为整个 framebuffer，现在改成用
+  `sg_apply_viewport()` 把绘制限制在一个**居中的 8:5（320:200）矩形**里，周围留黑边；
+  窗口任意拉伸都不再拉变形。`FD2_ASPECT=off`（或 `0`/`stretch`）可恢复铺满。
+
+**与方案 B/C 的关系**：本方案只改 `render_sokol.c` 这一层，`render_present(bgra,w,h)` 的
+接口不变。以后 B（HD 素材）/C（高分辨率内部缓冲）把更大的帧交给同一个接口即可；届时把
+`FD2_UPSCALE=nearest`（或按缩放比自动降级）即可，二者不冲突、可叠加。
+
+**验证（WSL/Linux）**：`cc -fsyntax-only -Wall -Wextra -Werror` 下 `render_sokol.c` 0 error
+（standalone 与 `-DSOKOL_GLCORE` 两条路径都过）；着色器为生成源，D3D11 侧仍走
+`d3dcompiler_47.dll` 运行时编译，编译失败日志 + 回退已覆盖。
+
+### 7.15 阶段 1：把 BIOS 时序换成现代原语（单调时钟 + 条件变量）
+
+**动机**：运行期时间/输入还停留在"模拟机器"阶段——一个 host 线程每 `Sleep(55)` 改
+BDA `0x46C`，游戏侧用**纯自旋**轮询它（`svc_wait_ticks`、`ev5_13460`，共 106 处
+`svc_wait_ticks` 调用 + 十余个"等 tick 变化"的空转环），键环还被多个线程无锁读写。这既
+空占一个核，也是偶发黑屏/卡死的根因类别。
+
+**原则**：保留**逻辑上的 18.2 Hz tick 语义**（动画/淡入淡出/延时都按 tick 计），只把
+实现换成主流原语——单调时钟 + 标准条件变量（`pthread_cond_t` / Windows
+`CONDITION_VARIABLE`），不引入任何自定义调度器/环形缓冲。
+
+**改动**：
+- `src/platform.h` + `platform_win32.c` / `platform_posix.c`：新增标准 `plat_cond`
+  （`plat_cond_init/wait/timedwait/signal/broadcast`，POSIX 侧用单调时钟；macOS 回退
+  `CLOCK_REALTIME`）与 `plat_sleep_us`。
+- `host/fd2_kernel.c`：
+  - BDA 键环由**一把互斥量 + 条件变量**保护；`fd2_kbd_push/pop/flush` 全部加锁；
+    `fd2_kbd_wait` 改为条件变量阻塞（不再 `sleep(1)` 轮询）。
+  - 新增阻塞原语 `fd2_wait_tick()`（等到 tick 前进）与 `fd2_wait_tick_or_key()`
+    （tick 前进 **或** 有键即返回）。
+  - tick 线程改为**按绝对时限**调度（`plat_now_us()` + 累计周期，无累积漂移），推进后
+    `broadcast` 唤醒等待者。
+  - `fd2_engine_key_set_ascii` 与 typematic 槽（`g_rep_*`）也加锁。
+  - 游戏线程创建失败时置 `g_quit`（主循环随即关窗），不再留下黑窗。
+  - 看门狗改用**两个心跳 + parked 深度**：boot 循环计数 `fd2_game_progress`、已发布帧数
+    `fd2_video_publish_count`，以及 `fd2_wait_depth`（`fd2_wait_tick`/`_or_key`/`fd2_kbd_wait`/
+    **`fd2_delay_ms`** 都计入）。**两个心跳都停 且 连续 `FD2_STALL_MS`（默认 10s）不在任何等待中**
+    才判为真卡死；启动阶段（`fd2_game_progress==0`，正在 load 资源）给 30s 宽限。判定后
+    dump 栈，**默认只记日志**（`FD2_HANG_EXIT=1` 才关窗）——避免把正常的长标题屏/过场误判成
+    崩溃。
+- `src/lib/crt.h` + 游戏侧：`svc_wait_ticks`、`ev5_13460`、`ev5_1E5C0` 以及十余个
+  "`while(!kbd_pending())` + 轮询 tick" 的 idle 环（`map_wait_anim`/`map_wait_key`/
+  `map_cursor_dir_run`/`party_change_wait_key`/`party_panel_run`/`map_window_run`/
+  `map_zoom`/`status_screen`/`dlg_run`/`ev4_11AA8`/`scene_core` 场景选择等）改为调用
+  `fd2_wait_tick[_or_key]`；`kbd_flush` 改走加锁的 `fd2_kbd_flush`。
+
+**行为保持**：tick 频率仍是 18.2 Hz；`svc_wait_ticks(0)` 仍立即返回；16 位回绕算术
+（`elapsed<0 -> +=0x10000`）与 `dword_53A2C` 账目不变；idle 环仍是"每 tick 重绘一次 +
+随时响应按键"，只是从"每秒空转上万次"变成"每 tick 醒一次"。
+
+**验证（WSL/Linux）**：`tools/check_compile.sh --full` 双 profile + `-Werror` 全绿；
+`fd2_kernel.c`/`fd2_platform.c`/`platform_posix.c`/`main_sokol.c`/`render_sokol.c`
+`-Wall -Wextra -Werror` 0 error；`make -C host engine` 全量链接成功。Windows/MSVC 与
+实机手感待本机验证。
+
+**未做（阶段 2）**：帧缓冲双缓冲（消除游戏线程写、渲染线程读的撕裂/竞态）。
+
+### 7.16 阶段 2：帧缓冲双缓冲（消除呈现撕裂/竞态）
+
+**问题**：`fd2_vga`（+`fd2_palette`）由游戏线程写、渲染线程在 `fd2_video_frame()` 里读，
+两者无同步——滚动时撕裂、调色板淡入淡出时会读到"半更新"的颜色。
+
+**做法**（主流单生产者/单消费者握手，不引入花哨机制）：
+- `host/fd2_video.c` 增加一个 **front 副本**（`g_front_vga` + `g_front_palette`）与一把
+  `g_fb_lock`。**只有游戏线程写 `fd2_vga`/`fd2_palette`**，渲染线程只读 front 副本。
+- 新增 `fd2_video_publish()`：游戏线程把 `fd2_vga`/`fd2_palette` 拷进 front（持锁）。
+  它在**每一帧结束、游戏即将停下来的点**被调用：`fd2_wait_tick`/`fd2_wait_tick_or_key`/
+  `fd2_kbd_wait` 入口，以及 `delay()`/`j___delay()` 入口——这些正是"本帧画完、进入等待"
+  的时刻，所以发布的永远是完整、稳定的一帧。
+- `fd2_video_frame()` 持锁把 front 转成 BGRA 再 `render_present`；渲染线程不再触碰
+  `fd2_vga`/`fd2_palette`，数据竞态消失。
+- 新增 `fd2_video_init()`（`fd2_engine_init` 在游戏线程启动前调用）建锁并发布初始黑帧。
+
+**为什么不是指针双缓冲**：游戏是 DOS 式**直接写显存**、且大量 **incremental** 更新
+（局部重绘、逐行 `memmove`、调色板动画），并非"每帧重画全部"。交换指针会让下一帧的增量
+更新落到没有上一帧内容的缓冲上 → 花屏。因此采用"帧末快照发布"，语义等价且零改动游戏逻辑。
+
+**开销**：每次 publish 两次 `memcpy`（64KB+768B ≈ 数 µs）；18.2Hz 下可忽略；渲染线程持锁
+仅覆盖一次 64000 像素查表（~数十 µs），游戏发布最多等这么久。
+
+**验证（WSL/Linux）**：`fd2_video.c`/`fd2_kernel.c`/`fd2_platform.c` `-Wall -Wextra -Werror`
+0 error；`make -C host engine` 全量链接成功。Windows/MSVC 待本机验证。
+
+### 7.17 修复："拖拽窗口后进程崩溃"实为看门狗误判（阶段 1 回归）
+
+**现象**：用户拖拽/调整窗口大小后进程消失，像是崩溃。
+
+**取证**：无 `fd2_crash.log`；有 `fd2_stall.log`：
+```
+fd2: STALL no game-thread progress (not parked in a wait) progress=1 frames=1653
+  #00 fd2_platform: j___delay+0x14
+  #01 title_screen: title_screen_run+0x548
+  #02 scene_core: scenario_menu
+  #03 boot: fd2_game_main+0x240
+```
+游戏线程正常停在标题屏的 `j___delay`（`Sleep`）里；`fd2_game_progress` 在**整个标题屏
+期间恒为 1**（它只在 `boot.c` 的外/内循环自增，而标题屏是在**一次** `scenario_menu()` 调用
+内部跑完的）。
+
+**根因**：阶段 1 的看门狗把"parked"只定义在 `fd2_wait_tick/_or_key/fd2_kbd_wait` 上，
+**漏了 `delay()`/`j___delay()`**。于是标题屏的长 `j___delay` 被当成"无进展且未阻塞"，
+10s 后触发 `g_quit=1` 关窗。拖拽窗口只是让人在标题屏停留更久，与 resize 本身无关。
+
+**修复**：
+- 新增 `fd2_delay_ms()`：`delay`/`j___delay` 都走它——发布本帧 + `fd2_wait_depth++` 后
+  `Sleep` + `--`，长固定停顿计入"parked"。
+- 看门狗改用**两个心跳**（`fd2_game_progress` + `fd2_video_publish_count`），任一前进即
+  重置；且要求"两个心跳都停"**且**"连续 `FD2_STALL_MS` 不在任何等待"才判定。
+- 判定行为改为**默认只记日志**（`FD2_HANG_EXIT=1` 才关窗），不再无故关掉正常运行的窗口。
+
+**回归**：`fd2_kernel.c`/`fd2_platform.c`/`fd2_video.c` `-Werror` 0 error；`make -C host
+engine` 链接通过。
+
+### 7.18 Windows 构建告警清零（C4819 / C4018）
+
+MSVC 构建输出大量告警，与逻辑无关，但污染构建日志：
+
+- **C4819（"该文件包含不能在当前代码页(936)中表示的字符"）**：源码是 UTF-8（含大量中文
+  注释），MSVC 默认按系统代码页 936 读取 → 几乎每个文件都报。修复：`build.ps1` 的
+  `$cflags` 加 **`/utf-8`**（已核对：全库没有非 ASCII 的字符串字面量，只有注释，所以连
+  执行字符集一起设为 UTF-8 也安全）。
+- **C4018（signed/unsigned 比较不匹配）**：还原代码里大量 `for (int i = 0; i < (uint32_t)全局; i++)`
+  这类小整数循环计数与 `uint32_t` 全局比较，是既有写法。POSIX 侧 `tools/check_compile.sh`
+  本就带 `-Wno-sign-compare`；为两端一致，`build.ps1` 加 **`/wd4018`**（而非逐处强转，
+  因为部分 `uint32_t` vs `int32_t` 的比较参与负数语义，盲目改类型有风险）。

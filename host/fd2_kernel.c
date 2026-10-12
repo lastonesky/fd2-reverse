@@ -47,27 +47,75 @@ static void     bda16_set(int off, uint16_t v) { *(volatile uint16_t *)(lowmem()
 
 static int g_last_off = -1;
 
+/* The BDA ring is touched by several threads (the entry layer / typematic /
+ * keyplay producers and the game thread's INT 16h consumer), so every access
+ * goes through one mutex the way the real BIOS owned it alone.  The
+ * condition variable wakes the game thread when a key arrives or when the
+ * 18.2 Hz tick advances (stage 1: blocking waits instead of polling). */
+static plat_mutex g_kbd_lock;
+static plat_cond  g_kbd_cond;
+volatile int      fd2_wait_depth;      /* >0 while parked in a wait */
+
 void fd2_kbd_push(uint8_t scan, uint8_t ascii)
 {
-    uint16_t tail = bda16(KB_TAIL);
-    uint16_t next = (uint16_t)(tail + 2);
+    uint16_t tail, next;
 
+    plat_mutex_lock(&g_kbd_lock);
+    tail = bda16(KB_TAIL);
+    next = (uint16_t)(tail + 2);
     if (next >= KB_END)
         next = KB_BUF;
-    if (next == bda16(KB_HEAD))
+    if (next == bda16(KB_HEAD)) {
+        plat_mutex_unlock(&g_kbd_lock);
         return;                          /* full: drop, like hardware       */
+    }
     lowmem()[0x400 + tail]     = scan;
     lowmem()[0x400 + tail + 1] = ascii;
     g_last_off = tail;
     bda16_set(KB_TAIL, next);
+    plat_cond_broadcast(&g_kbd_cond);
+    plat_mutex_unlock(&g_kbd_lock);
 }
 
 int fd2_kbd_pop(uint8_t *scan, uint8_t *ascii)
 {
-    uint16_t head = bda16(KB_HEAD);
+    uint16_t head;
+    int ok = 0;
 
-    if (head == bda16(KB_TAIL))
-        return 0;
+    plat_mutex_lock(&g_kbd_lock);
+    head = bda16(KB_HEAD);
+    if (head != bda16(KB_TAIL)) {
+        uint16_t next = (uint16_t)(head + 2);
+
+        *scan  = lowmem()[0x400 + head];
+        *ascii = lowmem()[0x400 + head + 1];
+        if (next >= KB_END)
+            next = KB_BUF;
+        bda16_set(KB_HEAD, next);
+        ok = 1;
+    }
+    plat_mutex_unlock(&g_kbd_lock);
+    return ok;
+}
+
+/* kbd_flush (0x4E381): drop everything pending (tail = head). */
+void fd2_kbd_flush(void)
+{
+    plat_mutex_lock(&g_kbd_lock);
+    bda16_set(KB_TAIL, bda16(KB_HEAD));
+    plat_mutex_unlock(&g_kbd_lock);
+}
+
+void fd2_kbd_wait(uint8_t *scan, uint8_t *ascii)
+{
+    uint16_t head;
+
+    fd2_video_publish();              /* frame complete: hand it to the presenter */
+    plat_mutex_lock(&g_kbd_lock);
+    fd2_wait_depth++;
+    while (bda16(KB_HEAD) == bda16(KB_TAIL))
+        plat_cond_wait(&g_kbd_cond, &g_kbd_lock);
+    head = bda16(KB_HEAD);
     *scan  = lowmem()[0x400 + head];
     *ascii = lowmem()[0x400 + head + 1];
     {
@@ -76,13 +124,51 @@ int fd2_kbd_pop(uint8_t *scan, uint8_t *ascii)
             next = KB_BUF;
         bda16_set(KB_HEAD, next);
     }
-    return 1;
+    fd2_wait_depth--;
+    plat_mutex_unlock(&g_kbd_lock);
 }
 
-void fd2_kbd_wait(uint8_t *scan, uint8_t *ascii)
+/* Block until the 16-bit BIOS tick advances (what the game's `while (tick ==
+ * last);` loops used to spin on). */
+void fd2_wait_tick(void)
 {
-    while (!fd2_kbd_pop(scan, ascii))
-        plat_sleep_ms(1);
+    uint16_t t;
+
+    fd2_video_publish();              /* frame complete: hand it to the presenter */
+    plat_mutex_lock(&g_kbd_lock);
+    fd2_wait_depth++;
+    t = bda16(0x46C);
+    while (bda16(0x46C) == t)
+        plat_cond_wait(&g_kbd_cond, &g_kbd_lock);
+    fd2_wait_depth--;
+    plat_mutex_unlock(&g_kbd_lock);
+}
+
+/* Block until the tick advances or a key becomes pending - the idle loop of
+ * every "animate while waiting for input" screen. */
+void fd2_wait_tick_or_key(void)
+{
+    uint16_t t;
+
+    fd2_video_publish();              /* frame complete: hand it to the presenter */
+    plat_mutex_lock(&g_kbd_lock);
+    fd2_wait_depth++;
+    t = bda16(0x46C);
+    while (bda16(0x46C) == t && bda16(KB_HEAD) == bda16(KB_TAIL))
+        plat_cond_wait(&g_kbd_cond, &g_kbd_lock);
+    fd2_wait_depth--;
+    plat_mutex_unlock(&g_kbd_lock);
+}
+
+/* Game-thread delay(): publish the finished frame, then sleep while marking
+ * the thread as parked so a long fixed pause (title screen, cutscene) is not
+ * mistaken for a hang by the watchdog. */
+void fd2_delay_ms(unsigned ms)
+{
+    fd2_video_publish();
+    fd2_wait_depth++;
+    plat_sleep_ms(ms);
+    fd2_wait_depth--;
 }
 
 /* ---- threads ----------------------------------------------------------- */
@@ -95,10 +181,26 @@ static DWORD g_game_tid;             /* set by the game thread itself */
 
 static void tick_thread(void *arg)
 {
+    /* Drift-free 18.2 Hz: every tick is scheduled against an absolute
+     * deadline from the monotonic clock instead of accumulating sleep error.
+     * The word is advanced under the ring lock and wakes the waiters. */
+    const uint64_t period = 54945u;      /* 1e6 / 18.2 Hz */
+    uint64_t t0 = plat_now_us();
+    uint64_t n = 0;
     (void)arg;
     while (!g_quit) {
+        uint64_t due;
+
+        n++;
+        due = t0 + n * period;
+        while (!g_quit && plat_now_us() < due)
+            plat_sleep_us(due - plat_now_us());
+        if (g_quit)
+            break;
+        plat_mutex_lock(&g_kbd_lock);
         (*(volatile uint32_t *)(lowmem() + 0x46C))++;
-        plat_sleep_ms(55);               /* 18.2 Hz */
+        plat_cond_broadcast(&g_kbd_cond);
+        plat_mutex_unlock(&g_kbd_lock);
     }
 }
 
@@ -195,15 +297,20 @@ static void parse_keys(void)
  * freeze/crash keeps the record.  The matching scenario in the log is
  * "fd2: key @... ms ...".
  *
- * The watchdog samples the game thread's liveness counter; if it stops for
- * FD2_STALL_MS (default 10000) it suspends the game thread, captures its
- * RIP/RSP and scans its stack for return addresses into the exe, and dumps
- * the BDA key ring and map globals - enough to see WHERE a frozen screen is
- * stuck and whether the game stopped consuming keys. */
+ * The watchdog samples two game-thread heartbeats (the boot-loop counter and
+ * the count of published frames) plus the "parked in a wait" depth.  A long
+ * title screen / cutscene keeps publishing (j___delay publishes too) and a
+ * menu waiting for input is parked, so neither is mistaken for a hang.  If
+ * neither heartbeat advances for FD2_STALL_MS (default 10000) AND the thread
+ * is not parked for that whole time, it is a real hang: suspend the game
+ * thread, capture RIP/RSP, scan its stack for return addresses into the exe,
+ * and dump the BDA key ring and map globals.  Default is log-only; set
+ * FD2_HANG_EXIT=1 to also close the window. */
 extern volatile unsigned fd2_game_progress;
 static FILE    *g_keylog;
 static uint64_t g_keylog_base;
 static unsigned g_stall_ms = 10000;
+static int      g_hang_exit;      /* FD2_HANG_EXIT=1: close on a detected hang */
 
 static void keylog_note(uint8_t scan, uint8_t ascii)
 {
@@ -239,35 +346,49 @@ static uint8_t  g_rep_scan;
 static uint8_t  g_rep_ascii;
 static int      g_rep_held;
 static uint64_t g_rep_due;
+static plat_mutex g_rep_lock;    /* guards the typematic slot (2 threads) */
 
 static void repeat_note(uint8_t scan, uint8_t ascii)
 {
     if (!g_rep_enabled)
         return;
+    plat_mutex_lock(&g_rep_lock);
     if (scan & 0x80) {                       /* break: release the slot   */
         if (g_rep_held && g_rep_scan == (uint8_t)(scan & 0x7F))
             g_rep_held = 0;
+        plat_mutex_unlock(&g_rep_lock);
         return;
     }
     g_rep_scan  = scan;                      /* last key pressed repeats  */
     g_rep_ascii = ascii;
     g_rep_held  = 1;
     g_rep_due   = plat_now_ms() + g_rep_delay;
+    plat_mutex_unlock(&g_rep_lock);
 }
 
 static void repeat_thread(void *arg)
 {
     (void)arg;
     for (;;) {
+        int      fire;
+        uint8_t  scan;
+        uint8_t  ascii;
+
         plat_sleep_ms(10);
         if (g_quit)
             return;
-        if (g_rep_held && plat_now_ms() >= g_rep_due) {
+        plat_mutex_lock(&g_rep_lock);
+        fire  = g_rep_held && plat_now_ms() >= g_rep_due;
+        scan  = g_rep_scan;
+        ascii = g_rep_ascii;
+        if (fire)
+            g_rep_due = plat_now_ms() + g_rep_period;
+        plat_mutex_unlock(&g_rep_lock);
+        if (fire) {
             if (g_rep_debug)
                 printf("fd2: repeat scan=%02X ascii=%02X\n",
-                       (unsigned)g_rep_scan, (unsigned)g_rep_ascii);
-            fd2_kbd_push(g_rep_scan, g_rep_ascii);
-            g_rep_due = plat_now_ms() + g_rep_period;
+                       (unsigned)scan, (unsigned)ascii);
+            fd2_kbd_push(scan, ascii);
         }
     }
 }
@@ -359,30 +480,47 @@ static void dump_game_stack(const char *why) { (void)why; }
 
 static void stall_thread(void *arg)
 {
-    unsigned last = 0, stalled_for = 0;
+    unsigned last_prog = 0, last_pub = 0;
+    unsigned stalled_for = 0, idle_for = 0;
     int      announced = 0;
     (void)arg;
     for (;;) {
         plat_sleep_ms(1000);
         if (g_quit)
             return;
+        if (fd2_wait_depth > 0)          /* parked on tick/keys/delay: fine */
+            idle_for = 0;
+        else
+            idle_for += 1000;
         {
+            /* Two liveness heartbeats: the boot loop counter and the published
+             * frame counter.  A long title screen / cutscene keeps publishing
+             * (j___delay publishes too), so it is not mistaken for a hang. */
             unsigned p = fd2_game_progress;
-            if (p != last) {
-                last = p;
+            unsigned q = fd2_video_publish_count;
+
+            if (p != last_prog || q != last_pub) {
+                last_prog = p;
+                last_pub = q;
                 stalled_for = 0;
                 announced = 0;
                 continue;
             }
             stalled_for += 1000;
-            /* Only a genuine hang, not an idle wait: the game thread also
-             * stops iterating while the title/menu blocks for a key, so
-             * require an unconsumed key in the BDA ring (the user pressing
-             * keys at a frozen screen) before dumping. */
-            if (stalled_for >= g_stall_ms && !announced &&
-                bda16(KB_TAIL) != bda16(KB_HEAD)) {
-                dump_game_stack("no game-thread progress + pending keys");
-                announced = 1;
+            /* Genuine hang = neither heartbeat for the limit AND not parked in
+             * any wait for that whole time.  Before the main loop starts the
+             * game is loading resources, so allow a longer window. */
+            {
+                unsigned limit = (last_prog == 0) ? 30000u : g_stall_ms;
+
+                if (stalled_for >= limit && idle_for >= g_stall_ms && !announced) {
+                    printf("fd2: HANG detected (no frame for %u ms, not parked)%s\n",
+                           stalled_for, g_hang_exit ? "; closing window" : "");
+                    dump_game_stack("no frame/heartbeat (not parked in a wait)");
+                    announced = 1;
+                    if (g_hang_exit)
+                        g_quit = 1;      /* opt-in; default is log-only  */
+                }
             }
         }
     }
@@ -451,9 +589,13 @@ int fd2_engine_init(int argc, char **argv)
     fd2_install_crash_handler();
     fd2_data_init();
     dos_lowmem_base = (uintptr_t)fd2_lowmem;
+    plat_mutex_init(&g_kbd_lock);
+    plat_mutex_init(&g_rep_lock);
+    plat_cond_init(&g_kbd_cond);
     bda16_set(KB_HEAD, KB_BUF);
     bda16_set(KB_TAIL, KB_BUF);
     fd2_video_default_palette();
+    fd2_video_init();
     synth_set_bank_path(NULL);           /* default timbre until a DLS is set */
     audio_init(11025);
     ail_set_format(11025, 8, 0);
@@ -469,6 +611,8 @@ int fd2_engine_init(int argc, char **argv)
         if (sm) g_stall_ms = (unsigned)atoi(sm);
         if (td) g_rep_delay = (unsigned)atoi(td);
         if (tr) g_rep_period = (unsigned)atoi(tr);
+        if (getenv("FD2_HANG_EXIT"))
+            g_hang_exit = 1;
         if (getenv("FD2_TYPEMATIC_DEBUG"))
             g_rep_debug = 1;
         if (tp && atoi(tp) == 0)
@@ -489,7 +633,11 @@ int fd2_engine_init(int argc, char **argv)
 void fd2_engine_start(void)
 {
     static int one = 1;
-    plat_thread(game_thread, &one);
+    if (plat_thread(game_thread, &one) != 0) {
+        printf("fd2: failed to start the game thread\n");
+        g_quit = 1;              /* frame_cb closes instead of a black window */
+        return;
+    }
     plat_thread(tick_thread, NULL);
     plat_thread(stat_thread, NULL);
     plat_thread(stall_thread, NULL);
@@ -529,8 +677,10 @@ void fd2_engine_key(uint8_t scan, uint8_t ascii)
 
 void fd2_engine_key_set_ascii(uint8_t ascii)
 {
+    plat_mutex_lock(&g_kbd_lock);
     if (g_last_off >= 0)
         lowmem()[0x400 + g_last_off + 1] = ascii;
+    plat_mutex_unlock(&g_kbd_lock);
 }
 
 void fd2_engine_shutdown(void)

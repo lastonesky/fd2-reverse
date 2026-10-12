@@ -191,6 +191,7 @@ int map_zoom_run(void)
             }
             last_tick = (int)(int16_t)BDA_W(0x46C);
         }
+        fd2_wait_tick_or_key();
     }
 
     byte_53A8E = 0x10;

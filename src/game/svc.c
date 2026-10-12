@@ -61,11 +61,16 @@ int svc_wait_ticks(int n)
     int32_t elapsed;
 
     dword_53A2C = (int16_t)pal_tick_word();
-    do {
+    if (n <= 0)                       /* 0 ticks: immediate, as before     */
+        return dword_53A2C;
+    for (;;) {
         elapsed = (int16_t)pal_tick_word() - dword_53A2C;
         if (elapsed < 0)
             elapsed += 0x10000;
-    } while (elapsed < n);
+        if (elapsed >= n)
+            break;
+        fd2_wait_tick();              /* park until the tick advances      */
+    }
 
     dword_53A2C = (int16_t)pal_tick_word();
     return dword_53A2C;

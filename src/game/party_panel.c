@@ -273,5 +273,6 @@ void party_panel_run(void)
             kbd_flush();
             return;
         }
+        fd2_wait_tick_or_key();
     }
 }

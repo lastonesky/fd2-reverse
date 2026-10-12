@@ -144,6 +144,7 @@ int ev4_11AA8(void)
             map_view_update(0);
             word_539F2 = (uint16_t)BDA_W(0x46C);
         }
+        fd2_wait_tick_or_key();
     }
     *(uint8_t *)(uintptr_t)((uintptr_t)&word_53A8D + 1) = 0x10;
     int386(0x16, &word_53A8D, &word_53A8D);

@@ -144,6 +144,7 @@ int map_window_run(void)
                 sub_11EB0((char *)VGA_P(0xA0504u), 320, (char *)buf + VIEW_SRC_OFF,
                           456, 0x138u, 192);
             }
+            fd2_wait_tick_or_key();
         }
 
         ((uint8_t *)&word_53A8D)[1] = 0x10;         /* AH = 10h: extended key */

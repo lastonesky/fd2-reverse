@@ -272,8 +272,10 @@ void dlg_wait_key(int speaker)
 
     while (!kbd_pending()) {
         pal_anim_step();
-        if ((int16_t)pal_tick_word() - tick_at < 2)
+        if ((int16_t)pal_tick_word() - tick_at < 2) {
+            fd2_wait_tick_or_key();
             continue;
+        }
 
         if (speaker == 1 && ++fast == 3) {          /* flip the tile   */
             fast = 0;

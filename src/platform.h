@@ -204,6 +204,23 @@ void plat_mutex_destroy(plat_mutex *m);
 void plat_mutex_lock(plat_mutex *m);
 void plat_mutex_unlock(plat_mutex *m);
 
+/* Condition variable (pthread_cond_t / Windows CONDITION_VARIABLE) for the
+ * blocking waits stage 1 introduced: the game thread parks on the BIOS tick
+ * boundary or on a keystroke instead of spinning. Same handle convention as
+ * plat_mutex (zero-initialised = not created). plat_cond_wait releases the
+ * mutex while blocked and re-acquires it before returning; the recommended
+ * caller pattern is the standard `while (!predicate) wait();`. */
+typedef struct plat_cond { void *h; } plat_cond;
+
+void plat_cond_init(plat_cond *c);
+void plat_cond_destroy(plat_cond *c);
+void plat_cond_wait(plat_cond *c, plat_mutex *m);                    /* block   */
+int  plat_cond_timedwait(plat_cond *c, plat_mutex *m, unsigned ms);  /* 0=signal, 1=timeout */
+void plat_cond_signal(plat_cond *c);
+void plat_cond_broadcast(plat_cond *c);
+
+void plat_sleep_us(uint64_t us);   /* sub-millisecond sleep (frame pacing) */
+
 int32_t plat_atomic_read(volatile int32_t *p);              /* seq-cst load    */
 void    plat_atomic_write(volatile int32_t *p, int32_t v); /* seq-cst store   */
 int32_t plat_atomic_inc(volatile int32_t *p);              /* returns new val  */

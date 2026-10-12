@@ -12,6 +12,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "platform.h"      /* plat_mutex: front-buffer handover */
 #include "render.h"
 #include "../src/game/vga.h"
 
@@ -19,6 +20,16 @@ uint8_t      fd2_palette[256 * 3];
 volatile int fd2_palette_dirty = 1;
 
 static uint32_t g_bgra[320 * 200];
+
+/* Stage 2: front frame published by the game thread.  Only the game thread
+ * touches fd2_vga / fd2_palette; the presenter reads this copy, and the two
+ * sides hand it over under g_fb_lock. */
+static uint8_t    g_front_vga[VGA_BYTES];
+static uint8_t    g_front_palette[256 * 3];
+static plat_mutex g_fb_lock;
+static int        g_fb_ready;
+
+volatile unsigned fd2_video_publish_count;
 
 void fd2_video_default_palette(void)
 {
@@ -31,17 +42,35 @@ void fd2_video_default_palette(void)
     fd2_palette_dirty = 1;
 }
 
+void fd2_video_init(void)
+{
+    plat_mutex_init(&g_fb_lock);
+    g_fb_ready = 1;
+    fd2_video_publish();          /* initial (blank) frame */
+}
+
+void fd2_video_publish(void)
+{
+    if (!g_fb_ready)
+        return;
+    plat_mutex_lock(&g_fb_lock);
+    memcpy(g_front_vga, fd2_vga, sizeof g_front_vga);
+    memcpy(g_front_palette, fd2_palette, sizeof g_front_palette);
+    plat_mutex_unlock(&g_fb_lock);
+    fd2_video_publish_count++;
+}
+
 void fd2_video_frame(void)
 {
-    const uint8_t *fb = fd2_vga;
     int i;
 
-    fd2_palette_dirty = 0;
+    plat_mutex_lock(&g_fb_lock);
     for (i = 0; i < 320 * 200; i++) {
-        uint8_t idx = fb[i];
-        const uint8_t *c = &fd2_palette[idx * 3];
+        uint8_t idx = g_front_vga[i];
+        const uint8_t *c = &g_front_palette[idx * 3];
         g_bgra[i] = ((uint32_t)c[0] << 16) | ((uint32_t)c[1] << 8) | c[2];
     }
+    plat_mutex_unlock(&g_fb_lock);
     render_present(g_bgra, 320, 200);
 }
 

@@ -198,6 +198,7 @@ int status_screen_run(int mode)
             }
             v10 = tick;
         }
+        fd2_wait_tick_or_key();
     } while (kbd_pending() == 0);
 
     HI_53A8D = 16;

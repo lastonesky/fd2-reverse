@@ -229,6 +229,7 @@ int map_cursor_dir_run(const int *frame_a, const int *frame_b)
         map_cursor_dir_draw(frame_a, frame_b);
         gfx_copy_rows((void *)(uintptr_t)VGA_SPARE, 320,
                       dword_53A49 + MAP_VIEW_OFF, MAP_VIEW_PITCH, 0x138, 0xC0);
+        fd2_wait_tick_or_key();
     }
 
     byte_53A8E = 0x10;

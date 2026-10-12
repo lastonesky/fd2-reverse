@@ -50,10 +50,16 @@ void ev5_146A7(int x, int y)
 /* 0x13460 - wait for the BIOS tick to change, return it. */
 int ev5_13460(void)
 {
-    while ((int32_t)(int16_t)BDA_W(0x46C) == (int32_t)dword_53A0C)
-        ;
-    dword_53A0C = (uint32_t)(int32_t)(int16_t)BDA_W(0x46C);
-    return (int32_t)(int16_t)BDA_W(0x46C);
+    int32_t t;
+
+    for (;;) {
+        t = (int32_t)(int16_t)BDA_W(0x46C);
+        if (t != (int32_t)dword_53A0C)
+            break;
+        fd2_wait_tick();                  /* park instead of a hot spin */
+    }
+    dword_53A0C = (uint32_t)t;
+    return t;
 }
 
 /* 0x13536 - clear bit7 of every record's +5 byte. */
@@ -157,6 +163,8 @@ void ev5_1E5C0(int ticks)
         k = kbd_pending();
         if ((int16_t)BDA_W(0x46C) - t0 >= ticks || (int16_t)BDA_W(0x46C) < t0)
             k = 1;
+        if (k == 0)
+            fd2_wait_tick_or_key();
     } while (k == 0);
     kbd_flush();
 }

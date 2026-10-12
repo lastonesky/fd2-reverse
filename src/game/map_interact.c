@@ -51,6 +51,7 @@ int map_wait_key(void)
             map_view_update(0);
             v0 = (int16_t)BDA_W(0x46C);
         }
+        fd2_wait_tick_or_key();
     }
 
     byte_53A8E = 0x10;

@@ -611,6 +611,100 @@ void plat_mutex_unlock(plat_mutex *m)
     if (m->h) pthread_mutex_unlock((pthread_mutex_t *)m->h);
 }
 
+/* ---- condition variable + sub-ms sleep (stage 1) ---------------------- */
+/* A monotonic condvar clock needs pthread_condattr_setclock, which macOS
+ * does not implement; there the default (CLOCK_REALTIME) is used. */
+#if defined(CLOCK_MONOTONIC) && !defined(__APPLE__)
+#  define PLAT_COND_CLK CLOCK_MONOTONIC
+#else
+#  define PLAT_COND_CLK CLOCK_REALTIME
+#endif
+
+void plat_cond_init(plat_cond *c)
+{
+    pthread_cond_t *cv = malloc(sizeof *cv);
+    pthread_condattr_t at;
+
+    if (!cv) return;                  /* c->h stays NULL: wait falls back */
+    pthread_condattr_init(&at);
+#if defined(CLOCK_MONOTONIC) && !defined(__APPLE__)
+    pthread_condattr_setclock(&at, CLOCK_MONOTONIC);
+#endif
+    if (pthread_cond_init(cv, &at) != 0) {
+        pthread_condattr_destroy(&at);
+        free(cv);
+        return;
+    }
+    pthread_condattr_destroy(&at);
+    c->h = cv;
+}
+
+void plat_cond_destroy(plat_cond *c)
+{
+    if (c->h) {
+        pthread_cond_destroy((pthread_cond_t *)c->h);
+        free(c->h);
+        c->h = NULL;
+    }
+}
+
+void plat_cond_wait(plat_cond *c, plat_mutex *m)
+{
+    if (c->h && m->h)
+        pthread_cond_wait((pthread_cond_t *)c->h, (pthread_mutex_t *)m->h);
+    else if (m->h) {
+        pthread_mutex_unlock((pthread_mutex_t *)m->h);
+        struct timespec ts = { 0, 1000000L };
+        nanosleep(&ts, NULL);
+        pthread_mutex_lock((pthread_mutex_t *)m->h);
+    }
+}
+
+int plat_cond_timedwait(plat_cond *c, plat_mutex *m, unsigned ms)
+{
+    if (c->h && m->h) {
+        struct timespec ts;
+        long add = (long)ms * 1000000L;
+
+        clock_gettime(PLAT_COND_CLK, &ts);
+        ts.tv_sec  += (time_t)(add / 1000000000L);
+        ts.tv_nsec += add % 1000000000L;
+        if (ts.tv_nsec >= 1000000000L) {
+            ts.tv_nsec -= 1000000000L;
+            ts.tv_sec  += 1;
+        }
+        return pthread_cond_timedwait((pthread_cond_t *)c->h,
+                                      (pthread_mutex_t *)m->h, &ts) == ETIMEDOUT;
+    }
+    if (m->h) {
+        pthread_mutex_unlock((pthread_mutex_t *)m->h);
+        struct timespec ts = { 0, (long)(ms ? ms : 1) * 1000000L };
+        nanosleep(&ts, NULL);
+        pthread_mutex_lock((pthread_mutex_t *)m->h);
+    }
+    return 1;
+}
+
+void plat_cond_signal(plat_cond *c)
+{
+    if (c->h) pthread_cond_signal((pthread_cond_t *)c->h);
+}
+
+void plat_cond_broadcast(plat_cond *c)
+{
+    if (c->h) pthread_cond_broadcast((pthread_cond_t *)c->h);
+}
+
+void plat_sleep_us(uint64_t us)
+{
+    if (!us)
+        return;
+    struct timespec ts;
+    ts.tv_sec  = (time_t)(us / 1000000u);
+    ts.tv_nsec = (long)(us % 1000000u) * 1000L;
+    nanosleep(&ts, NULL);
+}
+
 int32_t plat_atomic_read(volatile int32_t *p)
 {
     return __atomic_load_n(p, __ATOMIC_SEQ_CST);

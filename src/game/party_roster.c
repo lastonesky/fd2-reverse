@@ -201,6 +201,7 @@ int party_change_wait_key(const uint8_t *screen, int count,
             memmove((void *)(uintptr_t)VGA_P(0xA0000u),
                     (const void *)(uintptr_t)dword_53C63, 0xFA00u);
         }
+        fd2_wait_tick_or_key();
     }
 
     byte_53A8E = 0x10;

@@ -71,6 +71,7 @@ void map_wait_anim(int rec)
                           dword_53A49 + 32904, 456, 0x138, 192);
             baseline = (int)(int16_t)BDA_W(0x46C);
         }
+        fd2_wait_tick_or_key();
     }
 }
 

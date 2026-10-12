@@ -25,4 +25,13 @@ int int386(int intno, const void *in, void *out);
  * host; bgm.c used it to pin a freshly loaded FDMUS buffer. */
 void fd2_mem_lock(void *addr, unsigned len);
 
+/* Blocking timing / keyboard waits (native-host service, stage 1).  The
+ * restored game used to busy-wait on the BIOS tick word and on the keyboard
+ * ring; these park the thread on the host's monotonic-clock tick and key
+ * queue instead.  They keep the same observable behaviour (a tick loop still
+ * runs at 18.2 Hz) without spinning a core. */
+void fd2_wait_tick(void);           /* until the BIOS tick word advances  */
+void fd2_wait_tick_or_key(void);    /* ... or a key becomes pending       */
+void fd2_kbd_flush(void);           /* BIOS 0x4E381 (tail = head)         */
+
 #endif /* FD2_LIB_CRT_H */

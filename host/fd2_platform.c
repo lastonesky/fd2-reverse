@@ -22,7 +22,7 @@
  * for every caller (they only need "at least ms passed"). */
 void delay(unsigned ms)
 {
-    plat_sleep_ms(ms);
+    fd2_delay_ms(ms);         /* publish the frame + sleep counted as parked */
 }
 
 /* ---- VGA DAC ports ------------------------------------------------------
@@ -103,7 +103,7 @@ void fd2_mem_lock(void *addr, unsigned len)
  * ev_script.c etc. */
 int j___delay(int ms)
 {
-    plat_sleep_ms((unsigned)ms);
+    fd2_delay_ms((unsigned)ms);   /* publish + sleep counted as parked */
     return 0;
 }
 

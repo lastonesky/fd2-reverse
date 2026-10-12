@@ -365,6 +365,7 @@ int scene_apply_state(void)
                 sub_265EC();                        /* 0x2647E: next frame      */
                 tick0 = fd2_tick_low();             /* 0x26483                  */
             }
+            fd2_wait_tick_or_key();
         }
 
         ((uint8_t *)&word_53A8D)[1] = 0x10;         /* 0x2648D: AH=10h ext.key  */
