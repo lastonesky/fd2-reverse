@@ -3331,12 +3331,12 @@ console；默认（不带 `-Console`）是 `/SUBSYSTEM:WINDOWS /ENTRY:mainCRTSta
 `render_sokol.c` 只有一条 NEAREST 路径（纹理 320×200，铺满窗口），放大会是硬块。
 
 **实现**（`host/render_sokol.c`，改动仅限呈现层）：
-- 呈现层的放大模式在 init 时由 **`FD2_UPSCALE`** 选定，默认 `sharp`：
+- 呈现层的放大模式在 init 时由 **`FD2_UPSCALE`** 选定，默认 `nearest`：
   | 值 | 行为 |
   |---|---|
-  | `nearest` | 原来的逐像素 NEAREST（基准/对拍用；`FD2_UPSCALE=0/off` 同义） |
+  | `nearest` | 原来的逐像素 NEAREST（基准/对拍用；`FD2_UPSCALE=0/off` 同义），默认 |
   | `linear` | 普通双线性（平滑、偏软） |
-  | `sharp` | **sharp-bilinear**：双线性 + 把越过 texel 边界的过渡变陡（像素边保持锐利），默认 |
+  | `sharp` | **sharp-bilinear**：双线性 + 把越过 texel 边界的过渡变陡（像素边保持锐利） |
   | `bicubic` | Catmull-Rom 4×4，渐变平滑 |
 - 所有平滑都在片元着色器里用**单张 NEAREST 采样器手工做**（双线性 4 tap、双三次 16 tap），
   这样 D3D11 与 GL 结果一致，也不必重建采样器状态；`nearest` 模式与原来的字节级输出相同。
@@ -3475,3 +3475,32 @@ MSVC 构建输出大量告警，与逻辑无关，但污染构建日志：
   这类小整数循环计数与 `uint32_t` 全局比较，是既有写法。POSIX 侧 `tools/check_compile.sh`
   本就带 `-Wno-sign-compare`；为两端一致，`build.ps1` 加 **`/wd4018`**（而非逐处强转，
   因为部分 `uint32_t` vs `int32_t` 的比较参与负数语义，盲目改类型有风险）。
+
+### 7.19 修复：开宝箱后段错误（map_event.c 事件表取值漏了 +0x53）
+
+**现象（Arch Linux 实机）**：游玩中打开宝箱，进程 SIGSEGV。core dump 回溯：
+```
+gfx_draw_glyph
+  <- vm_run (vm.c:261)
+  <- vm_run (vm.c:170)
+  <- map_cell_event (map_event.c:71)
+  <- map_record_interact / map_record_engage / scene_event_tick
+```
+`gfx_draw_glyph` 收到 `index=0xFFFFC603`（-14845），`glyph_table + (index<<5)` 得到
+未映射地址 `0x7f04cbfa0d80`（64 位下 32 位回绕不再发生，故由"画花字"变成崩溃）。
+
+**根因**：`map_cell_event` 读取每 flag 3 字节的事件记录时，`kind/value` 取自
+`dword_53A55 + 3*flag`，但原机器码（0x190AC）取的是 **`+0x53`**：
+```
+91cb: movzwl 0x54(%edx,%eax,1),%ebx   ; value = *(u16*)(base + 3*flag + 0x54)
+91d0: movzbl 0x53(%edx,%eax,1),%eax   ; kind  = *(u8*)( base + 3*flag + 0x53)
+```
+（`map_turn.c:94-96` 一直是对的。）于是 `value` 读成往后 28 个 flag 的垃圾值。
+
+**core 取证**：宝箱对应 flag=0，`base[1..2]=04 1E` ⇒ 错值 `0x1E04=7684`，
+`dword_53AD9 = 7684+181 = 7865`，越界读 FDTXT 偏移表 → 负 offset → 负 glyph index。
+正确记录在 `base+0x53` 处 `00 C0 00`：kind=0、value=0xC0=192、`dword_53AD9=373`（合法）。
+
+**修复**：`src/game/map_event.c` 的 `ev` 基址加 `+0x53u`（写入端 `+0x54` 本已正确）。
+不改 `gfx_draw_glyph`：它对坏 index 的字节级行为要与机器码保持一致（有差分 harness），
+真正要修的是调用方。`make engine` 全量链接通过，已把新二进制拷到游戏目录 `../fd2engine`。

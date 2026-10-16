@@ -11,10 +11,13 @@
  *     first dword of the map_cell_info output) which is exactly the uint16 at
  *     out+2, i.e. `cell[6] & 0x1F`; here it is read as two bytes and
  *     sign-extended, matching the machine's `movsx edi, WORD [out+2]`;
- *   - `p` in the pseudo-code is the global pointer dword_53A55 (a 3-byte-per-
- *     flag event table), and dword_53AD5 is the parallel "handled" flag array;
- *     both are raw uint32_t pointer cells in fd2_globals.h and are therefore
- *     dereferenced through (uintptr_t);
+ *   - `p` in the pseudo-code is the global pointer dword_53A55.  The event
+ *     kind/value table it points at lives at **dword_53A55 + 0x53** (kind byte
+ *     + 16-bit value, 3 bytes per flag), exactly as the machine code reads it
+ *     (`movzbl 0x53(%edx,%eax,1)` / `movzwl 0x54(%edx,%eax,1)` with
+ *     eax = 3*flag) and as map_turn.c already does; dword_53AD5 is the parallel
+ *     "handled" flag array.  Both are raw uint32_t pointer cells in
+ *     fd2_globals.h and are therefore dereferenced through (uintptr_t);
  *   - the `funcs_1199C[v5](a1)` indirect call is the scene-handler table; it is
  *     cast to the 1-argument form exactly like ev_script.c/scene_core.c.
  */
@@ -28,7 +31,7 @@ int map_cell_event(int rec_index)
 {
     uint8_t  info[16];               /* map_cell_info output (~8 bytes used) */
     const uint8_t *rec;              /* dword_53A45 + 80*rec_index           */
-    uint8_t *ev;                     /* dword_53A55 + 3*flag                 */
+    uint8_t *ev;                     /* dword_53A55 + 3*flag + 0x53          */
     int      flag;                   /* cell flag value (info[2..3])         */
     uint8_t  tile;                   /* tile-info byte (info[4])             */
     int      r, kind, value;
@@ -62,7 +65,7 @@ int map_cell_event(int rec_index)
     svc_play_sfx2(dword_53EEC, 12, 1);
     j___delay(300);
 
-    ev    = (uint8_t *)(uintptr_t)(dword_53A55 + 3u * (uint32_t)flag);
+    ev    = (uint8_t *)(uintptr_t)(dword_53A55 + 3u * (uint32_t)flag + 0x53u);
     kind  = ev[0];
     value = ev[1] | (ev[2] << 8);
 

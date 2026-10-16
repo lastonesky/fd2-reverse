@@ -16,15 +16,16 @@
  * scaler. The mode is chosen once at init from FD2_UPSCALE:
  *
  *   nearest  - the original pixel-exact NEAREST path (reference / A-B tests)
+ *              (default: no smoothing, byte-identical reference output)
  *   linear   - plain bilinear (smooth, soft - rarely what pixel art wants)
  *   sharp    - sharp-bilinear: bilinear with the texel-crossing steepened so
- *              edges stay crisp instead of turning to mush  (default)
+ *              edges stay crisp instead of turning to mush
  *   bicubic  - Catmull-Rom 4x4, smooth gradients, good for photo-ish art
  *
  * All smoothing is done by hand from a single NEAREST sampler (4 taps for
  * bilinear, 16 for bicubic) so D3D11 and GL produce the same result and no
- * sampler-filter state has to be rebuilt. FD2_UPSCALE=nearest restores the
- * byte-identical reference output.
+ * sampler-filter state has to be rebuilt. The default NEAREST mode keeps the
+ * byte-identical reference output; opt into smoothing with FD2_UPSCALE.
  *
  * The source aspect ratio (320:200 = 8:5) is preserved when the window is
  * resized: the draw is confined to a centered viewport with that aspect and
@@ -156,7 +157,7 @@ static const char *GLSL_FS =
 
 /* Upscale modes. Keep the numbering in sync with the shader's MODE. */
 enum { UP_NEAREST = 0, UP_LINEAR = 1, UP_SHARP = 2, UP_BICUBIC = 3 };
-static int g_up_mode = UP_SHARP;
+static int g_up_mode = UP_NEAREST;
 static int g_keep_aspect = 1;      /* letterbox instead of stretching */
 
 static int eq_ci(const char *a, const char *b)
@@ -176,7 +177,7 @@ static void parse_upscale(void)
     const char *s = getenv("FD2_UPSCALE");
 
     if (!s || !*s)
-        return;                                   /* keep the default (sharp) */
+        return;                                   /* keep the default (nearest) */
     if (eq_ci(s, "nearest") || eq_ci(s, "off") || eq_ci(s, "0"))
         g_up_mode = UP_NEAREST;
     else if (eq_ci(s, "linear") || eq_ci(s, "bilinear"))
@@ -187,7 +188,7 @@ static void parse_upscale(void)
         g_up_mode = UP_BICUBIC;
     else
         printf("sokol: unknown FD2_UPSCALE='%s' (nearest/linear/sharp/bicubic),"
-               " using sharp\n", s);
+               " using nearest\n", s);
 }
 
 static void parse_aspect(void)

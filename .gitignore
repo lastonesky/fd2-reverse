@@ -33,3 +33,8 @@ src/fd2_image.c
 # The original executable may sit in the repo root during development, but it
 # is the user's own copy and must never be committed:
 /FD2.EXE
+
+# Runtime logs and agent scratch / python caches (not source):
+*.log
+__pycache__/
+.workbuddy/
