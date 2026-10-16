@@ -3807,3 +3807,40 @@ convert` 用 16 行点阵原样拷贝/缩放，导致 620/1824 个简体字形�
 **工具同步**：`fd2_fonttool.py` 的 `FD2_GLYPH_ROWS` 默认从 14 改回 **16**（不再默认缩字，
 避免以后 `convert` 又生成糊版）；要压行用 `fit-rows --rows N`。`fit-rows` 的 `--rows`
 默认 14（它的用途就是缩）。
+
+### 7.28 记录：12px 文泉驿点阵有缺陷；简体字体改用 16px 文泉驿点阵宋体
+
+- **12px 文泉驿不可用**：`wenquanyi_9pt.pcf`(12px) 渲染出来**字大小不一**（同一行里
+  部分字明显偏大/偏小），无法接受。12px 想稳定清晰只能用**有版权的中易宋体**
+  （SimSun 12px 手调档）。因此 12px 方案暂时搁置。
+- **定案**：简体字体改用 **16px 文泉驿点阵宋体**（`wenquanyi_12pt.pcf`，GPL 可再分发），
+  用 `fd2_fonttool.py convert`（`FD2_SONG_FONT=.../wenquanyi_12pt.pcf`）重生成 614 个
+  繁→简字形，覆盖 `E:\FD2\FDOTHER.simp.DAT`。备份：
+  `FDOTHER.simp.DAT.bak-simsun16-011652`（旧 SimSun 16px）。
+  行统计 `row13=1757, row14=618, row15=595`；第 15 行有像素由 §7.23 的引擎投影约束
+  兜住，无滚屏残留。对比图 `E:\FD2\candidates\compare_wqy16.png`。
+- 参数：`FD2_SONG_FONT` / `FD2_SIMSUN` 指定字体；`FD2_GLYPH_ROWS` 默认 16（不缩）。
+
+### 7.29 新增：窗口失去焦点时静音 / 暂停（`FD2_UNFOCUS`）
+
+运行参数 `FD2_UNFOCUS`（逗号分隔，默认 `mute`）：
+
+| 值 | 行为 |
+|---|---|
+| `mute`（默认） | 失去焦点/最小化时静音，回来恢复 |
+| `pause` / `stop` | 额外**冻结游戏线程**（隐含静音） |
+| `mute,pause` | 两者都要 |
+| `none` | 关闭全部（恢复旧行为：后台照常出声/运行） |
+
+实现：
+- `host/audio.h`+`audio_sokol.c`：新增 `audio_set_muted()`，在 `mix_cb` 的**输出端**
+  置零（音乐+音效立即静音，不受各自 gain 影响），遥测 peak 也显示 0。
+- `host/fd2_kernel.c`：`g_paused` + `wait_while_paused()`；`fd2_kbd_wait` /
+  `fd2_wait_tick` / `fd2_wait_tick_or_key` / `fd2_delay_ms` 在暂停时阻塞（计入
+  `fd2_wait_depth`，看门狗不误报；不消费按键，恢复后原地继续）。`fd2_set_focus()` 按策略
+  执行 mute/pause，并打印日志。
+- `host/main_sokol.c`：`event_cb` 处理 `SAPP_EVENTTYPE_FOCUSED/UNFOCUSED` 与
+  `RESTORED/ICONIFIED`，调用 `fd2_set_focus()`。
+
+**验证**：跑两个实例（第二个抢焦点）——第一个实例日志出现
+`window focus lost mute pause`，第二个退出后 `window focus gained unmute resume`。
