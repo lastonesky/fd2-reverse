@@ -28,8 +28,10 @@
 
 #define SOKOL_NO_ENTRY
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "fd2_kernel.h"
+#include "platform.h"
 #include "render.h"
 #include "keys.h"
 #include "sokol_app.h"
@@ -40,6 +42,12 @@
 #endif
 
 static render_desc g_rd;
+
+/* FD2_AUTOQUIT_MS=<ms>: close the window automatically after this many
+ * milliseconds.  Used when launching the engine for a short test/demo run so
+ * an unattended game does not keep playing audio forever. */
+static uint64_t g_autoquit_ms = 0;
+static uint64_t g_t0_ms = 0;
 
 #if defined(_WIN32)
 /* -------------------------------------------------------------------------
@@ -347,8 +355,14 @@ static void init_cb(void)
 static void frame_cb(void)
 {
     fd2_engine_frame();
-    if (fd2_engine_game_over())
+    if (fd2_engine_game_over()) {
         sapp_quit();          /* game thread returned: close, do not freeze */
+        return;
+    }
+    if (g_autoquit_ms && plat_now_ms() - g_t0_ms >= g_autoquit_ms) {
+        printf("sokol: auto-quit after %llu ms\n", (unsigned long long)g_autoquit_ms);
+        sapp_quit();
+    }
 }
 
 static void event_cb(const sapp_event *e)
@@ -377,12 +391,10 @@ static void event_cb(const sapp_event *e)
         break;
     case SAPP_EVENTTYPE_QUIT_REQUESTED:
         /* Alt+F4 / the title-bar close button reach us as WM_CLOSE /
-         * WM_DELETE_WINDOW.  The original quits through its own "return
-         * to DOS" menu, and an accidental Alt+F4 loses unsaved progress,
-         * so cancel the pending quit and keep running.  Ctrl+Esc is the
-         * explicit escape hatch (sapp_quit above). */
-        printf("sokol: quit request ignored (use Ctrl+Esc to exit)\n");
-        sapp_cancel_quit();
+         * WM_DELETE_WINDOW.  Honour it: exit cleanly (the game also has
+         * its own "return to DOS" menu; Ctrl+Esc remains a shortcut). */
+        printf("sokol: quit request accepted (Alt+F4 / window close)\n");
+        sapp_quit();
         break;
     default:
         break;
@@ -420,11 +432,9 @@ static void event_cb(const sapp_event *e)
         break;
     case SAPP_EVENTTYPE_QUIT_REQUESTED:
         /* Alt+F4 / the title-bar close button reach us as WM_DELETE_WINDOW.
-         * The original quits through its own "return to DOS" menu, and an
-         * accidental Alt+F4 loses unsaved progress, so cancel the pending
-         * quit and keep running.  Ctrl+Esc is the explicit escape hatch. */
-        printf("sokol: quit request ignored (use Ctrl+Esc to exit)\n");
-        sapp_cancel_quit();
+         * Honour it: exit cleanly (Ctrl+Esc remains a shortcut). */
+        printf("sokol: quit request accepted (Alt+F4 / window close)\n");
+        sapp_quit();
         break;
     default:
         break;
@@ -447,6 +457,13 @@ int main(int argc, char **argv)
     memset(&desc, 0, sizeof desc);
     if (fd2_engine_init(argc, argv) != 0)
         return 1;
+
+    {
+        const char *aq = getenv("FD2_AUTOQUIT_MS");
+        if (aq && *aq)
+            g_autoquit_ms = (uint64_t)atoll(aq);
+        g_t0_ms = plat_now_ms();
+    }
 
     g_rd.native_window = NULL;
     g_rd.logical_w = 320;
