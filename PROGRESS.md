@@ -3571,3 +3571,20 @@ ascii（与 `input_post_key()`/autokey 路径一致）；真正的 CHAR 事件�
 - 修复前等价于 `1C,00`；
 - 修复后 `39,20`（空格）与 **`1C,0D`（回车）** 均正确。
 `make engine` 链接通过，已拷到游戏目录 `../fd2engine`。
+
+### 7.21 修复：Alt+F4 / 关闭窗口会直接退出并丢掉未存档进度
+
+**现象**：Linux / Windows 下按 Alt+F4（或点标题栏关闭按钮）窗口立刻关闭，未存档的进度
+丢失；原版在商店/教会/道具店/酒店前用组合键进隐藏商店时，按键也容易被 OS 抢走。
+
+**根因**：`host/main_sokol.c` 的 `event_cb` 把 sokol 的 `SAPP_EVENTTYPE_QUIT_REQUESTED`
+（Windows `WM_CLOSE`、X11 `WM_DELETE_WINDOW`——Alt+F4 和关闭按钮都归到这里）直接
+`sapp_quit()`，没给用户代码拦截的机会。
+
+**修复**：收到 `QUIT_REQUESTED` 时改调 `sapp_cancel_quit()`（sokol 官方的“取消退出”
+协议），窗口保持打开、游戏继续；日志打印 `quit request ignored`。主动退出仍走 `Ctrl+Esc`
+（`event_cb` 里保留的 `sapp_quit()`）和游戏自己的“返回 DOS”菜单（`fd2_engine_game_over()`
+→ `frame_cb` 的 `sapp_quit()`）。
+
+**归属**：纯宿主/平台修复，按 `BRANCHING.md` 只进 `modern-platform`。`make -C host check`
+加单独 `-fsyntax-only main_sokol.c` 通过。

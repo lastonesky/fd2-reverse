@@ -376,7 +376,13 @@ static void event_cb(const sapp_event *e)
         push_vk(sapp_to_vk((int)e->key_code), 0);
         break;
     case SAPP_EVENTTYPE_QUIT_REQUESTED:
-        sapp_quit();
+        /* Alt+F4 / the title-bar close button reach us as WM_CLOSE /
+         * WM_DELETE_WINDOW.  The original quits through its own "return
+         * to DOS" menu, and an accidental Alt+F4 loses unsaved progress,
+         * so cancel the pending quit and keep running.  Ctrl+Esc is the
+         * explicit escape hatch (sapp_quit above). */
+        printf("sokol: quit request ignored (use Ctrl+Esc to exit)\n");
+        sapp_cancel_quit();
         break;
     default:
         break;
@@ -413,7 +419,12 @@ static void event_cb(const sapp_event *e)
         }
         break;
     case SAPP_EVENTTYPE_QUIT_REQUESTED:
-        sapp_quit();
+        /* Alt+F4 / the title-bar close button reach us as WM_DELETE_WINDOW.
+         * The original quits through its own "return to DOS" menu, and an
+         * accidental Alt+F4 loses unsaved progress, so cancel the pending
+         * quit and keep running.  Ctrl+Esc is the explicit escape hatch. */
+        printf("sokol: quit request ignored (use Ctrl+Esc to exit)\n");
+        sapp_cancel_quit();
         break;
     default:
         break;
