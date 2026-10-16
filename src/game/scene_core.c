@@ -371,6 +371,7 @@ int scene_apply_state(void)
         int386(0x16, &word_53A8D, &word_53A8D);     /* 0x264A0: INT 16h         */
         {
         uint8_t scan = ((uint8_t *)&word_53A8D)[1]; /* scan code in HIBYTE      */
+        uint8_t ascii = (uint8_t)word_53A8D;        /* ascii code in LOBYTE     */
         switch (scan) {
         case 0xE0:                                  /* 0x264AF..0x264C3         */
         case 0x52:
@@ -393,7 +394,12 @@ int scene_apply_state(void)
             break;
         default: {                                  /* 0x26559: hotkey match    */
             uint8_t *ent = (uint8_t *)(uintptr_t)dword_53F56;
-            if (scan == ent[2] && dword_53F4A == ent[1])
+            /* The per-place hotkey table (dseg03 0x238D, stride 31) stores the
+             * hidden-shop key as its ASCII code ('T', 'j', ...), while the
+             * machine code compares the raw BIOS scan byte here.  Match either
+             * so the hidden place option (dword_53F4A = 5) is reachable from
+             * the key the data names. */
+            if ((scan == ent[2] || ascii == ent[2]) && dword_53F4A == ent[1])
                 dword_53F4A = 5;                    /* 0x26572: confirmed       */
             break;
         }
