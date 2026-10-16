@@ -390,11 +390,15 @@ static void event_cb(const sapp_event *e)
         push_vk(sapp_to_vk((int)e->key_code), 0);
         break;
     case SAPP_EVENTTYPE_QUIT_REQUESTED:
-        /* Alt+F4 / the title-bar close button reach us as WM_CLOSE /
-         * WM_DELETE_WINDOW.  Honour it: exit cleanly (the game also has
-         * its own "return to DOS" menu; Ctrl+Esc remains a shortcut). */
-        printf("sokol: quit request accepted (Alt+F4 / window close)\n");
-        sapp_quit();
+        /* Alt+F4 (WM_SYSCOMMAND/SC_CLOSE -> WM_CLOSE) and the title-bar
+         * close button both reach us here.  Do not quit: Windows keeps
+         * delivering these even though the DOS original had no window, so
+         * an accidental Alt+F4 would drop the player out mid-game.
+         * sapp_cancel_quit() clears the pending request, which also stops
+         * sokol's message loop from re-posting WM_CLOSE.  Ctrl+Esc is the
+         * explicit escape hatch (see KEY_DOWN above). */
+        printf("sokol: quit request ignored (use Ctrl+Esc to exit)\n");
+        sapp_cancel_quit();
         break;
     default:
         break;
@@ -432,9 +436,10 @@ static void event_cb(const sapp_event *e)
         break;
     case SAPP_EVENTTYPE_QUIT_REQUESTED:
         /* Alt+F4 / the title-bar close button reach us as WM_DELETE_WINDOW.
-         * Honour it: exit cleanly (Ctrl+Esc remains a shortcut). */
-        printf("sokol: quit request accepted (Alt+F4 / window close)\n");
-        sapp_quit();
+         * Ignore it and keep the session running; Ctrl+Esc is the explicit
+         * escape hatch (see KEY_DOWN above). */
+        printf("sokol: quit request ignored (use Ctrl+Esc to exit)\n");
+        sapp_cancel_quit();
         break;
     default:
         break;

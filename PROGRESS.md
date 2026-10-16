@@ -3663,3 +3663,24 @@ ascii（与 `input_post_key()`/autokey 路径一致）；真正的 CHAR 事件�
 
 **归属**：纯宿主/平台修复，按 `BRANCHING.md` 只进 `modern-platform`。`make -C host check`
 加单独 `-fsyntax-only main_sokol.c` 通过。
+
+### 7.22 回归修复：Alt+F4 又能关闭窗口（§7.21 被 b5a9b79 反转）
+
+**现象**：Windows 下重新构建后按 Alt+F4（或点标题栏关闭按钮）窗口又直接关闭，未存档
+进度丢失——§7.21 的修复“失效”。
+
+**根因**：不是 sokol 的问题，而是 **commit `b5a9b79` 主动把 §7.21 改回去了**：
+`event_cb` 的 `SAPP_EVENTTYPE_QUIT_REQUESTED` 分支由 `sapp_cancel_quit()` 又改回
+`sapp_quit()`（提交说明是“honour window close”），与 `PROGRESS.md §7.21` 记录的既定
+行为相反。`build/fd2engine.exe` 也是在该提交之后构建的，所以实机表现与 §7.21 不符。
+
+**修复**：把 Windows 与 POSIX 两条 `QUIT_REQUESTED` 分支都改回
+`sapp_cancel_quit()`，日志仍为 `quit request ignored (use Ctrl+Esc to exit)`。
+`sapp_cancel_quit()` 清除 `_sapp.quit_requested`，`sokol_app.h` 的 Win32 主循环因此不会
+`PostMessage(WM_CLOSE)`，窗口保持打开；`sokol` 的 `WM_CLOSE` 处理在
+`quit_ordered==false` 时也不会 `PostQuitMessage`。主动退出仍为 `Ctrl+Esc`
+（`event_cb` 里保留的 `sapp_quit()`）与游戏“返回 DOS”菜单（`fd2_engine_game_over()`
+→ `frame_cb` 的 `sapp_quit()`）。`FD2_AUTOQUIT_MS` 走 `sapp_quit()`，不受影响。
+
+**验证**：`build.ps1`（release GUI）链接通过，`build/fd2engine.exe` 已更新；日志出现
+`quit request ignored` 即表示 Alt+F4 被拦截，窗口不关闭。
