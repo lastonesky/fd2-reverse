@@ -46,14 +46,15 @@ FONT_RES = 4              # FDOTHER.DAT resource holding the 16x16 font
 GLYPH_BYTES = 32
 GLYPH_W = GLYPH_H = 16
 
-# The original FD2 font is a 14-row face (ink in rows 0..13) sitting in the
-# 16x16 cell: row 15 is inked by 0 of 1824 glyphs and row 14 by only 7.  The
-# engine relies on this - gfx_draw_glyph (0x4ED7A) puts the drop shadow on
-# r+1, and dlg_scroll_text (0x16E24) only shifts/clears a 72-row text window.
-# A glyph that inks row 15 therefore both looks oversized and smears shadow
-# into the next text line after a scroll.  Keep regenerated glyphs in the same
-# band as the original.
-FD2_GLYPH_ROWS = 14
+# Bitmap CJK is designed per-ppem: clear strikes exist at 12px (11-12 rows)
+# and 16px (16 rows), and the 13-15px ones are noticeably worse (verified:
+# SimSun's 12px==13px and 14px==15px are two different faces, 100% identical
+# within a pair and 0% across).  Trying to squeeze the Simplified font into
+# the original's 14-row band therefore just made it blurry, so the default is
+# the full 16px cell (the clear strike); `fit-rows --rows N` can still shrink
+# on request.  The engine's gfx_draw_glyph guards the last-row drop shadow, so
+# 16-row replacement fonts do not smear into the next text line.
+FD2_GLYPH_ROWS = 16
 
 
 # --------------------------------------------------------------- DAT ------
@@ -159,20 +160,20 @@ def _bits_to_fd2(a):
     return bytes(out)
 
 
-def _fit_grid(a):
-    """Tight-crop a boolean glyph and fit it into the FD2 14-row band.
+def _fit_grid(a, rows=FD2_GLYPH_ROWS):
+    """Tight-crop a boolean glyph and fit it into a `rows`-row band.
 
     Top-aligned at row 0 (the original is: 1739/1824 glyphs start on row 0) and
     horizontally centred, scaled only when the ink would not otherwise fit -
-    a native 16px bitmap strike that is already <=14 rows is copied verbatim so
-    it stays crisp.
+    a native bitmap strike that already fits is copied verbatim so it stays
+    crisp.
     """
     from PIL import Image
     np = __import__("numpy")
     ys, xs = np.where(a)
     a = a[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
     h, w = a.shape
-    s = min(FD2_GLYPH_ROWS / h, 15.0 / w)
+    s = min(rows / h, 16.0 / w)
     nh, nw = max(1, round(h * s)), max(1, round(w * s))
     if (nh, nw) != (h, w):
         # NEAREST keeps the 1bpp strokes crisp; LANCZOS-then-threshold makes
@@ -405,6 +406,7 @@ def cmd_fit_rows(args):
     用于修复已经用旧版 convert 生成的 DAT（字形用了第 14/15 行，比原版大）。
     """
     import numpy as np
+    rows = getattr(args, "rows", 14)
     dat, header, ends = load_dat(args.data)
     font = bytearray(dat[FONT_RES])
     ng = len(font) // GLYPH_BYTES
@@ -414,8 +416,8 @@ def cmd_fit_rows(args):
                      dtype=bool)
         if not a.any():
             continue
-        if a[FD2_GLYPH_ROWS:, :].any():
-            font[g * GLYPH_BYTES:(g + 1) * GLYPH_BYTES] = _bits_to_fd2(_fit_grid(a))
+        if a[rows:, :].any():
+            font[g * GLYPH_BYTES:(g + 1) * GLYPH_BYTES] = _bits_to_fd2(_fit_grid(a, rows))
             changed += 1
     dat[FONT_RES] = bytes(font)
     out = args.out or args.data
@@ -459,9 +461,11 @@ def main(argv=None):
     s.add_argument("--out", default="/tmp/FDOTHER.simp.DAT")
     s.set_defaults(func=cmd_convert)
 
-    s = sub.add_parser("fit-rows", help="把现有 DAT 里超出 14 行的字形压回原版字高")
+    s = sub.add_parser("fit-rows", help="把现有 DAT 里超出 N 行的字形压到 N 行")
     s.add_argument("--data", default="FDOTHER.DAT", help="要修复的 FDOTHER.DAT")
     s.add_argument("--out", default="", help="输出路径（默认原地改写）")
+    s.add_argument("--rows", type=int, default=14,
+                   help="目标字高（默认 14：原版字面；16 表示不缩）")
     s.set_defaults(func=cmd_fit_rows)
     args = ap.parse_args(argv)
     args.func(args)

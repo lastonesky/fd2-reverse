@@ -3803,3 +3803,7 @@ convert` 用 16 行点阵原样拷贝/缩放，导致 620/1824 个简体字形�
 
 已 `build.ps1` 重新构建并部署 `E:\FD2\fd2engine.exe`。9 版候选与对比图留在
 `E:\FD2\candidates\` 备查。
+
+**工具同步**：`fd2_fonttool.py` 的 `FD2_GLYPH_ROWS` 默认从 14 改回 **16**（不再默认缩字，
+避免以后 `convert` 又生成糊版）；要压行用 `fit-rows --rows N`。`fit-rows` 的 `--rows`
+默认 14（它的用途就是缩）。
