@@ -134,7 +134,8 @@ def load_mapping():
     return m
 
 
-def stream(dat, residx, sub):
+def stream(dat, residx, sub, keep_ops=False):
+    """一个文本流的 int16 序列。keep_ops=True 时保留负 opcode（至 -1 止）。"""
     s = dat[residx]
     off = struct.unpack_from("<h", s, 2 * sub)[0]
     p, out = off, []
@@ -142,9 +143,42 @@ def stream(dat, residx, sub):
         v = struct.unpack_from("<h", s, p)[0]
         p += 2
         if v < 0:
-            break
-        out.append(v)
+            if keep_ops:
+                out.append(v)
+                if v == -1:
+                    break
+            else:
+                break
+        else:
+            out.append(v)
     return out
+
+
+def decode_ops(ops, mapping):
+    """按 vm.c (0x15F84) 的 opcode 解释整段文本。"""
+    out, i = [], 0
+    while i < len(ops):
+        v = ops[i]
+        if v >= 0:
+            out.append(mapping.get(v, f"[{v}]"))
+            i += 1
+        elif v == -1:
+            break
+        elif v in (-2, -3):          # new paragraph (with/without key wait)
+            out.append("\n")
+            i += 1
+        elif v in (-4, -5):          # run sub-stream 53AD9 / 53ADD (runtime)
+            out.append("{子文本}")
+            i += 1
+        elif v == -6:                # decimal dword_53AE1
+            out.append("{num}")
+            i += 1
+        elif v in (-17, -18, -19, -20):   # portrait box + operand (id/idx)
+            out.append(f"{{頭像:{ops[i+1] if i+1 < len(ops) else '?'}}}")
+            i += 2
+        else:
+            i += 1
+    return "".join(out)
 
 
 def decode(glyphs, mapping):
@@ -190,9 +224,35 @@ def cmd_sheet(args):
 def cmd_decode(args):
     dat, _, _ = load_dat(args.text)
     mapping = load_mapping()
-    g = stream(dat, args.res, args.sub)
-    print(" ".join(str(x) for x in g))
-    print(decode(g, mapping))
+    ops = stream(dat, args.res, args.sub, keep_ops=True)
+    print(" ".join(str(x) for x in ops))
+    print(decode_ops(ops, mapping))
+
+
+def cmd_text(args):
+    dat, _, _ = load_dat(args.text)
+    mapping = load_mapping()
+    lines = []
+    for ri, S in enumerate(dat):
+        if len(S) < 2:
+            continue
+        first = struct.unpack_from("<h", S, 0)[0]
+        nsub = (first // 2) if first > 0 else 0
+        for sub in range(nsub):
+            if 2 * sub + 2 > len(S):
+                break
+            ops = stream(dat, ri, sub, keep_ops=True)
+            if not ops:
+                continue
+            txt = decode_ops(ops, mapping)
+            if txt.strip():
+                lines.append(f"### res{ri} sub{sub}\n{txt}")
+    out = "\n\n".join(lines)
+    if args.out:
+        open(args.out, "w", encoding="utf-8").write(out)
+        print(f"wrote {args.out} ({len(lines)} streams)")
+    else:
+        print(out)
 
 
 def cmd_build_map(args):
@@ -261,6 +321,11 @@ def main(argv=None):
     s.add_argument("--res", type=int, default=0)
     s.add_argument("--sub", type=int, default=0)
     s.set_defaults(func=cmd_decode)
+
+    s = sub.add_parser("text", help="导出整个 FDTXT 的可读文本")
+    s.add_argument("--text", default="FDTXT.DAT")
+    s.add_argument("--out", default="")
+    s.set_defaults(func=cmd_text)
 
     s = sub.add_parser("build-map", help="从道具名反推字形->字（种子映射）")
     s.add_argument("--data", default=".")
