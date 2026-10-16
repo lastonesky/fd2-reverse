@@ -262,8 +262,9 @@ static fr_key sapp_to_fr_key(int k)
 
 /* BIOS (scan, ascii) for a key. Extended keys have no character, so their
  * ascii byte is 0xE0 - the same convention main_win32.c uses. For the rest
- * the character arrives in a following CHAR event and is patched in; if the
- * key produces none (F-keys, modifiers) ascii stays 0, like ToAscii. */
+ * push_fr_key() seeds the char from fr_key_ascii() and a following CHAR event
+ * patches it in (X11's XLookupString only yields a Unicode codepoint for
+ * keysyms it maps, so Return/Tab/Backspace never get a CHAR event). */
 static uint8_t scan_ascii(fr_key key, uint8_t *scan)
 {
     *scan = fr_key_scan(key);
@@ -279,6 +280,13 @@ static void push_fr_key(fr_key key, int down)
     ascii = scan_ascii(key, &scan);
     if (!scan)
         return;
+    /* Seed the BIOS ascii byte here, exactly like input_post_key().  X11 only
+     * sends a CHAR event for keysyms _sapp_x11_keysym_to_unicode() maps, and
+     * Return/Tab/Backspace are not in that table - so without this, Enter
+     * reaches the game as AL=0 and only Space (which does get a CHAR event)
+     * confirms a menu selection.  A real CHAR event still overwrites it. */
+    if (!fr_key_extended(key))
+        ascii = fr_key_ascii(key);
     if (down) {
         if (g_down[key]) return;
         g_down[key] = 1;

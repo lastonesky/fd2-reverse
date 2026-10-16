@@ -3528,3 +3528,26 @@ gfx_draw_glyph
 **修复**：`src/game/map_event.c` 的 `ev` 基址加 `+0x53u`（写入端 `+0x54` 本已正确）。
 不改 `gfx_draw_glyph`：它对坏 index 的字节级行为要与机器码保持一致（有差分 harness），
 真正要修的是调用方。`make engine` 全量链接通过，已把新二进制拷到游戏目录 `../fd2engine`。
+
+### 7.20 修复：Linux 下开始菜单回车不响应（POSIX 输入层 Enter 无 ASCII 字节）
+
+**现象**：标题后的主菜单（new game / load / continue）只有**空格**能确认，**回车**无效。
+
+**根因（仅 POSIX 路径）**：`title_screen.c:262` 的确认条件依赖 BIOS `INT 16h` 返回的
+`AL`：`(uint8_t)word_53A8D == 0x0D || ... == 0x20 || AH == 0xE0/0x52`。而
+`host/main_sokol.c` 的 `push_fr_key()` 对所有非扩展键都把 ascii 先置 0，指望随后由
+`sokol` 的 `SAPP_EVENTTYPE_CHAR` 事件补上。但 X11 的 `XLookupString` 只对
+`_sapp_x11_keysym_to_unicode()` 表里的 keysym 发 CHAR（拉丁区 + 映射表），
+`XK_Return`(0xFF0D) 不在其中 → Return 永远等不到 CHAR → 游戏侧 `AL=0`，菜单不认。
+空格能过是因为 `XK_space`(0x20) 命中 Latin-1 直通，有 CHAR 事件。
+
+**修复**：`push_fr_key()` 在 `scan_ascii()` 之后对非扩展键用 `fr_key_ascii(key)` 预填
+ascii（与 `input_post_key()`/autokey 路径一致）；真正的 CHAR 事件仍会覆盖它，所以字母
+大小写/布局字符行为不变。仅 `host/main_sokol.c` 的 `#else /* !_WIN32 */` 段，Windows
+的 ToAscii 路径不受影响。`title_screen.c` 无需改动。
+
+**验证（实机 X11）**：写 `/tmp/sendkey`（XSendEvent 合成按键）向窗口发键，`FD2_KEYLOG`
+记录游戏实际读到的 (scan, ascii)：
+- 修复前等价于 `1C,00`；
+- 修复后 `39,20`（空格）与 **`1C,0D`（回车）** 均正确。
+`make engine` 链接通过，已拷到游戏目录 `../fd2engine`。
