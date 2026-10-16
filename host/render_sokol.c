@@ -41,6 +41,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "host_args.h"
 #include "render.h"
 #include "sokol_gfx.h"
 #include "sokol_glue.h"
@@ -61,7 +62,7 @@
 static void gl_readback_check(const uint32_t *bgra, int w, int h)
 {
     static long frames;
-    const char *env = getenv("FD2_GL_READBACK");
+    const char *env = host_arg("GL_READBACK");
     long interval = env ? atol(env) : 0;
     int fw, fh, s = 3;                  /* the host's 3x window */
     unsigned char *px;
@@ -174,7 +175,7 @@ static int eq_ci(const char *a, const char *b)
 
 static void parse_upscale(void)
 {
-    const char *s = getenv("FD2_UPSCALE");
+    const char *s = host_arg("UPSCALE");
 
     if (!s || !*s)
         return;                                   /* keep the default (nearest) */
@@ -193,7 +194,7 @@ static void parse_upscale(void)
 
 static void parse_aspect(void)
 {
-    const char *s = getenv("FD2_ASPECT");
+    const char *s = host_arg("ASPECT");
 
     if (!s || !*s)
         return;                                   /* keep the default (on) */
@@ -524,7 +525,7 @@ void render_present(const uint32_t *bgra, int w, int h)
 #if defined(SOKOL_GLCORE)
     static uint32_t pattern[320 * 200];
 
-    if (getenv("FD2_TESTPATTERN")) {
+    if (host_arg_flag("TESTPATTERN")) {
         /* Diagnostic: a static pattern with an unmistakable orientation -
          * green ramps with the source row, a white block at the top-left and
          * a red block at the bottom-right. FD2_GL_READBACK then tells

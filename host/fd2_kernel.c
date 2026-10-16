@@ -21,6 +21,7 @@
 
 #include "fd2_video.h"
 #include "fd2_audio.h"
+#include "host_args.h"
 #include "platform.h"
 #include "audio.h"
 #include "synth.h"
@@ -320,8 +321,8 @@ static void key_thread(void *arg)
 
 static void parse_keys(void)
 {
-    const char *s = getenv("FD2_KEYS");
-    const char *d = getenv("FD2_KEY_DELAY");
+    const char *s = host_arg("KEYS");
+    const char *d = host_arg("KEY_DELAY");
     if (d) g_key_delay = atoi(d);
     if (!s || !s[0]) return;
     while (*s && g_nkeys < 64) {
@@ -580,7 +581,7 @@ static int       g_nplay;
 
 static void parse_keyplay(void)
 {
-    const char *path = getenv("FD2_KEYPLAY");
+    const char *path = host_arg("KEYPLAY");
     FILE *f;
     char  line[128];
 
@@ -619,13 +620,14 @@ static void keyplay_thread(void *arg)
 
 int fd2_engine_init(int argc, char **argv)
 {
-    const char *log = getenv("FD2_LOG");
+    const char *log;      
+    host_args_init(argc, argv);
+    log = host_arg("LOG");
     if (!log) log = "fd2engine.log";
     if (freopen(log, "w", stdout)) { }
     if (freopen(log, "a", stderr)) { }
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    (void)argc; (void)argv;
 #if defined(_WIN32)
     timeBeginPeriod(1);   /* 1 ms timer: BIOS tick really runs at 18.2 Hz */
 #endif
@@ -642,21 +644,25 @@ int fd2_engine_init(int argc, char **argv)
     synth_set_bank_path(NULL);           /* default timbre until a DLS is set */
     audio_init(11025);
     ail_set_format(11025, 8, 0);
-    ail_set_master_volume(100);
+    {
+        const char *v = host_arg("VOLUME");
+
+        ail_set_master_volume(v ? atoi(v) : 100);
+    }
     parse_keys();
     parse_keyplay();
     {
-        const char *kl = getenv("FD2_KEYLOG");
-        const char *sm = getenv("FD2_STALL_MS");
-        const char *tp = getenv("FD2_TYPEMATIC");
-        const char *td = getenv("FD2_TYPEMATIC_DELAY");
-        const char *tr = getenv("FD2_TYPEMATIC_RATE");
+        const char *kl = host_arg("KEYLOG");
+        const char *sm = host_arg("STALL_MS");
+        const char *tp = host_arg("TYPEMATIC");
+        const char *td = host_arg("TYPEMATIC_DELAY");
+        const char *tr = host_arg("TYPEMATIC_RATE");
         if (sm) g_stall_ms = (unsigned)atoi(sm);
         if (td) g_rep_delay = (unsigned)atoi(td);
         if (tr) g_rep_period = (unsigned)atoi(tr);
-        if (getenv("FD2_HANG_EXIT"))
+        if (host_arg_flag("HANG_EXIT"))
             g_hang_exit = 1;
-        if (getenv("FD2_TYPEMATIC_DEBUG"))
+        if (host_arg_flag("TYPEMATIC_DEBUG"))
             g_rep_debug = 1;
         if (tp && atoi(tp) == 0)
             g_rep_enabled = 0;
@@ -674,7 +680,7 @@ int fd2_engine_init(int argc, char **argv)
          * losing focus or minimising silences the mixer.  `pause` also
          * freezes the game thread; `none` restores the old always-on
          * behaviour.  Comma-separated, e.g. FD2_UNFOCUS=mute,pause. */
-        const char *uf = getenv("FD2_UNFOCUS");
+        const char *uf = host_arg("UNFOCUS");
 
         if (uf) {
             if (strstr(uf, "none")) {
@@ -693,7 +699,12 @@ int fd2_engine_init(int argc, char **argv)
                g_unfocus_mute, g_unfocus_pause);
     }
     audio_set_muted(0);
+    host_args_dump();
     printf("fd2: engine init (log=%s, keys=%d)\n", log, g_nkeys);
+    printf("fd2: usage: fd2engine [--unfocus=mute|pause|mute,pause|none] "
+           "[--volume=N] [--upscale=...] [--aspect=...] [--log=FILE] "
+           "[--autokey=HEX,..] [--keyplay=FILE] ..."
+           " (env FD2_* still works)\n");
     return 0;
 }
 

@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "fd2_kernel.h"
+#include "host_args.h"
 #include "platform.h"
 #include "render.h"
 #include "keys.h"
@@ -43,7 +44,7 @@
 
 static render_desc g_rd;
 
-/* FD2_AUTOQUIT_MS=<ms>: close the window automatically after this many
+/* --autoquit-ms=<ms> (or FD2_AUTOQUIT_MS): close the window automatically after this many
  * milliseconds.  Used when launching the engine for a short test/demo run so
  * an unattended game does not keep playing audio forever. */
 static uint64_t g_autoquit_ms = 0;
@@ -480,7 +481,7 @@ int main(int argc, char **argv)
         return 1;
 
     {
-        const char *aq = getenv("FD2_AUTOQUIT_MS");
+        const char *aq = host_arg("AUTOQUIT_MS");
         if (aq && *aq)
             g_autoquit_ms = (uint64_t)atoll(aq);
         g_t0_ms = plat_now_ms();

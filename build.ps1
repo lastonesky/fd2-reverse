@@ -49,7 +49,7 @@ $cflags = "/nologo /W3 /utf-8 /wd4018 /EHsc /GS- /D_CRT_SECURE_NO_WARNINGS $cfg"
 $inc    = "/I `"$hostd`" /I `"$src`" /I `"$src\game`" /I `"$src\include`" /I `"$sokol`""
 
 $hostSrcs = @(
-    "platform_win32.c", "keys.c", "keys_win32.c",
+    "host_args.c", "platform_win32.c", "keys.c", "keys_win32.c",
     "render_sokol.c", "sokol_impl.c",
     "audio_sokol.c", "synth.c", "xmidi.c", "dls.c",
     "fd2_audio.c", "fd2_video.c", "fd2_platform.c", "fd2_kernel.c",

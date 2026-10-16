@@ -3844,3 +3844,18 @@ convert` 用 16 行点阵原样拷贝/缩放，导致 620/1824 个简体字形�
 
 **验证**：跑两个实例（第二个抢焦点）——第一个实例日志出现
 `window focus lost mute pause`，第二个退出后 `window focus gained unmute resume`。
+
+### 7.31 宿主运行参数改为标准命令行开关（`--name`，env 仍作回退）
+
+§7.29 的 `FD2_UNFOCUS` 是环境变量，用起来不直观。现在新增 `host/host_args.c`：一次性
+解析 `argv`，支持 `--name=value` 与 `--name value`，大小写 / `-` 与 `_` 等价，未命中的
+落到 `getenv("FD2_<NAME>")`。`host_arg()`/`host_arg_flag()` 是唯一入口。
+
+已接入：`--log` `--unfocus` `--volume`（新实现，之前只有 `ail_set_master_volume(100)` 写死）
+`--autoquit-ms` `--upscale` `--aspect` `--keys`/`--key-delay` `--keyplay` `--keylog`
+`--stall-ms` `--hang-exit` `--typematic*` `--gl-readback` `--testpattern`。启动日志打印
+识别到的开关与一条 usage。env 回退保持兼容（`FD2_UNFOCUS=none` 等继续有效）。
+
+构建：`host_args.c` 加入 `build.ps1` 与 `host/Makefile` 的 `HOST_SRCS`。
+验证：`--unfocus=pause --volume=0 --aspect=stretch --autoquit-ms=2500` 与
+`--unfocus pause --upscale sharp`（空格形式）、`FD2_UPSCALE=bicubic`（env）均按预期生效。

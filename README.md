@@ -114,3 +114,35 @@ src/
 2. 一切结论来自静态证据（反编译/反汇编/交叉引用/字节扫描）；与前人运行期结论冲突时
    标注“待第二阶段对拍”。
 3. 所有地址以 `FD2.EXE.i64` 为准（外部资料是另一 build，md5 不同）。
+
+## 运行参数（命令行开关）
+
+宿主现在统一走 `--name[=value]`（也接受 `--name value`，大小写与 `-`/`_` 不敏感），
+环境变量 `FD2_<NAME>` 仍作为回退，二者等价：
+
+| 开关 | 环境变量 | 说明 |
+|---|---|---|
+| `--unfocus=mute` | `FD2_UNFOCUS` | 窗口失焦/最小化时静音（默认 `mute`） |
+| `--unfocus=pause` | | 额外冻结游戏线程（隐含静音） |
+| `--unfocus=mute,pause` | | 两者都要 |
+| `--unfocus=none` | | 关闭该特性（后台照常出声/运行） |
+| `--volume=N` | `FD2_VOLUME` | 主音量 0..100（默认 100） |
+| `--upscale=nearest\|linear\|sharp\|bicubic` | `FD2_UPSCALE` | 呈现层放大算法（默认 nearest） |
+| `--aspect=off` | `FD2_ASPECT` | 关掉 4:3 保持，铺满窗口 |
+| `--log=FILE` | `FD2_LOG` | 日志文件（默认 `fd2engine.log`） |
+| `--autoquit-ms=N` | `FD2_AUTOQUIT_MS` | N 毫秒后自动关窗（测试用） |
+| `--autokey=HEX,..` | `FD2_KEYS` | 脚本化按键（BIOS scan 码） |
+| `--keyplay=FILE` | `FD2_KEYPLAY` | 回放 `--keylog` 记录的时间线 |
+| `--keylog=FILE` | `FD2_KEYLOG` | 记录按键时间线 |
+| `--hang-exit` | `FD2_HANG_EXIT` | 看门狗判定挂起时直接关窗（默认只记日志） |
+| `--stall-ms=N` | `FD2_STALL_MS` | 挂起判定阈值（毫秒） |
+| `--typematic=0` | `FD2_TYPEMATIC` | 关掉方向键连发 |
+
+例：
+
+```
+fd2engine.exe --unfocus=mute,pause --volume=60 --upscale=sharp
+fd2engine.exe --unfocus=none            # 不需要失焦处理
+```
+
+启动日志会列出识别到的开关（`fd2: arg   --NAME = '...'`）并把启动失败/策略写进去。
