@@ -3938,3 +3938,16 @@ Alt/Cmd 状态。
 **验证**（PowerShell `keybd_event` + `PostMessage WM_CLOSE`）：
 `--close=button` 下，不按 Alt 发 WM_CLOSE → 进程退出（日志 `window close accepted`）；
 按住 Alt 发 WM_CLOSE → 进程继续（日志 `keyboard quit shortcut blocked`）。
+
+### 7.36 定案：简体字体回到 WQY 16px（**全量**替换）
+
+试用的结论（用户从一批 OFL/CC0 点阵字体里挑选）：
+- 原生 16px 且覆盖全的，只有 **文泉驿点阵宋体 12pt(=16px)**；FashionBitmap16 缺 334 字
+  （实机到处方框），GNU Unifont 覆盖全但字形偏细，SimSun 有版权。
+- 12px 的 FusionPixel 很清晰但字太小、没感觉，放弃。
+
+最终：用 `wenquanyi_12pt.pcf` 按**简体字**（`_t2s`）**全量**重渲染 1824 个字形
+（1823 成功、1 个空格），避免 §7.34 的半新半旧问题。行统计 16 行满格，`row15` 由
+§7.23 的投影约束兜住。已覆盖 `E:\FD2\FDOTHER.simp.DAT`。
+预览 `E:\FD2\candidates\wqy16_final.png`（上=原版14px、下=WQY16 全量）。
+源字体 `E:\tmp\xwqy\...\wenquanyi_12pt.pcf`（另可从 `E:\FD2\fonts\` 备份，如需）。
