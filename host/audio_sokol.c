@@ -47,6 +47,7 @@ static unsigned         g_rate;
 
 static audio_music_fn   g_music;
 static int              g_hold;          /* silence until the game says go    */
+static int              g_muted;         /* window focus policy: output = 0   */
 static uint64_t         g_arm_t0;        /* when the gate was closed          */
 static int16_t          g_mus[MUS_FRAMES];
 static unsigned         g_mus_len, g_mus_pos;
@@ -68,6 +69,15 @@ static unsigned         g_dump_n;
 
 void audio_lock(void)   { if (g_cs_ready) plat_mutex_lock(&g_cs); }
 void audio_unlock(void) { if (g_cs_ready) plat_mutex_unlock(&g_cs); }
+
+void audio_set_muted(int on)
+{
+    audio_lock();
+    g_muted = on ? 1 : 0;
+    audio_unlock();
+}
+
+int audio_muted(void) { return g_muted; }
 
 /* ---------------------------------------------------------- convert ----- */
 /* 8-bit waveOut PCM is unsigned (silence 128), 16-bit signed; both already
@@ -255,6 +265,7 @@ static void mix_cb(float *out, int nframes, int nch)
         }
 
         x = m + s;
+        if (g_muted) x = 0.0f;           /* mute wins over everything            */
         if (x > 1.0f)  x = 1.0f;
         if (x < -1.0f) x = -1.0f;
         for (ch = 0; ch < nch; ch++)
@@ -275,6 +286,7 @@ static void mix_cb(float *out, int nframes, int nch)
         if (g_voice[v].active)
             sfx++;
 
+    if (g_muted) { peak_m = 0.0f; peak_s = 0.0f; }   /* telemetry: silence   */
     g_mixed      += (uint64_t)nframes;
     g_music_peak  = (int)(peak_m * 32767.0f);
     g_sfx_peak    = (int)(peak_s * 32767.0f);

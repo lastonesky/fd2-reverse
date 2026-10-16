@@ -50,6 +50,13 @@ unsigned audio_rate(void);
 void     audio_lock(void);
 void     audio_unlock(void);
 
+/* Mute/unmute the final mix.  Unlike the master volume (which is baked into
+ * each SFX copy at play time) this is applied at the output, so it silences
+ * music *and* effects instantly, whatever their own gains are.  Used by the
+ * window focus policy (FD2_UNFOCUS). */
+void     audio_set_muted(int on);
+int      audio_muted(void);
+
 /* Music stream: NULL stops it. audio_hold_music() forces silence until the
  * first audio_release_music() (see the start gate above). A gate nobody
  * opens after AUDIO_ARM_MS is released by the mixer anyway - play_bgm always

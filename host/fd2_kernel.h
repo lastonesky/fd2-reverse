@@ -38,6 +38,11 @@ void fd2_engine_key_set_ascii(uint8_t ascii);
 /* Stop everything (game usually already returned). */
 void fd2_engine_shutdown(void);
 
+/* Window focus changed.  Applies the FD2_UNFOCUS policy: mute the mixer
+ * and/or freeze the game thread while unfocused.  Called by the entry
+ * layer's FOCUSED / UNFOCUSED / ICONIFIED / RESTORED events. */
+void fd2_set_focus(int focused);
+
 /* BDA keyboard ring, used by fd2_platform.c's INT 16h service.  The ring is
  * protected by one mutex shared by every producer/consumer thread. */
 void fd2_kbd_push(uint8_t scan, uint8_t ascii);

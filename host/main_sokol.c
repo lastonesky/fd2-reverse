@@ -367,6 +367,22 @@ static void frame_cb(void)
 
 static void event_cb(const sapp_event *e)
 {
+    /* Window focus: mute and/or pause per FD2_UNFOCUS (see fd2_kernel.c).
+     * Handled for both entry paths before the key translation below. */
+    switch (e->type) {
+    case SAPP_EVENTTYPE_FOCUSED:
+    case SAPP_EVENTTYPE_RESTORED:
+        printf("sokol: window focused\n");
+        fd2_set_focus(1);
+        return;
+    case SAPP_EVENTTYPE_UNFOCUSED:
+    case SAPP_EVENTTYPE_ICONIFIED:
+        printf("sokol: window unfocused\n");
+        fd2_set_focus(0);
+        return;
+    default:
+        break;
+    }
 #if defined(_WIN32)
     switch (e->type) {
     case SAPP_EVENTTYPE_KEY_DOWN: {

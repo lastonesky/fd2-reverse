@@ -55,6 +55,29 @@ static int g_last_off = -1;
 static plat_mutex g_kbd_lock;
 static plat_cond  g_kbd_cond;
 volatile int      fd2_wait_depth;      /* >0 while parked in a wait */
+static volatile int g_quit;            /* set once the game thread returns   */
+static volatile int g_paused;          /* window unfocused + FD2_UNFOCUS=pause */
+
+/* Window focus policy, parsed from FD2_UNFOCUS in fd2_engine_init:
+ *   mute   (default) silence the mixer while unfocused
+ *   pause            also freeze the game thread at its next wait
+ *   none             do neither
+ * `pause` implies `mute` (a frozen game should not keep playing music). */
+static int g_unfocus_mute  = 1;
+static int g_unfocus_pause = 0;
+
+/* Block the game thread while paused.  Counts as parked so the hang watchdog
+ * stays quiet, and does not consume keys, so play resumes where it stopped. */
+static void wait_while_paused(void)
+{
+    plat_mutex_lock(&g_kbd_lock);
+    while (g_paused && !g_quit) {
+        fd2_wait_depth++;
+        plat_cond_wait(&g_kbd_cond, &g_kbd_lock);
+        fd2_wait_depth--;
+    }
+    plat_mutex_unlock(&g_kbd_lock);
+}
 
 void fd2_kbd_push(uint8_t scan, uint8_t ascii)
 {
@@ -111,6 +134,7 @@ void fd2_kbd_wait(uint8_t *scan, uint8_t *ascii)
     uint16_t head;
 
     fd2_video_publish();              /* frame complete: hand it to the presenter */
+    wait_while_paused();
     plat_mutex_lock(&g_kbd_lock);
     fd2_wait_depth++;
     while (bda16(KB_HEAD) == bda16(KB_TAIL))
@@ -135,6 +159,7 @@ void fd2_wait_tick(void)
     uint16_t t;
 
     fd2_video_publish();              /* frame complete: hand it to the presenter */
+    wait_while_paused();
     plat_mutex_lock(&g_kbd_lock);
     fd2_wait_depth++;
     t = bda16(0x46C);
@@ -151,6 +176,7 @@ void fd2_wait_tick_or_key(void)
     uint16_t t;
 
     fd2_video_publish();              /* frame complete: hand it to the presenter */
+    wait_while_paused();
     plat_mutex_lock(&g_kbd_lock);
     fd2_wait_depth++;
     t = bda16(0x46C);
@@ -166,14 +192,31 @@ void fd2_wait_tick_or_key(void)
 void fd2_delay_ms(unsigned ms)
 {
     fd2_video_publish();
+    wait_while_paused();
     fd2_wait_depth++;
     plat_sleep_ms(ms);
     fd2_wait_depth--;
 }
 
-/* ---- threads ----------------------------------------------------------- */
+/* Window focus policy entry point (called from the entry layer's
+ * FOCUSED/UNFOCUSED events). */
+void fd2_set_focus(int focused)
+{
+    printf("fd2: window focus %s%s%s\n",
+           focused ? "gained" : "lost",
+           g_unfocus_mute ? (focused ? " unmute" : " mute") : "",
+           g_unfocus_pause ? (focused ? " resume" : " pause") : "");
+    if (g_unfocus_mute)
+        audio_set_muted(focused ? 0 : 1);
+    if (g_unfocus_pause) {
+        plat_mutex_lock(&g_kbd_lock);
+        g_paused = focused ? 0 : 1;
+        plat_cond_broadcast(&g_kbd_cond);
+        plat_mutex_unlock(&g_kbd_lock);
+    }
+}
 
-static volatile int g_quit;
+/* ---- threads ----------------------------------------------------------- */
 
 #if defined(_WIN32)
 static DWORD g_game_tid;             /* set by the game thread itself */
@@ -626,6 +669,30 @@ int fd2_engine_init(int argc, char **argv)
                 printf("fd2: keylog -> %s (<ms>,<scan>,<ascii> per line)\n", kl);
         }
     }
+    {
+        /* Window focus policy (see g_unfocus_* above).  Default `mute`:
+         * losing focus or minimising silences the mixer.  `pause` also
+         * freezes the game thread; `none` restores the old always-on
+         * behaviour.  Comma-separated, e.g. FD2_UNFOCUS=mute,pause. */
+        const char *uf = getenv("FD2_UNFOCUS");
+
+        if (uf) {
+            if (strstr(uf, "none")) {
+                g_unfocus_mute = g_unfocus_pause = 0;
+            } else {
+                g_unfocus_mute  = strstr(uf, "mute") != NULL;
+                g_unfocus_pause = strstr(uf, "pause") != NULL ||
+                                  strstr(uf, "stop")  != NULL;
+                if (g_unfocus_pause)
+                    g_unfocus_mute = 1;      /* paused => silent too      */
+                if (!g_unfocus_mute && !g_unfocus_pause)
+                    g_unfocus_mute = 1;      /* bare value => mute        */
+            }
+        }
+        printf("fd2: unfocus policy: mute=%d pause=%d\n",
+               g_unfocus_mute, g_unfocus_pause);
+    }
+    audio_set_muted(0);
     printf("fd2: engine init (log=%s, keys=%d)\n", log, g_nkeys);
     return 0;
 }
