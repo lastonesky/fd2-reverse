@@ -3913,3 +3913,28 @@ Ark Pixel、Fusion Pixel、ZLabs Pixel、Cubic 11、Boutique 9x9）。逐档探�
 
 对比图 `E:\FD2\candidates\fusion12_final.png`（上=全量替换、下=半新半旧）。
 **教训**：换整套源字体时必须全量替换；只有"同字体、仅繁转简"时才只换差异字形。
+
+### 7.35 窗口关闭策略：区分「关闭按钮」与「Alt+F4」（`--close`）
+
+之前为了不让误按 Alt+F4 丢进度，`QUIT_REQUESTED` 一律 `sapp_cancel_quit()`，结果
+**标题栏关闭按钮也点不动了**。二者其实可以区分——**键盘快捷键必然在修饰键按住时到达**：
+
+- Windows/Linux：Alt+F4（WM_CLOSE / WM_DELETE_WINDOW）到达时 Alt 仍按着；
+- macOS：Cmd+W（windowShouldClose）到达时 Cmd 仍按着。
+
+`host/main_sokol.c`：进入 `QUIT_REQUESTED` 时判断修饰键是否按下——按住则
+`sapp_cancel_quit()`（拦截快捷键），否则 `sapp_quit()`（放行关闭按钮）；失焦时清掉
+修饰键状态。Windows 上不用 sokol 的按键事件推断（scancode 不一定映射得到），而是直接
+`GetAsyncKeyState(VK_MENU/VK_LMENU/VK_RMENU)`；X11/macOS 用 key 事件跟踪的
+Alt/Cmd 状态。
+
+运行参数 `--close`（默认 `button`）：
+| 值 | 行为 |
+|---|---|
+| `button` | 关闭按钮可关；Alt+F4 / Cmd+W 被拦截 |
+| `both` | 两种都关 |
+| `none` | 两种都拦（Ctrl+Esc 仍可退） |
+
+**验证**（PowerShell `keybd_event` + `PostMessage WM_CLOSE`）：
+`--close=button` 下，不按 Alt 发 WM_CLOSE → 进程退出（日志 `window close accepted`）；
+按住 Alt 发 WM_CLOSE → 进程继续（日志 `keyboard quit shortcut blocked`）。

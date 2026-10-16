@@ -366,8 +366,78 @@ static void frame_cb(void)
     }
 }
 
+/* --- close policy -------------------------------------------------------
+ * The title-bar close button and the keyboard quit shortcut (Windows/Linux
+ * Alt+F4, macOS Cmd+W) both arrive as a single QUIT_REQUESTED event
+ * (WM_CLOSE / WM_DELETE_WINDOW / windowShouldClose), so the event itself
+ * cannot tell them apart.  The *modifier state* can: the shortcut is
+ * delivered while Alt (Cmd on macOS) is still held, the button is not.
+ * Track that key and only cancel the request while it is down.
+ *
+ *   --close=button (default) title-bar button quits; Alt+F4/Cmd+W does not
+ *   --close=both             both quit
+ *   --close=none             neither (Ctrl+Esc still exits)
+ */
+enum { QUIT_BUTTON = 0, QUIT_BOTH, QUIT_NONE };
+static int g_quit_policy = QUIT_BUTTON;
+static int g_quit_mod_down;          /* Alt (X11) / Cmd (macOS) held */
+
+/* Is the keyboard-quit modifier physically down right now?  On Windows we ask
+ * the OS directly (sokol's scancode mapping does not always surface a
+ * synthetic/Alt press, and GetAsyncKeyState is what the WM_CLOSE handler can
+ * trust); on X11/macOS use the state sokol delivered via key events. */
+static int quit_shortcut_held(void)
+{
+#if defined(_WIN32)
+    return (GetAsyncKeyState(VK_MENU)  & 0x8000) != 0 ||
+           (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0 ||
+           (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0;
+#else
+    return g_quit_mod_down;
+#endif
+}
+
+static void handle_quit_request(void)
+{
+    int block;
+
+    switch (g_quit_policy) {
+    case QUIT_BOTH: block = 0; break;
+    case QUIT_NONE: block = 1; break;
+    default:        block = quit_shortcut_held(); break;
+    }
+    if (block) {
+        printf("sokol: keyboard quit shortcut blocked "
+               "(close button still works; Ctrl+Esc exits)\n");
+        sapp_cancel_quit();
+    } else {
+        printf("sokol: window close accepted (quitting)\n");
+        sapp_quit();
+    }
+}
+
 static void event_cb(const sapp_event *e)
 {
+    /* Close policy: remember whether the keyboard-quit modifier is held, and
+     * handle the quit request before the per-OS key translation. */
+    if (e->type == SAPP_EVENTTYPE_KEY_DOWN || e->type == SAPP_EVENTTYPE_KEY_UP) {
+        int down = (e->type == SAPP_EVENTTYPE_KEY_DOWN);
+
+#if defined(__APPLE__)
+        if (e->key_code == SAPP_KEYCODE_LEFT_SUPER ||
+            e->key_code == SAPP_KEYCODE_RIGHT_SUPER)
+            g_quit_mod_down = down;
+#else
+        if (e->key_code == SAPP_KEYCODE_LEFT_ALT ||
+            e->key_code == SAPP_KEYCODE_RIGHT_ALT)
+            g_quit_mod_down = down;
+#endif
+    }
+    if (e->type == SAPP_EVENTTYPE_QUIT_REQUESTED) {
+        handle_quit_request();
+        return;
+    }
+
     /* Window focus: mute and/or pause per FD2_UNFOCUS (see fd2_kernel.c).
      * Handled for both entry paths before the key translation below. */
     switch (e->type) {
@@ -379,6 +449,7 @@ static void event_cb(const sapp_event *e)
     case SAPP_EVENTTYPE_UNFOCUSED:
     case SAPP_EVENTTYPE_ICONIFIED:
         printf("sokol: window unfocused\n");
+        g_quit_mod_down = 0;         /* no key-up while unfocused */
         fd2_set_focus(0);
         return;
     default:
@@ -405,17 +476,6 @@ static void event_cb(const sapp_event *e)
         if (0)
             break;
         push_vk(sapp_to_vk((int)e->key_code), 0);
-        break;
-    case SAPP_EVENTTYPE_QUIT_REQUESTED:
-        /* Alt+F4 (WM_SYSCOMMAND/SC_CLOSE -> WM_CLOSE) and the title-bar
-         * close button both reach us here.  Do not quit: Windows keeps
-         * delivering these even though the DOS original had no window, so
-         * an accidental Alt+F4 would drop the player out mid-game.
-         * sapp_cancel_quit() clears the pending request, which also stops
-         * sokol's message loop from re-posting WM_CLOSE.  Ctrl+Esc is the
-         * explicit escape hatch (see KEY_DOWN above). */
-        printf("sokol: quit request ignored (use Ctrl+Esc to exit)\n");
-        sapp_cancel_quit();
         break;
     default:
         break;
@@ -451,13 +511,6 @@ static void event_cb(const sapp_event *e)
             g_char_pending = 0;
         }
         break;
-    case SAPP_EVENTTYPE_QUIT_REQUESTED:
-        /* Alt+F4 / the title-bar close button reach us as WM_DELETE_WINDOW.
-         * Ignore it and keep the session running; Ctrl+Esc is the explicit
-         * escape hatch (see KEY_DOWN above). */
-        printf("sokol: quit request ignored (use Ctrl+Esc to exit)\n");
-        sapp_cancel_quit();
-        break;
     default:
         break;
     }
@@ -482,8 +535,21 @@ int main(int argc, char **argv)
 
     {
         const char *aq = host_arg("AUTOQUIT_MS");
+        const char *cl = host_arg("CLOSE");
+
         if (aq && *aq)
             g_autoquit_ms = (uint64_t)atoll(aq);
+        if (cl) {
+            if (strstr(cl, "both"))
+                g_quit_policy = QUIT_BOTH;
+            else if (strstr(cl, "none"))
+                g_quit_policy = QUIT_NONE;
+            else
+                g_quit_policy = QUIT_BUTTON;
+        }
+        printf("fd2: close policy: %s\n",
+               g_quit_policy == QUIT_BOTH ? "both" :
+               g_quit_policy == QUIT_NONE ? "none" : "button");
         g_t0_ms = plat_now_ms();
     }
 

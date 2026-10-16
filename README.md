@@ -127,6 +127,9 @@ src/
 | `--unfocus=none` / `sound` | | 不处理，后台照常出声/运行 |
 | `--unfocus=fade` | | 失焦音量淡出、获得焦点淡入 |
 | `--unfocus-fade-ms=N` | `FD2_UNFOCUS_FADE_MS` | 淡入淡出时长，默认 300 ms |
+| `--close=button` | `FD2_CLOSE` | **默认**：标题栏关闭按钮可关，Alt+F4/Cmd+W 拦截 |
+| `--close=both` | | 两种都关 |
+| `--close=none` | | 两种都拦（仍可用 Ctrl+Esc 退出） |
 | `--volume=N` | `FD2_VOLUME` | 主音量 0..100（默认 100） |
 | `--upscale=nearest\|linear\|sharp\|bicubic` | `FD2_UPSCALE` | 呈现层放大算法（默认 nearest） |
 | `--aspect=off` | `FD2_ASPECT` | 关掉 4:3 保持，铺满窗口 |
