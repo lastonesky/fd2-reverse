@@ -85,7 +85,7 @@ void host_args_dump(void)
 {
     static const char *known[] = {
         "LOG", "GAMEDIR", "EXE",
-        "UNFOCUS", "AUTOQUIT_MS",
+        "UNFOCUS", "UNFOCUS_FADE_MS", "AUTOQUIT_MS",
         "UPSCALE", "ASPECT",
         "VOLUME", "KEYS", "KEY_DELAY", "KEYPLAY", "KEYLOG",
         "STALL_MS", "HANG_EXIT",

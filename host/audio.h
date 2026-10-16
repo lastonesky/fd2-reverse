@@ -50,11 +50,14 @@ unsigned audio_rate(void);
 void     audio_lock(void);
 void     audio_unlock(void);
 
-/* Mute/unmute the final mix.  Unlike the master volume (which is baked into
- * each SFX copy at play time) this is applied at the output, so it silences
- * music *and* effects instantly, whatever their own gains are.  Used by the
- * window focus policy (FD2_UNFOCUS). */
+/* Output gain for the window focus policy.  Unlike the master volume (which
+ * is baked into each SFX copy at play time) this is applied at the output, so
+ * it silences music *and* effects whatever their own gains are.
+ *   audio_set_muted(on)        instant jump to 0 / 1
+ *   audio_set_fade(out, ms)    ramp to 0 / 1 over `ms` (ms = 0 is instant)
+ */
 void     audio_set_muted(int on);
+void     audio_set_fade(int out, unsigned ms);
 int      audio_muted(void);
 
 /* Music stream: NULL stops it. audio_hold_music() forces silence until the

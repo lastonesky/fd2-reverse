@@ -122,10 +122,11 @@ src/
 
 | 开关 | 环境变量 | 说明 |
 |---|---|---|
-| `--unfocus=mute` | `FD2_UNFOCUS` | 窗口失焦/最小化时静音（默认 `mute`） |
-| `--unfocus=pause` | | 额外冻结游戏线程（隐含静音） |
-| `--unfocus=mute,pause` | | 两者都要 |
-| `--unfocus=none` | | 关闭该特性（后台照常出声/运行） |
+| `--unfocus=mute` | `FD2_UNFOCUS` | 失焦/最小化时静音，回来恢复（**默认**） |
+| `--unfocus=pause` | | 冻结游戏线程（隐含静音，音乐在混音线程合成，不静音会继续响） |
+| `--unfocus=none` / `sound` | | 不处理，后台照常出声/运行 |
+| `--unfocus=fade` | | 失焦音量淡出、获得焦点淡入 |
+| `--unfocus-fade-ms=N` | `FD2_UNFOCUS_FADE_MS` | 淡入淡出时长，默认 300 ms |
 | `--volume=N` | `FD2_VOLUME` | 主音量 0..100（默认 100） |
 | `--upscale=nearest\|linear\|sharp\|bicubic` | `FD2_UPSCALE` | 呈现层放大算法（默认 nearest） |
 | `--aspect=off` | `FD2_ASPECT` | 关掉 4:3 保持，铺满窗口 |
@@ -141,8 +142,9 @@ src/
 例：
 
 ```
-fd2engine.exe --unfocus=mute,pause --volume=60 --upscale=sharp
-fd2engine.exe --unfocus=none            # 不需要失焦处理
+fd2engine.exe --unfocus=pause --volume=60 --upscale=sharp
+fd2engine.exe --unfocus=fade --unfocus-fade-ms=500
+fd2engine.exe --unfocus=none            # 不需要失焦处理（= sound）
 ```
 
 启动日志会列出识别到的开关（`fd2: arg   --NAME = '...'`）并把启动失败/策略写进去。

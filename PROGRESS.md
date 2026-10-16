@@ -3859,3 +3859,26 @@ convert` 用 16 行点阵原样拷贝/缩放，导致 620/1824 个简体字形�
 构建：`host_args.c` 加入 `build.ps1` 与 `host/Makefile` 的 `HOST_SRCS`。
 验证：`--unfocus=pause --volume=0 --aspect=stretch --autoquit-ms=2500` 与
 `--unfocus pause --upscale sharp`（空格形式）、`FD2_UPSCALE=bicubic`（env）均按预期生效。
+
+### 7.32 失焦策略定稿：`mute`(默认) / `pause` / `none`(=sound) / `fade`
+
+§7.29/§7.31 的策略简化成一个枚举（`fd2_kernel.c`）：
+
+| `--unfocus=` | 行为 |
+|---|---|
+| `mute`（默认） | 失焦立即静音，回来恢复 |
+| `pause`（含 `stop`） | 冻结游戏线程（隐含静音） |
+| `none`（同 `sound`/`off`/`keep`） | 不处理，后台照常出声/运行 |
+| `fade` | 失焦输出增益淡出到 0、获得焦点淡入到 1，时长 `--unfocus-fade-ms`（默认 300） |
+
+`pause` 既然隐含静音，就不再需要单独的 `mute,pause` 组合。
+
+音频侧把 §7.29 的布尔 `g_muted` 换成**输出增益斜坡**（`audio_sokol.c`）：
+`audio_set_muted()` = 立即跳变，`audio_set_fade(out, ms)` = 每帧按
+`1/(rate*ms/1000)` 步进逼近期望增益；`mix_cb` 每帧对 music/SFX 乘当前增益后再
+求和、限幅、算 peak，所以遥测显示的就是实际输出。`g_gain`/`g_gain_tgt` 在
+device 回调持有的锁下访问。
+
+验证：`--unfocus` 取值 mute/pause/none/sound/fade 全部按预期解析；双实例测试
+`--unfocus=fade --unfocus-fade-ms=500` 日志出现 `window focus lost -> fade` /
+`gained -> fade`，并打印 `unfocus fade: 500 ms`。

@@ -47,7 +47,9 @@ static unsigned         g_rate;
 
 static audio_music_fn   g_music;
 static int              g_hold;          /* silence until the game says go    */
-static int              g_muted;         /* window focus policy: output = 0   */
+static float            g_gain = 1.0f;   /* focus policy output gain (0..1)   */
+static float            g_gain_tgt = 1.0f;
+static float            g_gain_step = 1.0f;   /* per frame, from the fade ms  */
 static uint64_t         g_arm_t0;        /* when the gate was closed          */
 static int16_t          g_mus[MUS_FRAMES];
 static unsigned         g_mus_len, g_mus_pos;
@@ -70,14 +72,29 @@ static unsigned         g_dump_n;
 void audio_lock(void)   { if (g_cs_ready) plat_mutex_lock(&g_cs); }
 void audio_unlock(void) { if (g_cs_ready) plat_mutex_unlock(&g_cs); }
 
-void audio_set_muted(int on)
+static void audio_set_gain(float target, unsigned ms)
 {
     audio_lock();
-    g_muted = on ? 1 : 0;
+    g_gain_tgt = target < 0.0f ? 0.0f : (target > 1.0f ? 1.0f : target);
+    if (ms == 0 || g_rate == 0) {
+        g_gain      = g_gain_tgt;
+        g_gain_step = 1.0f;
+    } else {
+        float frames = (float)g_rate * (float)ms / 1000.0f;
+
+        g_gain_step = (frames > 0.5f) ? (1.0f / frames) : 1.0f;
+    }
     audio_unlock();
 }
 
-int audio_muted(void) { return g_muted; }
+void audio_set_muted(int on) { audio_set_gain(on ? 0.0f : 1.0f, 0); }
+
+void audio_set_fade(int out, unsigned ms)
+{
+    audio_set_gain(out ? 0.0f : 1.0f, ms);
+}
+
+int audio_muted(void) { return g_gain_tgt == 0.0f && g_gain == 0.0f; }
 
 /* ---------------------------------------------------------- convert ----- */
 /* 8-bit waveOut PCM is unsigned (silence 128), 16-bit signed; both already
@@ -264,8 +281,17 @@ static void mix_cb(float *out, int nframes, int nch)
                 p->active = 0;
         }
 
+        /* Focus gain: jump for mute, or ramp one step per frame for a fade. */
+        if (g_gain < g_gain_tgt) {
+            g_gain += g_gain_step;
+            if (g_gain > g_gain_tgt) g_gain = g_gain_tgt;
+        } else if (g_gain > g_gain_tgt) {
+            g_gain -= g_gain_step;
+            if (g_gain < g_gain_tgt) g_gain = g_gain_tgt;
+        }
+        m *= g_gain;
+        s *= g_gain;
         x = m + s;
-        if (g_muted) x = 0.0f;           /* mute wins over everything            */
         if (x > 1.0f)  x = 1.0f;
         if (x < -1.0f) x = -1.0f;
         for (ch = 0; ch < nch; ch++)
@@ -286,7 +312,6 @@ static void mix_cb(float *out, int nframes, int nch)
         if (g_voice[v].active)
             sfx++;
 
-    if (g_muted) { peak_m = 0.0f; peak_s = 0.0f; }   /* telemetry: silence   */
     g_mixed      += (uint64_t)nframes;
     g_music_peak  = (int)(peak_m * 32767.0f);
     g_sfx_peak    = (int)(peak_s * 32767.0f);
