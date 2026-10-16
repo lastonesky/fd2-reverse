@@ -46,6 +46,15 @@ FONT_RES = 4              # FDOTHER.DAT resource holding the 16x16 font
 GLYPH_BYTES = 32
 GLYPH_W = GLYPH_H = 16
 
+# The original FD2 font is a 14-row face (ink in rows 0..13) sitting in the
+# 16x16 cell: row 15 is inked by 0 of 1824 glyphs and row 14 by only 7.  The
+# engine relies on this - gfx_draw_glyph (0x4ED7A) puts the drop shadow on
+# r+1, and dlg_scroll_text (0x16E24) only shifts/clears a 72-row text window.
+# A glyph that inks row 15 therefore both looks oversized and smears shadow
+# into the next text line after a scroll.  Keep regenerated glyphs in the same
+# band as the original.
+FD2_GLYPH_ROWS = 14
+
 
 # --------------------------------------------------------------- DAT ------
 def load_dat(path):
@@ -120,14 +129,45 @@ def _bits_to_fd2(a):
     return bytes(out)
 
 
+def _fit_grid(a):
+    """Tight-crop a boolean glyph and fit it into the FD2 14-row band.
+
+    Top-aligned at row 0 (the original is: 1739/1824 glyphs start on row 0) and
+    horizontally centred, scaled only when the ink would not otherwise fit -
+    a native 16px bitmap strike that is already <=14 rows is copied verbatim so
+    it stays crisp.
+    """
+    from PIL import Image
+    np = __import__("numpy")
+    ys, xs = np.where(a)
+    a = a[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    h, w = a.shape
+    s = min(FD2_GLYPH_ROWS / h, 15.0 / w)
+    nh, nw = max(1, round(h * s)), max(1, round(w * s))
+    if (nh, nw) != (h, w):
+        # NEAREST keeps the 1bpp strokes crisp; LANCZOS-then-threshold makes
+        # them wavy on a 16->14 downscale (checked on 沒/還/抵).
+        a = np.array(Image.fromarray((a * 255).astype("uint8"))
+                     .resize((nw, nh), Image.NEAREST)) > 128
+    out = np.zeros((16, 16), dtype=bool)
+    x0 = (16 - nw) // 2
+    for yy in range(nh):
+        for xx in range(nw):
+            gx = x0 + xx
+            if a[yy, xx] and 0 <= gx < 16:
+                out[yy][gx] = True
+    return out
+
+
 def _render_face(ch, path, index):
     """Render `ch` from one font file into a 16x16 FD2 glyph.
 
-    Native/embedded bitmap strikes come out pure 0/255 from FreeType; those are
-    copied verbatim (16x16 cell) so pixels stay crisp.  Anti-aliased outlines
-    (vector fonts) are thresholded, tight-cropped, scaled to <=15px and centred.
+    Native/embedded bitmap strikes come out pure 0/255 from FreeType; they are
+    tight-cropped and, when they already fit, copied verbatim so pixels stay
+    crisp.  Anti-aliased outlines are thresholded first.  Either way the result
+    is fitted into the FD2_GLYPH_ROWS-row band (see the constant above).
     """
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import ImageDraw, ImageFont
     np = __import__("numpy")
     f = ImageFont.truetype(path, 16, index=index)
     img = Image.new("L", (24, 24), 0)
@@ -135,25 +175,10 @@ def _render_face(ch, path, index):
     arr = np.array(img)
     if arr.max() == 0:
         return None
-    if set(np.unique(arr).tolist()) <= {0, 255}:
-        cell = arr[3:19, 3:19] > 128          # native bitmap strike
-        return _bits_to_fd2(cell) if cell.sum() else None
-    a = arr > 128                             # outline -> crop/centre
-    ys, xs = np.where(a)
-    a = a[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-    h, w = a.shape
-    s = min(15.0 / h, 15.0 / w)
-    nh, nw = max(1, round(h * s)), max(1, round(w * s))
-    b = np.array(Image.fromarray((a * 255).astype("uint8")).resize((nw, nh), Image.LANCZOS)) > 128
-    grid = [[False] * 16 for _ in range(16)]
-    y0, x0 = (16 - nh) // 2, (16 - nw) // 2
-    for yy in range(nh):
-        for xx in range(nw):
-            if b[yy, xx]:
-                gx, gy = x0 + xx, y0 + yy
-                if 0 <= gx < 16 and 0 <= gy < 16:
-                    grid[gy][gx] = True
-    return _bits_to_fd2(grid)
+    a = arr > 128
+    if not a.any():
+        return None
+    return _bits_to_fd2(_fit_grid(a))
 
 
 def render_glyph(ch, bold=True):
@@ -355,6 +380,31 @@ def cmd_convert(args):
     print(f"converted {changed} glyph(s) -> {args.out} (font {ng} glyphs, mapped {len(mapping)})")
 
 
+def cmd_fit_rows(args):
+    """把现有字体里超出 FD2_GLYPH_ROWS 行的字形压回原版字高。
+
+    不需要原始字体：直接把字形按墨迹 bbox 裁剪/缩放后顶部对齐到第 0 行。
+    用于修复已经用旧版 convert 生成的 DAT（字形用了第 14/15 行，比原版大）。
+    """
+    import numpy as np
+    dat, header, ends = load_dat(args.data)
+    font = bytearray(dat[FONT_RES])
+    ng = len(font) // GLYPH_BYTES
+    changed = 0
+    for g in range(ng):
+        a = np.array(glyph_bytes_to_rows(font[g * GLYPH_BYTES:(g + 1) * GLYPH_BYTES]),
+                     dtype=bool)
+        if not a.any():
+            continue
+        if a[FD2_GLYPH_ROWS:, :].any():
+            font[g * GLYPH_BYTES:(g + 1) * GLYPH_BYTES] = _bits_to_fd2(_fit_grid(a))
+            changed += 1
+    dat[FONT_RES] = bytes(font)
+    out = args.out or args.data
+    write_dat(out, dat, header, ends)
+    print(f"fit-rows: {changed}/{ng} glyph(s) resized -> {out}")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="FD2 字形反查 / 繁->简重生成")
     ap.add_argument("--exe", default="FDOTHER.DAT", help="FDOTHER.DAT 路径")
@@ -390,6 +440,11 @@ def main(argv=None):
     s.add_argument("--data", default=".", help="含 FDOTHER.DAT 的目录")
     s.add_argument("--out", default="/tmp/FDOTHER.simp.DAT")
     s.set_defaults(func=cmd_convert)
+
+    s = sub.add_parser("fit-rows", help="把现有 DAT 里超出 14 行的字形压回原版字高")
+    s.add_argument("--data", default="FDOTHER.DAT", help="要修复的 FDOTHER.DAT")
+    s.add_argument("--out", default="", help="输出路径（默认原地改写）")
+    s.set_defaults(func=cmd_fit_rows)
     args = ap.parse_args(argv)
     args.func(args)
     return 0
