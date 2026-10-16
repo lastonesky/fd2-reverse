@@ -3069,3 +3069,31 @@ PROGRESS §7.20），本条仅作 `main` 侧知识备份。
 - **最后一关的睡龙 / 炎龙剑**：龙应是地图上带特殊事件的记录（`funcs_1199C` 场景处理器 +
   `map_cell_event`），传送唤醒和掉落都走事件脚本；具体在 FDFIELD 的章节数据里，源码层只
   能看到通用机制。
+
+### 5.11 工具：`tools/fd2secrets.py`（隐藏事件 / 道具扫描）
+
+**FDFIELD/FDSHAP 的 DAT 偏移表存的是 END 偏移**（不是 start）：资源 i =
+`[ (i==0 ? header_size : offs[i-1]), offs[i] )`。每个状态 s 用三连：
+
+| 资源 | 内容 | 源码全局 |
+|---|---|---|
+| `FDFIELD[3s]`   | 地图：`u16 W, u16 H` + `W*H` × 4 字节格 | `dword_53A51` |
+| `FDFIELD[3s+1]` | 状态头（事件表；存档里同一段 0x8A3） | `dword_53A55` |
+| `FDFIELD[3s+2]` | 单位/记录摆放 | `dword_53A59` |
+| `FDSHAP[2*ts]`   | 精灵库 | `dword_53A5D` |
+| `FDSHAP[2*ts+1]` | 每 tile 4 字节信息表 | `dword_53A69` |
+
+格 `(x,y)` = `map + 4 + 4*(x + W*y)`：`[0..1] tile&0x3FF`、`[2] flags&0x1F`、`[3]`
+精灵状态（`map_cell_info` 0x12E38 + `util_fix_records` 0x4DF4C）。事件表在状态头
+`+0x53`，每 flag 3 字节 `[kind, value_lo, value_hi]`（`map_cell_event` 0x190AC）：
+`kind 0`=道具（value=道具 id）、`kind 1`=钱、其它=`funcs_1199C[value]` 脚本。格还要满足
+`tile_info & 0x60 != 0`（FDSHAP 信息表 `[4*tile]`）才触发 —— 这就是地图上那个“微小亮点”。
+
+扫描结果：**全 30 个状态共 79 个隐藏道具/金钱事件**分布在特殊格上（`state/flag/坐标/tile`
+全由工具打印）。道具 id 最大 **214**；后几关给的是 id 195/198–200/207 等特殊品类
+（道具表 type 32/34）。`--save FD2.SAV` 会读存档 `+0x30A3` 的 `dword_53AD5` 标出“已拿”。
+
+示例：`python3 tools/fd2secrets.py <DATA_DIR> --all --items --save FD2.SAV`。
+
+> 道具**名字**未解码：FDTXT 的字符串是 u16 字形索引（不是 Big5/GBK），需要字形表才能
+> 映回汉字；`box_items_draw` 用 `vm_run(dword_53A7D, item_id + 181, ...)` 取名字。
