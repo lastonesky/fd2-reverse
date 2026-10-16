@@ -133,7 +133,13 @@ void gfx_blit_transparent(void *dest, const void *src, int stride)
 
 /* ------------------------------------------------------------------ */
 /* 0x4ED7A: 16x16 1bpp glyph with foreground / drop shadow / fill      */
-/* ------------------------------------------------------------------ */
+/*
+ * Port note: the original FDOTHER font only ever inks rows 0..14 (row 15 is
+ * set in 0/1824 glyphs), so its drop shadow never leaves the 16x16 cell.
+ * The Simplified font (16-row SimSun, see PROGRESS 7.26) does ink row 15, and
+ * its row-16 shadow survives dlg_scroll_text's 72-row window as a ghost.  Do
+ * not draw the shadow on the last row: a no-op for the original font (so the
+ * gfxcheck comparison still holds) and safe for 16-row replacement fonts. */
 void gfx_draw_glyph(const void *glyph_table, int index, void *dest, int stride,
                     int fg, int shadow, int fill)
 {
@@ -179,9 +185,11 @@ void gfx_draw_glyph(const void *glyph_table, int index, void *dest, int stride,
                 unsigned set = row & 0x8000u;
                 row = (uint16_t)(row << 1);
                 if (set) {
-                    p[0]           = gfx_pen_fg;
-                    p[st - 1]      = gfx_pen_shadow;    /* one row down, left */
-                    p[st]          = gfx_pen_shadow;    /* one row down       */
+                    p[0] = gfx_pen_fg;
+                    if (r < 15) {       /* shadow must stay in the cell */
+                        p[st - 1] = gfx_pen_shadow; /* one row down, left */
+                        p[st]     = gfx_pen_shadow; /* one row down       */
+                    }
                 }
                 ++p;
             }
