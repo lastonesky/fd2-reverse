@@ -23,6 +23,13 @@
     python3 tools/fd2_fonttool.py decode --text FDTXT.DAT --res 0 --sub 192
     python3 tools/fd2_fonttool.py build-map --exe /path/FDOTHER.DAT --items
     python3 tools/fd2_fonttool.py convert --data /path/to/FD2 --out /tmp/FDOTHER.simp.DAT
+
+字体选择：默认用「文泉驿点阵宋体」（16×16 原生点阵，GPL2+字体嵌入例外，
+可随 DAT 分发）。想换字体（如本机的 SimSun 或霞鹜新致宋）时：
+    FD2_SONG_FONT=/path/to/font.ttf python3 tools/fd2_fonttool.py convert ...
+    FD2_SIMSUN=/path/to/simsun.ttc  python3 tools/fd2_fonttool.py convert ...  # 别名
+注意：专有字体（SimSun 等）生成的 DAT 只可本机自用，不得分发；矢量字体在
+16px 下通常不如原生点阵清晰。
 """
 from __future__ import annotations
 
@@ -79,47 +86,91 @@ def glyph_bytes_to_rows(g):
     return rows
 
 
-def render_glyph(ch, bold=True):
-    """把汉字渲染成 FD2 风格的 16x16 1bpp（返回 32 字节）。"""
+# Font candidates, tried in order.  Each entry is (path, index).  Native 16px
+# bitmap faces come out crisp; the renderer auto-detects bitmap vs outline.
+# WenQuanYi Bitmap Song is GPL2 + font-embedding exception, so its glyphs may
+# be embedded in FDOTHER.SIMP.DAT and redistributed; it is the default.
+SONG_FONTS = [
+    ("/usr/share/fonts/wenquanyi/wenquanyi_12pt.pcf", 0),
+    (os.path.expanduser("~/.local/share/fonts/wenquanyi_12pt.pcf"), 0),
+    (os.path.join(FD2DATA, "wenquanyi_12pt.pcf"), 0),
+    ("/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc", 2),
+    ("/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc", 3),
+    ("/usr/share/fonts/wenquanyi/wqy-microhei/wqy-microhei.ttc", 0),
+]
+
+# Optional first-choice font for local experiments (e.g. SimSun or 霞鹜新致宋):
+# FD2_SONG_FONT=/path/to/font.ttf  (FD2_SIMSUN kept as an alias).  Proprietary
+# fonts selected this way must not be redistributed.
+_extra = os.environ.get("FD2_SONG_FONT") or os.environ.get("FD2_SIMSUN")
+if _extra:
+    SONG_FONTS.insert(0, (_extra, 0))
+
+
+def _bits_to_fd2(a):
+    """16x16 bool grid -> FD2 32-byte 1bpp glyph (see gfx_draw_glyph 0x4ED7A)."""
+    out = bytearray(32)
+    for y in range(16):
+        for x in range(16):
+            if a[y, x]:
+                if x < 8:
+                    out[y * 2] |= 1 << (7 - x)
+                else:
+                    out[y * 2 + 1] |= 1 << (15 - x)
+    return bytes(out)
+
+
+def _render_face(ch, path, index):
+    """Render `ch` from one font file into a 16x16 FD2 glyph.
+
+    Native/embedded bitmap strikes come out pure 0/255 from FreeType; those are
+    copied verbatim (16x16 cell) so pixels stay crisp.  Anti-aliased outlines
+    (vector fonts) are thresholded, tight-cropped, scaled to <=15px and centred.
+    """
     from PIL import Image, ImageDraw, ImageFont
-    cands = [
-        ("/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc", 3),
-        ("/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc", 2),   # SC fallback
-        ("/usr/share/fonts/wenquanyi/wqy-microhei/wqy-microhei.ttc", 0),
-    ]
-    for path, idx in cands:
-        if not os.path.exists(path):
+    np = __import__("numpy")
+    f = ImageFont.truetype(path, 16, index=index)
+    img = Image.new("L", (24, 24), 0)
+    ImageDraw.Draw(img).text((3, 3), ch, fill=255, font=f)
+    arr = np.array(img)
+    if arr.max() == 0:
+        return None
+    if set(np.unique(arr).tolist()) <= {0, 255}:
+        cell = arr[3:19, 3:19] > 128          # native bitmap strike
+        return _bits_to_fd2(cell) if cell.sum() else None
+    a = arr > 128                             # outline -> crop/centre
+    ys, xs = np.where(a)
+    a = a[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    h, w = a.shape
+    s = min(15.0 / h, 15.0 / w)
+    nh, nw = max(1, round(h * s)), max(1, round(w * s))
+    b = np.array(Image.fromarray((a * 255).astype("uint8")).resize((nw, nh), Image.LANCZOS)) > 128
+    grid = [[False] * 16 for _ in range(16)]
+    y0, x0 = (16 - nh) // 2, (16 - nw) // 2
+    for yy in range(nh):
+        for xx in range(nw):
+            if b[yy, xx]:
+                gx, gy = x0 + xx, y0 + yy
+                if 0 <= gx < 16 and 0 <= gy < 16:
+                    grid[gy][gx] = True
+    return _bits_to_fd2(grid)
+
+
+def render_glyph(ch, bold=True):
+    """把汉字渲染成 FD2 风格的 16x16 1bpp（返回 32 字节）。
+
+    依次尝试候选字体：优先 16×16 点阵宋体（默认文泉驿点阵宋体，笔画细、
+    低分辨率不糊），点阵缺字或想换字体时用矢量字体下采样兜底。
+    可用 FD2_SONG_FONT=/path/to/font 指定首选字体（本机自行负责版权）。"""
+    for path, index in SONG_FONTS:
+        if not path or not os.path.exists(path):
             continue
         try:
-            f = ImageFont.truetype(path, 28, index=idx)
+            b = _render_face(ch, path, index)
         except Exception:
             continue
-        img = Image.new("L", (44, 44), 0)
-        ImageDraw.Draw(img).text((8, 4), ch, fill=255, font=f)
-        a = __import__("numpy").array(img) > 128
-        if a.sum() == 0:
-            continue
-        ys, xs = __import__("numpy").where(a)
-        a = a[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-        h, w = a.shape
-        # 保留宽高比，缩放到 13 像素高左右（FD2 字心约 13x13），居中进 16x16
-        s = min(13.0 / h, 13.0 / w)
-        nh, nw = max(1, round(h * s)), max(1, round(w * s))
-        im = Image.fromarray((a * 255).astype("uint8")).resize((nw, nh), Image.LANCZOS)
-        a = __import__("numpy").array(im) > 128
-        out = bytearray(32)
-        y0, x0 = (16 - nh) // 2, (16 - nw) // 2
-        for yy in range(nh):
-            for xx in range(nw):
-                if a[yy, xx]:
-                    gx, gy = x0 + xx, y0 + yy
-                    if 0 <= gx < 16 and 0 <= gy < 16:
-                        out[gy * 2 + (0 if gx < 8 else 1)] |= 1 << (7 - (gx & 7))
-        # FD2 stores each row as a byte-swapped u16 little-endian:
-        # our out is already row-major MSB-first per byte; swap byte order per row
-        for r in range(16):
-            out[r * 2], out[r * 2 + 1] = out[r * 2 + 1], out[r * 2]
-        return bytes(out)
+        if b is not None:
+            return b
     raise SystemExit("no CJK font found to render glyph")
 
 
@@ -278,19 +329,23 @@ def cmd_convert(args):
     font = bytearray(dat[FONT_RES])
     ng = len(font) // GLYPH_BYTES
     mapping = load_mapping()
-    chars = "".join(mapping[g] for g in sorted(mapping))
-    # batch t2s via opencc
+    order = sorted(mapping, key=int)
+    chars = "".join(mapping[g] for g in order)
+    # Per-character t2s: join with newlines so OpenCC cannot apply phrase-level
+    # rewrites across unrelated glyphs (which would shift/garble the mapping).
     simp = chars
     try:
-        p = subprocess.run(["opencc", "-c", "t2s"], input=chars,
-                           capture_output=True, text=True)
+        p = subprocess.run(["opencc", "-c", "t2s"],
+                           input="\n".join(chars), capture_output=True, text=True)
         if p.returncode == 0:
-            simp = p.stdout
+            conv = p.stdout.splitlines()
+            if len(conv) == len(chars):
+                simp = "".join(x[0] if x else c for c, x in zip(chars, conv))
     except FileNotFoundError:
         print("warning: opencc not found; using identity (no conversion)", file=sys.stderr)
     simp = (simp + chars)[:len(chars)]
     changed = 0
-    for i, g in enumerate(sorted(mapping)):
+    for i, g in enumerate(order):
         c, s = chars[i], simp[i]
         if c != s and s:
             font[g * GLYPH_BYTES:(g + 1) * GLYPH_BYTES] = render_glyph(s)
