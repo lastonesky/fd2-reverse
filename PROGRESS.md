@@ -2979,6 +2979,30 @@ CRT/库包装 `0x3645D`(read)/`0x2E95B`(fread)/`0x365DA`(int386) 及 `0x36E3D..0
 | C2 | 7 张游戏分派表改真实函数指针数组；`fd2_relocate` no-op | ✅ |
 | C3 | VGA 帧缓冲缝；`vm_run` 及全部绘图层地址参数指针化 | ✅ |
 
+### 5.6 还原正确性修复：`map_cell_event` 事件表基址漏了 `+0x53`
+
+**问题（与宿主无关，属于还原错误）**：`src/game/map_event.c` 的 `map_cell_event()`
+在按 flag 读取每 flag 3 字节的事件记录时，把 `kind/value` 取到
+`dword_53A55 + 3*flag`，但原机器码（0x190AC）取的是 **`+0x53`**：
+```
+91cb: movzwl 0x54(%edx,%eax,1),%ebx   ; value = *(u16*)(base + 3*flag + 0x54)
+91d0: movzbl 0x53(%edx,%eax,1),%eax   ; kind  = *(u8*)( base + 3*flag + 0x53)
+```
+`src/game/map_turn.c` 一直是对的。少了 `+0x53` 会把 `value` 读成往后 28 个 flag 的
+垃圾值：例如宝箱对应 flag=0 时读到 `0x1E04`，`dword_53AD9 = 7684+181 = 7865`，
+越界读 FDTXT 偏移表得到负 offset → 负 glyph index。32 位 DOS 上只是画花字，64 位上
+`glyph_table + (index<<5)` 变成未映射地址而崩溃（开宝箱 SIGSEGV 的根因）。
+
+**修复**：`ev` 基址加 `+0x53u`（写入端 `+0x54` 原本就是对的）。不改 `gfx_draw_glyph`：
+它对坏 index 的字节级行为要与机器码保持一致，真正要修的是调用方。
+
+**归属**：按 `BRANCHING.md`，这是"原 C 写错了"的还原正确性修复，进 `main`，再合并到
+`modern-platform`。（`modern-platform` 侧的同一修复及其原生运行记录见该分支
+PROGRESS 的 7.19 节。）
+
+**附带工具**：`tools/fd2sav.py`（FD2.SAV 存档解析/修改，布局全部来自本仓库还原源码）、
+`tools/sav_diff.py`（去混淆后按记录字段标注的逐字节 diff）。
+
 ---
 
 ## 6. `modern-platform` 分支：复用 port 的后端
