@@ -3882,3 +3882,20 @@ device 回调持有的锁下访问。
 验证：`--unfocus` 取值 mute/pause/none/sound/fade 全部按预期解析；双实例测试
 `--unfocus=fade --unfocus-fade-ms=500` 日志出现 `window focus lost -> fade` /
 `gained -> fade`，并打印 `unfocus fade: 500 ms`。
+
+### 7.33 简体字体改用 FusionPixel 12（原生 12px，居中）
+
+在 §7.28/§7.32 的 16px 之后，又试了用户提供的一批 OFL/CC0 点阵字体（FashionBitmap16、
+Ark Pixel、Fusion Pixel、ZLabs Pixel、Cubic 11、Boutique 9x9）。逐档探测结论：**没有一个
+带原生 14/15px 档**（14/15 只能缩放，效果差）；清晰档仍是 12px 和 16px。用户对比后选定
+**FusionPixel 12**（`fusion-pixel-12px-monospaced-zh_hans.ms.bitmap.ttf`，SIL OFL 1.1，
+覆盖全、字形最舒服）。
+
+生成方式：原生 12px 渲染 → 裁墨迹 bbox → **水平+垂直居中**放进 16×16 格（占第 2..13 行）。
+614 个繁→简字形 miss=0，`row15=0`（投影约束对它是空操作）。已覆盖
+`E:\FD2\FDOTHER.simp.DAT`，旧 16px 备份 `FDOTHER.simp.DAT.bak-wqy16-014357`。
+
+对比图（清理后仅保留的候选图）：`E:\FD2\candidates\native12.png`。
+源字体：`E:\tmp\fonts\fusion12\...`（E:\tmp 为临时目录，需要长期保存可另存）。
+
+代价：12 行 < 原版 14 行，字偏小、19px 行距下偏空；如需可调 `vm_run` 的 line_step。
