@@ -133,7 +133,22 @@ void gfx_blit_transparent(void *dest, const void *src, int stride)
 
 /* ------------------------------------------------------------------ */
 /* 0x4ED7A: 16x16 1bpp glyph with foreground / drop shadow / fill      */
-/* ------------------------------------------------------------------ */
+/*
+ * Drop shadow: a set pixel at (r,c) writes `shadow` at (r+1,c-1) and
+ * (r+1,c).  The original glyphs only ever ink rows 0..14 (FDOTHER.DAT
+ * resource 4, verified: row 15 is set in 0 of 1824 glyphs), so the shadow
+ * never leaves the 16x16 cell and never lands on the next text line
+ * (line step is 19, cell is 16 rows).
+ *
+ * The regenerated Simplified font (tools/fd2_fonttool.py `convert`) does
+ * ink row 15, and its shadow would land on row 16 - the first of the three
+ * blank rows between text lines.  The dialog scroll (dlg_scroll_text,
+ * 0x16E24) is only 72 rows tall with a 19-row shift, so that row-16 shadow
+ * survives the scroll as a ghost (visible as leftover "text shadows" below
+ * the last line).  Suppress the shadow on the last glyph row: for the
+ * original font this is a no-op (row 15 is never inked, so the output stays
+ * byte-identical - src/gfxcheck.c still passes), and it makes any 16-row
+ * font safe. */
 void gfx_draw_glyph(const void *glyph_table, int index, void *dest, int stride,
                     int fg, int shadow, int fill)
 {
@@ -179,9 +194,11 @@ void gfx_draw_glyph(const void *glyph_table, int index, void *dest, int stride,
                 unsigned set = row & 0x8000u;
                 row = (uint16_t)(row << 1);
                 if (set) {
-                    p[0]           = gfx_pen_fg;
-                    p[st - 1]      = gfx_pen_shadow;    /* one row down, left */
-                    p[st]          = gfx_pen_shadow;    /* one row down       */
+                    p[0] = gfx_pen_fg;
+                    if (r < 15) {       /* shadow must stay in the cell */
+                        p[st - 1] = gfx_pen_shadow; /* one row down, left */
+                        p[st]     = gfx_pen_shadow; /* one row down       */
+                    }
                 }
                 ++p;
             }
