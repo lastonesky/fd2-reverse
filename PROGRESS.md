@@ -3002,3 +3002,23 @@ PROGRESS 的 7.19 节。）
 
 **附带工具**：`tools/fd2sav.py`（FD2.SAV 存档解析/修改，布局全部来自本仓库还原源码）、
 `tools/sav_diff.py`（去混淆后按记录字段标注的逐字节 diff）。
+
+### 5.7 知识：把 MV（记录 `+0x3B`）改太大会死机
+
+MV 就是 `path_mark`/`path_find` 的移动力预算：原版 `path_find` 第二遍 `rec2` 把当前路径
+放进定长全局栈 `unk_60079`（8 字节/条，`0x60079..0x6017A` 只有 **32 条**），路径一旦超过
+32 步就写穿相邻全局；同时剩余移动力按 `int8` 比较，**MV≥128** 时比较翻转、可达格反复
+重展开，且第一遍 `rec1` 递归深度 ≈ MV 会压爆调用栈。游戏自身职业表上限是 **9**，所以
+原版永远安全；用 `tools/fd2sav.py` 手改时建议别超过 ~15。
+
+（字段：MV=`+0x3B`、EV=`+0x4E`（派生值，`unit_recalc` 一重算就回到“基础 DX”）、
+MAXHP=`+0x42`、HP=`+0x40`。port 的 `path.c` 有 `PATH_STACK_MAX=64` 保护，只截断不写穿。）
+
+### 5.8 知识：Linux/POSIX 下开始菜单回车不响应（宿主层，源码无需改）
+
+标题菜单的确认条件（`title_screen.c`：`(uint8_t)word_53A8D == 0x0D || == 0x20 || AH==0xE0/0x52`）
+依赖 BIOS `INT 16h` 返回的 `AL`；X11 的 `XLookupString` 只对映射表里的 keysym 发 CHAR
+（`XK_Return` 不在表中），所以宿主输入层 `host/main_sokol.c` 的 `push_fr_key()` 要像
+`input_post_key()` 一样用 `fr_key_ascii(key)` 预填 ascii 字节，回车才会以 `1C,0D` 到达游戏。
+**归属**：宿主/平台修复，按 `BRANCHING.md` 只进 `modern-platform`（运行记录见该分支
+PROGRESS §7.20），本条仅作 `main` 侧知识备份。
