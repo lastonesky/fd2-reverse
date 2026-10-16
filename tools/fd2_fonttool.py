@@ -86,6 +86,36 @@ def write_dat(path, resources, header, ends):
 
 
 # --------------------------------------------------------------- font -----
+def _t2s(chars):
+    """Traditional -> Simplified for a list of single chars, order preserved.
+
+    Per-character: joined with newlines so OpenCC cannot apply phrase-level
+    rewrites across unrelated glyphs (which would shift/garble the mapping).
+    Uses the `opencc` CLI when present, else the pure-python port
+    (`pip install opencc-python-reimplemented`).
+    """
+    text = "\n".join(chars)
+    try:
+        p = subprocess.run(["opencc", "-c", "t2s"], input=text,
+                           capture_output=True, text=True)
+        if p.returncode == 0:
+            conv = p.stdout.splitlines()
+            if len(conv) == len(chars):
+                return "".join(x[0] if x else c for c, x in zip(chars, conv))
+    except FileNotFoundError:
+        pass
+    try:
+        from opencc import OpenCC
+        conv = OpenCC("t2s").convert(text).splitlines()
+        if len(conv) == len(chars):
+            return "".join(x[0] if x else c for c, x in zip(chars, conv))
+    except Exception:
+        pass
+    print("warning: no opencc (CLI or python); using identity (no conversion)",
+          file=sys.stderr)
+    return chars
+
+
 def glyph_bytes_to_rows(g):
     rows = []
     for r in range(GLYPH_H):
@@ -167,7 +197,7 @@ def _render_face(ch, path, index):
     crisp.  Anti-aliased outlines are thresholded first.  Either way the result
     is fitted into the FD2_GLYPH_ROWS-row band (see the constant above).
     """
-    from PIL import ImageDraw, ImageFont
+    from PIL import Image, ImageDraw, ImageFont
     np = __import__("numpy")
     f = ImageFont.truetype(path, 16, index=index)
     img = Image.new("L", (24, 24), 0)
@@ -205,7 +235,7 @@ def load_mapping():
     for name in ("glyph_map.seed.json", "glyphs.json"):
         p = os.path.join(FD2DATA, name)
         if os.path.exists(p):
-            for k, v in json.load(open(p)).items():
+            for k, v in json.load(open(p, encoding="utf-8")).items():
                 m[int(k)] = v
     return m
 
@@ -263,7 +293,7 @@ def decode(glyphs, mapping):
 
 # --------------------------------------------------------------- ops -------
 def cmd_items(args):
-    items = json.load(open(os.path.join(FD2DATA, "items.json")))
+    items = json.load(open(os.path.join(FD2DATA, "items.json"), encoding="utf-8"))
     if args.id is not None:
         print(f"{args.id}: {items.get(str(args.id), '?')}")
         return
@@ -334,7 +364,7 @@ def cmd_text(args):
 def cmd_build_map(args):
     """从道具名（fd2data/items.json）反推字形->字，合并进 glyph_map.seed.json。"""
     dat, _, _ = load_dat(os.path.join(args.data, "FDTXT.DAT"))
-    items = json.load(open(os.path.join(FD2DATA, "items.json")))
+    items = json.load(open(os.path.join(FD2DATA, "items.json"), encoding="utf-8"))
     votes = {}
     for k, nm in items.items():
         g = stream(dat, 0, 181 + int(k))
@@ -344,7 +374,7 @@ def cmd_build_map(args):
                 votes[gi][ch] += 1
     gm = {str(g): max(v, key=v.get) for g, v in votes.items()}
     out = os.path.join(FD2DATA, "glyph_map.seed.json")
-    json.dump(gm, open(out, "w"), ensure_ascii=False, indent=0)
+    json.dump(gm, open(out, "w", encoding="utf-8"), ensure_ascii=False, indent=0)
     print(f"wrote {out}: {len(gm)} glyphs")
 
 
@@ -356,19 +386,7 @@ def cmd_convert(args):
     mapping = load_mapping()
     order = sorted(mapping, key=int)
     chars = "".join(mapping[g] for g in order)
-    # Per-character t2s: join with newlines so OpenCC cannot apply phrase-level
-    # rewrites across unrelated glyphs (which would shift/garble the mapping).
-    simp = chars
-    try:
-        p = subprocess.run(["opencc", "-c", "t2s"],
-                           input="\n".join(chars), capture_output=True, text=True)
-        if p.returncode == 0:
-            conv = p.stdout.splitlines()
-            if len(conv) == len(chars):
-                simp = "".join(x[0] if x else c for c, x in zip(chars, conv))
-    except FileNotFoundError:
-        print("warning: opencc not found; using identity (no conversion)", file=sys.stderr)
-    simp = (simp + chars)[:len(chars)]
+    simp = _t2s(chars)
     changed = 0
     for i, g in enumerate(order):
         c, s = chars[i], simp[i]

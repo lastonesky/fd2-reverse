@@ -3758,3 +3758,27 @@ convert` 用 16 行点阵原样拷贝/缩放，导致 620/1824 个简体字形�
 
 以后若走高清（plan B 文字层 / `16×S` 图集），同样的不变式按 S 缩放：
 `FD2_GLYPH_ROWS = cell_px − shadow_px`，字形底部留 `shadow_px` 行即可。
+
+### 7.26 简体字面正式重生成（SimSun，14 行）+ 工具跨平台小修
+
+§7.25 定案后，用修好的 `_render_face`/`_fit_grid` 重新 `convert`，而不是只对旧位图做
+`fit-rows` 降采样：
+
+- **生成环境**：Debian `xfonts-wqy` 的 `wenquanyi_12pt.pcf`（GPL，工具默认）与
+  本机 `C:\Windows\Fonts\simsun.ttc` 都试过；**原旧简体字体就是 SimSun 字形**（逐字形
+  对比形状一致），所以用 SimSun 重生成可以“同字体、只修正字高”，改动最小。
+- **结果**：614 个繁→简字形重画；行统计 `row13=1723, row14=7, row15=0`——row14=7 正是
+  原版未替换的 7 个字形，row15=0。已覆盖 `E:\FD2\FDOTHER.simp.DAT`，旧版备份
+  `FDOTHER.simp.DAT.bak-20261017-002844`、fit 过渡版备份 `...bak-fit-003604`。
+- **验证**：与原版 `gfx_draw_glyph`（无约束）逐像素重放对白滚屏，残留区 0 像素。
+
+**工具跨平台小修**（`fd2_fonttool.py`）：
+- `_render_face` 补回 `Image` 导入（`_fit_grid` 重构时漏掉，会直接崩）；
+- 所有 `json.load/open` 显式 `encoding="utf-8"`（Windows 默认为 GBK，读 `glyphs.json`
+  会 `UnicodeDecodeError`）；
+- t2s 增加纯 Python 回退：没有 `opencc` 可执行文件时用
+  `pip install opencc-python-reimplemented` 的 `opencc.OpenCC('t2s')`，仍然是逐字
+  （用换行分隔，避免词组级改写）。
+
+**协议**：SimSun 输出只可本机自用、不得分发（工具已提示）；`FDOTHER.simp.DAT` 属外部
+资产、不入库。
