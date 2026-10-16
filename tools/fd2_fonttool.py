@@ -91,12 +91,12 @@ def render_glyph(ch, bold=True):
         if not os.path.exists(path):
             continue
         try:
-            f = ImageFont.truetype(path, 16, index=idx)
+            f = ImageFont.truetype(path, 28, index=idx)
         except Exception:
             continue
-        img = Image.new("L", (24, 24), 0)
-        ImageDraw.Draw(img).text((4, 2), ch, fill=255, font=f)
-        a = __import__("numpy").array(img) > 100
+        img = Image.new("L", (44, 44), 0)
+        ImageDraw.Draw(img).text((8, 4), ch, fill=255, font=f)
+        a = __import__("numpy").array(img) > 128
         if a.sum() == 0:
             continue
         ys, xs = __import__("numpy").where(a)
@@ -106,7 +106,7 @@ def render_glyph(ch, bold=True):
         s = min(13.0 / h, 13.0 / w)
         nh, nw = max(1, round(h * s)), max(1, round(w * s))
         im = Image.fromarray((a * 255).astype("uint8")).resize((nw, nh), Image.LANCZOS)
-        a = __import__("numpy").array(im) > 110
+        a = __import__("numpy").array(im) > 128
         out = bytearray(32)
         y0, x0 = (16 - nh) // 2, (16 - nw) // 2
         for yy in range(nh):
