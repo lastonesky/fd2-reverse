@@ -280,8 +280,11 @@ def decode_ops(ops, mapping):
         elif v == -6:                # decimal dword_53AE1
             out.append("{num}")
             i += 1
-        elif v in (-17, -18, -19, -20):   # portrait box + operand (id/idx)
+        elif v in (-17, -18):             # 头像框 + 角色 id（= 名字表下标-1）
             out.append(f"{{頭像:{ops[i+1] if i+1 < len(ops) else '?'}}}")
+            i += 2
+        elif v in (-19, -20):             # 头像框 + 场景记录表槽位（不是角色 id）
+            out.append(f"{{單位:{ops[i+1] if i+1 < len(ops) else '?'}}}")
             i += 2
         else:
             i += 1
