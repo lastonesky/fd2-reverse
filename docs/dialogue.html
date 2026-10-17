@@ -2,12 +2,17 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#ffffff">
 <title>FD2 对白全文</title>
 <style>
 :root { --bg:#fafafa; --fg:#222; --muted:#777; --line:#e0e0e0; --card:#fff; --accent:#1565c0; }
 * { box-sizing:border-box; }
-body { margin:0; font:14px/1.7 "Microsoft JhengHei","PingFang TC",sans-serif; color:var(--fg); background:var(--bg); }
-#wrap { display:flex; height:100vh; }
+body { margin:0; font:14px/1.7 "Microsoft JhengHei","PingFang TC",sans-serif; color:var(--fg); background:var(--bg);
+       -webkit-text-size-adjust:100%; }
+#wrap { display:flex; height:100vh; height:100dvh; }
+#mbar, #scrim { display:none; }
 #side { width:250px; overflow-y:auto; border-right:1px solid var(--line); background:var(--card); padding:12px 10px 40px; flex:none; }
 #side h1 { font-size:15px; margin:0 0 10px; }
 #side h4 { font-size:12px; color:var(--muted); margin:14px 0 4px; font-weight:600; }
@@ -39,9 +44,45 @@ table.terms { border-collapse:collapse; font-size:13px; }
 table.terms td { border:1px solid var(--line); padding:2px 8px; }
 .hidden { display:none !important; }
 #legend { border:1px solid var(--line); border-radius:8px; background:var(--card); padding:8px 14px; margin:4px 0 10px; font-size:12px; color:var(--muted); }
+
+/* ---------- 手机 / 窄屏 ---------- */
+@media (max-width: 820px) {
+  body { font-size:15px; }
+  #mbar { display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:40;
+          background:var(--card); border-bottom:1px solid var(--line);
+          padding:8px 12px; padding-top:calc(8px + env(safe-area-inset-top)); }
+  #mbar b { font-size:15px; font-weight:600; }
+  #mbar small { color:var(--muted); font-size:12px; margin-left:auto; }
+  #menu { font-size:18px; line-height:1; border:1px solid var(--line); background:var(--card);
+          color:var(--fg); border-radius:6px; padding:4px 10px; cursor:pointer; }
+  #wrap { display:block; height:auto; }
+  #side { position:fixed; top:0; left:0; bottom:0; width:84vw; max-width:320px; z-index:60;
+          padding-top:calc(12px + env(safe-area-inset-top));
+          padding-bottom:calc(40px + env(safe-area-inset-bottom));
+          transform:translateX(-103%); transition:transform .22s ease; box-shadow:2px 0 16px rgba(0,0,0,.18); }
+  body.navopen #side { transform:none; }
+  #scrim { position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:55; }
+  body.navopen #scrim { display:block; }
+  #main { flex:none; overflow:visible; padding:10px 12px calc(60px + env(safe-area-inset-bottom)); }
+  #bar { position:static; flex-wrap:wrap; gap:6px; padding:6px 0 8px; }
+  #q { flex:1 1 100%; width:100%; }
+  #legend { font-size:11px; padding:7px 10px; }
+  .scene { margin-top:16px; scroll-margin-top:56px; }
+  .block { padding:7px 10px; margin:8px 0; }
+  .row { gap:6px; }
+  .badge { min-width:0; max-width:none; font-size:11px; height:20px; padding:1px 5px; }
+  table.terms { width:100%; font-size:12px; }
+  table.terms td { padding:3px 6px; }
+}
 </style>
 </head>
 <body>
+<div id="mbar">
+  <button id="menu" aria-label="目录">☰</button>
+  <b>FD2 对白</b>
+  <small id="mtot"></small>
+</div>
+<div id="scrim"></div>
 <div id="wrap">
   <div id="side">
     <h1>FD2 对白</h1>
@@ -76,7 +117,7 @@ order.forEach(id=>{
   const d = document.createElement("div");
   d.className = "sp"; d.dataset.sp = id;
   d.innerHTML = `<span class="badge" style="background:${color(id)}">${esc(s.name)}</span><span class="n">${s.n}</span>`;
-  d.onclick = ()=>{ onlySpeaker = (onlySpeaker===id)?null:id; apply(); };
+  d.onclick = ()=>{ onlySpeaker = (onlySpeaker===id)?null:id; apply(); closeNav(); };
   spBox.appendChild(d);
 });
 
@@ -86,8 +127,16 @@ DATA.scenes.forEach(sc=>{
   const a=document.createElement("a");
   a.className="nav"; a.href="#res"+sc.res;
   a.innerHTML=`res${sc.res} <span class="n">${sc.n}</span>`;
+  a.onclick = ()=> closeNav();
   nav.appendChild(a);
 });
+
+/* ---- mobile drawer ---- */
+function closeNav(){ document.body.classList.remove("navopen"); }
+document.getElementById("menu").onclick = ()=> document.body.classList.toggle("navopen");
+document.getElementById("scrim").onclick = closeNav;
+document.getElementById("mtot").textContent =
+  Object.keys(DATA.speakers).length + " 人 / " + DATA.total + " 段";
 
 /* ---- content ---- */
 const content = document.getElementById("content");
