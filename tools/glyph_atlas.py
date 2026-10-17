@@ -187,7 +187,7 @@ def write_png(path, w, h, bgra):
 
 
 def render_page(font, mapping, lo, hi, out, cols=16, scale=4,
-                cell_w=86, cell_h=98):
+                cell_w=86, cell_h=110):
     rows = (hi - lo + cols - 1) // cols
     w, h = cols * cell_w, rows * cell_h + 46
     cv = Canvas(w, h)
