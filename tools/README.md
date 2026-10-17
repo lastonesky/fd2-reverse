@@ -17,7 +17,7 @@
 | 工具 | 作用 | 用法 |
 |---|---|---|
 | `fd2_fonttool.py` | 字库/文本底层工具：列资源、导字形表、解文本流、繁→简重生成字库 | `… text --text E:/FD2/FDTXT.DAT --out t.txt`<br>`… decode --text … --res 3 --sub 0`<br>`… items` / `… items --id 12`<br>`… sheet --lo 0 --hi 256 --out s.png` |
-| `fd2_dialogue.py` | 全对白导出：`docs/dialogue.md` + 可搜索 `docs/dialogue.html` | `python tools/fd2_dialogue.py` |
+| `fd2_dialogue.py` | 全对白导出：`docs/dialogue.md` + 可搜索 `docs/dialogue.html`（手机可看）+ A4 `dialogue.pdf` | `python tools/fd2_dialogue.py`（`--no-pdf` 跳过 PDF；PDF 用 Chrome/Edge 无头打印） |
 | `glyph_view.py` | 按字形号导出放大图（目检用） | `python tools/glyph_view.py 160-179 out.png 12` |
 | `glyph_atlas.py` | 全字库「位图 + 识别字」对照表（人工核对） | `python tools/glyph_atlas.py`（16 页）<br>`… --lo 640 --hi 960` |
 | `glyph_dupcheck.py` | 查「一字多号」并给文本语境（找错认） | `python tools/glyph_dupcheck.py --only-diff` |

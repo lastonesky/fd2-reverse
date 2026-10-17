@@ -74,9 +74,38 @@ table.terms td { border:1px solid var(--line); padding:2px 8px; }
   table.terms { width:100%; font-size:12px; }
   table.terms td { padding:3px 6px; }
 }
+
+/* ---------- 打印 / 导出 PDF ---------- */
+#phead { display:none; }
+@media print {
+  @page { size:A4; margin:13mm 12mm 15mm; }
+  html, body { background:#fff; }
+  body { font-size:10.5pt; line-height:1.55; }
+  #mbar, #scrim, #side, #bar, #legend { display:none !important; }
+  #wrap { display:block; height:auto; }
+  #main { display:block; height:auto; overflow:visible; padding:0; }
+  #phead { display:block; margin:0 0 6mm; border-bottom:2pt solid var(--accent); padding-bottom:3mm; }
+  #phead h1 { font-size:17pt; margin:0 0 2mm; }
+  #phead p { margin:0; font-size:9pt; color:#666; }
+  .scene { margin:0 0 3mm; }
+  .scene > h2 { font-size:12pt; padding-bottom:1.5mm; margin:0 0 2.5mm;
+                border-bottom:1.2pt solid var(--accent); break-after:avoid; page-break-after:avoid; }
+  .block { margin:2.2mm 0; padding:1.8mm 3mm; break-inside:avoid; page-break-inside:avoid; }
+  .block .id { font-size:8pt; }
+  .badge { -webkit-print-color-adjust:exact; print-color-adjust:exact;
+           font-size:8.5pt; height:auto; min-width:16mm; max-width:28mm; padding:0 2mm; }
+  .row { margin:1mm 0; break-inside:avoid; }
+  table.terms { font-size:9pt; }
+  table.terms tr { break-inside:avoid; page-break-inside:avoid; }
+  table.terms td { padding:0.8mm 2mm; }
+  mark { background:#ffe082; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  a { color:inherit; text-decoration:none; }
+}
 </style>
 </head>
 <body>
+<div id="phead"><h1>FD2 對白全文</h1>
+  <p>烈焰龍 IV · FDTXT.DAT 解碼 · 共 33 個場景 / 355 段對白 / 60 位說話人 / res0 字串表 571 條　（灰色「場景#N」為場景記錄表槽位，同一槽位在不同場景是不同人，故不作人名）</p></div>
 <div id="mbar">
   <button id="menu" aria-label="目录">☰</button>
   <b>FD2 对白</b>

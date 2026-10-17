@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""FD2 对白全文导出：FDTXT.DAT -> docs/dialogue.md + docs/dialogue.html
+"""FD2 对白全文导出：FDTXT.DAT -> docs/dialogue.md + .html + .pdf
 
 用法:
     python tools/fd2_dialogue.py [--text E:/FD2/FDTXT.DAT] [--outdir docs]
@@ -13,8 +13,10 @@
 import argparse
 import json
 import os
+import pathlib
 import re
 import struct
+import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -248,9 +250,38 @@ table.terms td { border:1px solid var(--line); padding:2px 8px; }
   table.terms { width:100%; font-size:12px; }
   table.terms td { padding:3px 6px; }
 }
+
+/* ---------- 打印 / 导出 PDF ---------- */
+#phead { display:none; }
+@media print {
+  @page { size:A4; margin:13mm 12mm 15mm; }
+  html, body { background:#fff; }
+  body { font-size:10.5pt; line-height:1.55; }
+  #mbar, #scrim, #side, #bar, #legend { display:none !important; }
+  #wrap { display:block; height:auto; }
+  #main { display:block; height:auto; overflow:visible; padding:0; }
+  #phead { display:block; margin:0 0 6mm; border-bottom:2pt solid var(--accent); padding-bottom:3mm; }
+  #phead h1 { font-size:17pt; margin:0 0 2mm; }
+  #phead p { margin:0; font-size:9pt; color:#666; }
+  .scene { margin:0 0 3mm; }
+  .scene > h2 { font-size:12pt; padding-bottom:1.5mm; margin:0 0 2.5mm;
+                border-bottom:1.2pt solid var(--accent); break-after:avoid; page-break-after:avoid; }
+  .block { margin:2.2mm 0; padding:1.8mm 3mm; break-inside:avoid; page-break-inside:avoid; }
+  .block .id { font-size:8pt; }
+  .badge { -webkit-print-color-adjust:exact; print-color-adjust:exact;
+           font-size:8.5pt; height:auto; min-width:16mm; max-width:28mm; padding:0 2mm; }
+  .row { margin:1mm 0; break-inside:avoid; }
+  table.terms { font-size:9pt; }
+  table.terms tr { break-inside:avoid; page-break-inside:avoid; }
+  table.terms td { padding:0.8mm 2mm; }
+  mark { background:#ffe082; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  a { color:inherit; text-decoration:none; }
+}
 </style>
 </head>
 <body>
+<div id="phead"><h1>FD2 對白全文</h1>
+  <p>__HEAD__</p></div>
 <div id="mbar">
   <button id="menu" aria-label="目录">☰</button>
   <b>FD2 对白</b>
@@ -383,14 +414,54 @@ clr.onclick = ()=>{ q.value=""; kw=""; onlySpeaker=null; apply(); };
 </body>
 </html>"""
     doc = doc.replace("__DATA__", data).replace("__PALETTE__", json.dumps(PALETTE))
+    head = ("烈焰龍 IV · FDTXT.DAT 解碼 · 共 %d 個場景 / %d 段對白 / %d 位說話人 / "
+            "res0 字串表 %d 條　（灰色「場景#N」為場景記錄表槽位，同一槽位在不同場景是不同人，故不作人名）"
+            % (len(scenes), sum(s["n"] for s in scenes), len(speakers), len(terms)))
+    doc = doc.replace("__HEAD__", head)
     open(out_path, "w", encoding="utf-8", newline="\n").write(doc)
     print(f"wrote {out_path}")
+
+
+def find_browser():
+    cands = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser",
+    ]
+    for c in cands:
+        if os.path.exists(c):
+            return c
+    return None
+
+
+def export_pdf(html_path, pdf_path):
+    """用 headless Chrome/Edge 把 HTML 打成 A4 PDF（走 @media print 版式）。"""
+    exe = find_browser()
+    if not exe:
+        print("! 没找到 Chrome/Edge，跳过 PDF（可用浏览器手动 Ctrl+P 另存）")
+        return None
+    url = pathlib.Path(html_path).resolve().as_uri()
+    pdf_path = str(pathlib.Path(pdf_path).resolve())
+    cmd = [exe, "--headless=new", "--disable-gpu", "--no-pdf-header-footer",
+           "--virtual-time-budget=10000", "--print-to-pdf=" + pdf_path, url]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    if not os.path.exists(pdf_path):
+        print("! PDF 生成失败:", (r.stderr or r.stdout)[-400:])
+        return None
+    print(f"wrote {pdf_path}  ({os.path.getsize(pdf_path) // 1024} KB)")
+    return pdf_path
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="FD2 对白全文导出")
     ap.add_argument("--text", default=DEFAULT_TEXT)
     ap.add_argument("--outdir", default="docs")
+    ap.add_argument("--pdf", dest="pdf", action="store_true", default=True,
+                    help="同时导出 PDF（默认开启）")
+    ap.add_argument("--no-pdf", dest="pdf", action="store_false")
     a = ap.parse_args(argv)
     os.makedirs(a.outdir, exist_ok=True)
     streams, names = load_streams(a.text)
@@ -400,7 +471,10 @@ def main(argv=None):
     n_dialog = sum(len(v) for k, v in idx.items() if k != 0)
     print(f"streams={len(streams)} (对白 {n_dialog} 段, 名字表 {len(names)} 条)")
     gen_markdown(idx, names, os.path.join(a.outdir, "dialogue.md"))
-    gen_html(idx, names, os.path.join(a.outdir, "dialogue.html"))
+    html_path = os.path.join(a.outdir, "dialogue.html")
+    gen_html(idx, names, html_path)
+    if a.pdf:
+        export_pdf(html_path, os.path.join(a.outdir, "dialogue.pdf"))
 
 
 if __name__ == "__main__":
