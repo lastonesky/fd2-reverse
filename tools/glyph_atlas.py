@@ -189,7 +189,9 @@ def write_png(path, w, h, bgra):
 def render_page(font, mapping, lo, hi, out, cols=16, scale=4,
                 cell_w=86, cell_h=110):
     rows = (hi - lo + cols - 1) // cols
-    w, h = cols * cell_w, rows * cell_h + 46
+    # 底部留白：最后一行标签基线在 y0+86，20px SimSun 还会下伸 ~5px，
+    # 再留 18px 余量，保证任何看图工具里最后一行都完整可见（不被页边裁切）。
+    w, h = cols * cell_w, rows * cell_h + 46 + 18
     cv = Canvas(w, h)
 
     # 页眉
