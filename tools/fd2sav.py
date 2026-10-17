@@ -56,7 +56,9 @@ and leaves a timestamped .bak next to the file.
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import re
 import shutil
 import struct
 import sys
@@ -160,10 +162,20 @@ def store(path: str, buf: bytearray, backup=True, dry=False) -> str | None:
     if dry:
         return None
     if backup and os.path.exists(path):
-        bpath = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
+        base = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
+        bpath = base
+        n = 1
+        while os.path.exists(bpath):          # 同一秒内连续写两次也不覆盖
+            n += 1
+            bpath = f"{base}-{n}"
         shutil.copy2(path, bpath)
-    with open(path, "wb") as f:
-        f.write(obf)
+        os.utime(bpath, None)                 # 备份时间应是“此刻”，不继承源文件
+    try:
+        with open(path, "wb") as f:
+            f.write(obf)
+    except PermissionError:
+        raise SystemExit(f"写不进 {path}\n"
+                         "  存档可能正被游戏占用，或文件是只读的——先退出游戏再试。")
     return bpath
 
 
@@ -371,120 +383,10 @@ def select_members(reg: Region, sel: str):
     return [int(sel, 0)]
 
 
-# --------------------------------------------------------------------------- #
-# commands
-# --------------------------------------------------------------------------- #
-def cmd_info(args):
-    buf = load(args.file)
-    ok = checksum_ok(buf)
-    print(f"file     : {args.file}")
-    print(f"size     : {len(buf)} = 0x{len(buf):X}")
-    print(f"checksum : {'OK' if ok else 'MISMATCH'}  "
-          f"(stored 0x{struct.unpack_from('<I', buf, SAVE_SIZE-4)[0]:08X})")
-
-    f = buf[HEAD_FIELD:HEAD_FIELD + 18]
-    print("\n== head (继续游戏) ==")
-    print(f"  location #      f[0]      = {f[0]}")
-    print(f"  roster count    f[1]      = {f[1]}")
-    print(f"  scene/state id  f[2]      = {f[2]}")
-    print(f"  party count     f[9]      = {f[9]}")
-    print(f"  MONEY           f[A..D]   = {struct.unpack_from('<I', buf, HEAD_MONEY)[0]}")
-    print(f"  misc            f[E..11]  = "
-          f"{f[0x0E]},{f[0x0F]},{f[0x10]},{f[0x11]}")
-    _dump_region(Region(buf, "head"))
-    _dump_region(Region(buf, "roster"))
-
-    for i in range(4):
-        print()
-        _dump_region(Region(buf, f"s{i}"))
-
-
-def _dump_region(reg: Region):
-    tag = "[EMPTY]" if reg.empty() else ""
-    sid = reg.scenario_id()
-    extra = f" scenario_id={sid}" if sid is not None else ""
-    money = reg.money
-    print(f"\n-- {reg.label}{extra} {tag}")
-    if money is not None:
-        print(f"   MONEY = {money} (0x{money:08X})")
-    print(f"   count = {reg.count}   (records present below)")
-    for i in range(min(reg.count, reg.max_recs)):
-        r = reg.rec(i)
-        items = " ".join(f"{get_field(r, f'item{k}'):02X}" for k in range(8))
-        print(f"   #{i:<2} id={r[8]:<3} kind={r[6]:<3} lv={r[0x21]:<3} "
-              f"flag={r[5]:02X} HP={u16(r,0x40):>5}/{u16(r,0x42):<5} "
-              f"MP={u16(r,0x44):>5}/{u16(r,0x46):<5} "
-              f"AP={u16(r,0x37):>5} DP={u16(r,0x39):>5} DX={u16(r,0x3E):>5} "
-              f"port={r[7]:<3}")
-        print(f"       items[{items}]  "
-              f"slots={[f'{r[0x0A+2*k]:02X}:{r[0x0B+2*k]:02X}' for k in range(8)]}")
-
-
-def cmd_get(args):
-    buf = load(args.file)
-    reg = Region(buf, args.region)
-    for mi in select_members(reg, args.member):
-        r = reg.rec(mi)
-        vals = {k: get_field(r, k) for k in (args.fields or
-                ["id", "kind", "level", "hp", "maxhp", "mp", "maxmp",
-                 "ap", "dp", "dx"] + [f"item{i}" for i in range(8)])}
-        print(f"{reg.name} #{mi}: " + "  ".join(f"{k}={v}" for k, v in vals.items()))
-
-
-def cmd_set(args):
-    buf = load(args.file)
-    targets = expand_regions(args.region)
-    applied = []
-    for rname in targets:
-        reg = Region(buf, rname)
-        if rname != "head" and rname != "roster" and reg.empty():
-            print(f"  skip {rname}: empty slot")
-            continue
-        for mi in select_members(reg, args.member):
-            r = reg.rec(mi)
-            for kv in args.assign:
-                k, _, v = kv.partition("=")
-                k = k.strip()
-                if k not in FIELDS:
-                    raise SystemExit(f"unknown field '{k}' "
-                                     f"(known: {', '.join(sorted(FIELDS))})")
-                set_field(r, k, int(v, 0))
-                applied.append(f"{rname}#{mi}.{k}={int(v,0)}")
-            if args.recalc:
-                apply_recalc(r)
-    b = store(args.file, buf, backup=not args.no_backup, dry=args.dry_run)
-    print(f"applied {len(applied)} change(s): " +
-          ", ".join(applied[:12]) + (" ..." if len(applied) > 12 else ""))
-    print(f"{'dry-run, nothing written' if args.dry_run else 'written'}"
-          + (f"  backup: {b}" if b else ""))
-
-
-def cmd_money(args):
-    buf = load(args.file)
-    targets = expand_regions(args.region)
-    done = []
-    for rname in targets:
-        reg = Region(buf, rname)
-        if reg.money_off is None:
-            continue
-        if rname not in ("head", "roster") and reg.empty():
-            print(f"  skip {rname}: empty slot")
-            continue
-        if args.add:
-            reg.money = reg.money + args.amount
-        else:
-            reg.money = args.amount
-        done.append(f"{rname}={reg.money}")
-    b = store(args.file, buf, backup=not args.no_backup, dry=args.dry_run)
-    print("money: " + ", ".join(done))
-    print(f"{'dry-run, nothing written' if args.dry_run else 'written'}"
-          + (f"  backup: {b}" if b else ""))
-
-
 def is_real_char(rec) -> bool:
     """A live character record: unit_add (0x112A5) and world_load_party
     (0x1088D) both stamp byte +6 with 2, while an unused map slot is
-    `memset(rec,0,80); rec[5]=1` - so +6 != 2 means "template /空位",
+    `memset(rec,0,80); rec[5]=1` - so +6 != 2 means "template / 空位",
     not somebody whose HP should be touched."""
     return rec[6] == 2
 
@@ -495,188 +397,849 @@ def filter_real(reg: Region, idxs, only_real: bool):
     return [i for i in idxs if is_real_char(reg.rec(i))]
 
 
-def cmd_heal(args):
-    buf = load(args.file)
-    targets = expand_regions(args.region)
-    n = 0
-    skipped = 0
-    for rname in targets:
-        reg = Region(buf, rname)
-        if rname not in ("head", "roster") and reg.empty():
+# --------------------------------------------------------------------------- #
+# 存档定位：不写 -f 也能找到
+# --------------------------------------------------------------------------- #
+SAVE_NAME = "FD2.SAV"
+SAVE_ENV = "FD2_SAV"
+DEFAULT_DIRS = ["E:/FD2", "D:/FD2", "C:/FD2", "E:/GAMES/FD2", "D:/GAMES/FD2"]
+
+REGION_LABEL = {
+    "head":   "继续游戏·队伍",
+    "roster": "继续游戏·名单",
+    "s0":     "存档槽 1",
+    "s1":     "存档槽 2",
+    "s2":     "存档槽 3",
+    "s3":     "存档槽 4",
+}
+REGION_WORDS = set(REGIONS) | {"all", "continue", "cont"}
+
+
+def _save_candidates():
+    here = os.path.dirname(os.path.abspath(__file__))
+    cands = [
+        os.path.join(os.getcwd(), SAVE_NAME),
+        os.path.normpath(os.path.join(here, "..", SAVE_NAME)),
+        os.path.normpath(os.path.join(here, "..", "..", SAVE_NAME)),
+    ]
+    cands += [os.path.join(d, SAVE_NAME) for d in DEFAULT_DIRS]
+    return cands
+
+
+def find_save(explicit=None, quiet=False):
+    """-f/--file > 环境变量 FD2_SAV > 自动搜索（当前目录、工程目录、常见安装目录）。
+    多个命中时取最新的一个。"""
+    if explicit:
+        p = os.path.abspath(os.path.expanduser(explicit))
+        if not os.path.isfile(p):
+            raise SystemExit(f"找不到存档：{p}")
+        return p
+
+    env = os.environ.get(SAVE_ENV)
+    if env:
+        p = os.path.abspath(os.path.expanduser(env))
+        if not os.path.isfile(p):
+            raise SystemExit(f"{SAVE_ENV}={env} 指向的文件不存在")
+        return p
+
+    hits = []
+    for p in _save_candidates():
+        p = os.path.abspath(p)
+        if os.path.isfile(p) and p not in hits:
+            hits.append(p)
+    if not hits:
+        raise SystemExit(
+            "找不到 FD2.SAV。\n"
+            "  1) 用 -f <路径> 指定；\n"
+            "  2) 或把存档放到当前目录；\n"
+            f"  3) 或设置环境变量 {SAVE_ENV}=<路径>。")
+    hits.sort(key=os.path.getmtime, reverse=True)
+    if len(hits) > 1 and not quiet:
+        print(f"（找到 {len(hits)} 个 FD2.SAV，用最新的那个）")
+        for p in hits:
+            print(f"    {p}")
+    return hits[0]
+
+
+def backups(path):
+    """按文件名里的时间戳排序（copy2 会让 mtime 继承源文件，不能用来排序）。"""
+    d = os.path.dirname(os.path.abspath(path)) or "."
+    base = os.path.basename(path) + ".bak-"
+    try:
+        names = os.listdir(d)
+    except OSError:
+        return []
+    out = [os.path.join(d, n) for n in names if n.startswith(base)]
+    out.sort(key=lambda p: os.path.basename(p)[len(base):], reverse=True)
+    return out
+
+
+def bak_stamp(p):
+    """从 FD2.SAV.bak-20261017-161343 里取出可读时间。"""
+    m = re.search(r"bak-(\d{8})-(\d{6})", os.path.basename(p))
+    if not m:
+        return time.strftime("%Y-%m-%d %H:%M:%S",
+                             time.localtime(os.path.getmtime(p)))
+    d, t = m.group(1), m.group(2)
+    return f"{d[0:4]}-{d[4:6]}-{d[6:8]} {t[0:2]}:{t[2:4]}:{t[4:6]}"
+
+
+# --------------------------------------------------------------------------- #
+# 角色名（FDTXT.DAT 文本流 + 字形表）
+# --------------------------------------------------------------------------- #
+# 名字不在存档里，而是 FDTXT.DAT 的文本流：
+#   box_popup.c:60   vm_run(dword_53A7D, r[8]  + 1,   ...)   名字
+#   box_popup.c:61   vm_run(dword_53A7D, r[31] + 140, ...)   种族 (+0x1F)
+#   box_popup.c:62   vm_run(dword_53A7D, r[32] + 150, ...)   职业 (+0x20)
+#
+# FDTXT.DAT 是 res_load 的容器（res.c 0x111BA）：+6 起是 u32 块表，取
+# [tab[i], tab[i+1]) 这一段。块 0 内部是 int16 偏移表 + 字形序列
+# （vm_run 0x15F84：`s + *(int16*)(s + 2*sub)`，逐 int16 画字形，负数结束）。
+# 字形号 -> 汉字来自 tools/fd2data/glyphs.json。
+TXT_FILE = "FDTXT.DAT"
+GLYPHS_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "fd2data", "glyphs.json")
+NAME_BASE = 1          # sub = rec[+0x08] + 1
+RACE_BASE = 140        # sub = rec[+0x1F] + 140
+CLASS_BASE = 150       # sub = rec[+0x20] + 150
+
+_NAME_CACHE = {}
+
+
+def find_data_file(name, save_path=None):
+    """游戏数据文件（FDTXT.DAT）一般和存档放在一起，也可能在游戏目录。"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    dirs = []
+    if save_path:
+        dirs.append(os.path.dirname(os.path.abspath(save_path)))
+    dirs += [os.getcwd(),
+             os.path.normpath(os.path.join(here, "..")),
+             os.path.normpath(os.path.join(here, "..", ".."))]
+    dirs += DEFAULT_DIRS
+    seen = set()
+    for d in dirs:
+        if d in seen:
             continue
-        all_idx = select_members(reg, args.member)
-        keep    = filter_real(reg, all_idx, args.real_only)
+        seen.add(d)
+        p = os.path.join(d, name)
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def load_glyphs():
+    try:
+        with open(GLYPHS_JSON, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def parse_fdtxt(raw, block=0, glyphs=None):
+    """解析 FDTXT.DAT 的一个块，返回 {子串索引: 文本}。"""
+    glyphs = glyphs if glyphs is not None else load_glyphs()
+    if not glyphs or len(raw) < 6 + 4 * (block + 2):
+        return {}
+    start = struct.unpack_from("<I", raw, 6 + 4 * block)[0]
+    end = struct.unpack_from("<I", raw, 6 + 4 * (block + 1))[0]
+    if not 0 <= start < end <= len(raw):
+        return {}
+    blk = raw[start:end]
+    if len(blk) < 4:
+        return {}
+    first = struct.unpack_from("<h", blk, 0)[0]      # 表长 = 数据起点
+    if first <= 0:
+        return {}
+    n = min(first // 2, len(blk) // 2)
+    out = {}
+    for i in range(n):
+        off = struct.unpack_from("<h", blk, 2 * i)[0]
+        if off <= 0 or off >= len(blk):
+            continue
+        words, p = [], off
+        while p + 2 <= len(blk) and len(words) < 128:
+            w = struct.unpack_from("<h", blk, p)[0]
+            if w < 0:                                # -1 = 子串结束
+                break
+            words.append(w)
+            p += 2
+        out[i] = "".join(glyphs.get(str(w), "") for w in words)
+    return out
+
+
+def name_table(save_path=None):
+    """找 FDTXT.DAT 并解析块 0。找不到返回 {}，调用方自行降级。"""
+    p = find_data_file(TXT_FILE, save_path)
+    if not p:
+        return {}
+    if p in _NAME_CACHE:
+        return _NAME_CACHE[p]
+    try:
+        with open(p, "rb") as f:
+            raw = f.read()
+    except OSError:
+        return {}
+    tbl = parse_fdtxt(raw, 0)
+    _NAME_CACHE[p] = tbl
+    return tbl
+
+
+def char_name(rec, names):
+    """记录 +0x08 是 party/roster 的身份字节，名字是文本流第 (它+1) 条。"""
+    if not names:
+        return ""
+    return names.get(rec[0x08] + NAME_BASE, "")
+
+
+def race_name(rec, names):
+    if not names:
+        return ""
+    return names.get(rec[0x1F] + RACE_BASE, "")
+
+
+def class_name(rec, names):
+    if not names:
+        return ""
+    return names.get(rec[0x20] + CLASS_BASE, "")
+
+
+# --------------------------------------------------------------------------- #
+# 修改会话：加载 -> 改 -> 有变化才写盘
+# --------------------------------------------------------------------------- #
+class Edit:
+    def __init__(self, path):
+        self.path = path
+        self.buf = load(path)
+        self.orig = bytes(self.buf)
+
+    @property
+    def dirty(self):
+        return bytes(self.buf) != self.orig
+
+    def changed_bytes(self):
+        return sum(1 for a, b in zip(self.orig, bytes(self.buf)) if a != b)
+
+    def commit(self, dry=False, backup=True):
+        if not self.dirty:
+            print("\n没有需要改动的内容，文件未写。")
+            return None
+        if dry:
+            print("\n--dry-run：以上改动没有写入。")
+            return None
+        bpath = store(self.path, self.buf, backup=backup)
+        if not checksum_ok(load(self.path)):
+            print("!! 写后校验失败，请用 restore --latest 回滚", file=sys.stderr)
+            raise SystemExit(2)
+        print(f"\n已写入  {self.path}")
+        print(f"        实际改动 {self.changed_bytes()} 字节，校验和 OK")
+        if bpath:
+            print(f"备份    {bpath}")
+            print(f'回滚    {prog()} -f "{self.path}" restore --latest')
+        return bpath
+
+
+def prog():
+    return "python tools/fd2sav.py"
+
+
+def hint(path, rest):
+    """给用户可直接复制执行的命令行（带上存档路径，避免误操作到别的存档）。"""
+    return f'{prog()} -f "{path}" {rest}'
+
+
+def first_region(spec):
+    """给 get/dump/raw 这种只接受单个 region 的命令用（允许写 all / continue）。"""
+    return expand_regions(spec)[0]
+
+
+def open_region(edit, name):
+    reg = Region(edit.buf, name)
+    if name not in ("head", "roster") and reg.empty():
+        return None
+    return reg
+
+
+# --------------------------------------------------------------------------- #
+# 记录显示
+# --------------------------------------------------------------------------- #
+def _qty(r):
+    return u16(r, 0x40), u16(r, 0x42), u16(r, 0x44), u16(r, 0x46)
+
+
+ROW_FMT = "  {:<4}{}{:<5}{:<4}{:>9}{:>10}{:>6}{:>5}{:>5}"
+
+
+def _w(s):
+    """显示宽度：CJK 算 2 列。"""
+    return sum(2 if ord(c) > 0x2E7F else 1 for c in s)
+
+
+def _pad(s, width):
+    s = str(s)
+    return s + " " * max(0, width - _w(s))
+
+
+ROW_HDR = ROW_FMT.format("#", _pad("名字", 12), "id", "Lv", "HP", "MP", "AP", "DP", "DX")
+
+
+def rec_flat(reg, i, names=None):
+    r = reg.rec(i)
+    hp, mhp, mp, mmp = _qty(r)
+    mark = "  << 残血" if hp < mhp else ""
+    return (ROW_FMT.format(i, _pad(char_name(r, names), 12), r[8], r[0x21],
+                           f"{hp}/{mhp}", f"{mp}/{mmp}",
+                           u16(r, 0x37), u16(r, 0x39), u16(r, 0x3E)) + mark)
+
+
+def rec_items(reg, i):
+    r = reg.rec(i)
+    items = " ".join(f"{get_field(r, f'item{k}'):02X}" for k in range(8))
+    slots = [f"{r[0x0A + 2 * k]:02X}:{r[0x0B + 2 * k]:02X}" for k in range(8)]
+    return f"        items[{items}]  slots={slots}"
+
+
+def wounded(reg, idxs=None):
+    n = []
+    for i in (idxs if idxs is not None else range(min(reg.count, reg.max_recs))):
+        r = reg.rec(i)
+        if is_real_char(r) and u16(r, 0x40) < u16(r, 0x42):
+            n.append(i)
+    return n
+
+
+# --------------------------------------------------------------------------- #
+# 命令
+# --------------------------------------------------------------------------- #
+def cmd_info(args):
+    buf = load(args.file)
+    names = name_table(args.file)
+    f = buf[HEAD_FIELD:HEAD_FIELD + 18]
+    money = struct.unpack_from("<I", buf, HEAD_MONEY)[0]
+    party = Region(buf, "head")
+    roster = Region(buf, "roster")
+    real = [i for i in range(min(roster.count, roster.max_recs))
+            if is_real_char(roster.rec(i))]
+
+    print(f"存档    {args.file}")
+    print(f"        22,987 B   校验和 {'OK' if checksum_ok(buf) else '不匹配!'}"
+          f"   备份 {len(backups(args.file))} 个")
+    if not names:
+        print("（没找到 FDTXT.DAT / glyphs.json，名字列留空；"
+              "把 FDTXT.DAT 放到存档同目录即可显示）")
+    print(f"\n【继续游戏】  地点 {f[0]}   场景 {f[2]}   "
+          f"队伍 {f[9]} 人   金钱 {money:,}")
+    print(ROW_HDR)
+    for i in range(min(party.count, party.max_recs)):
+        print(rec_flat(party, i, names))
+        if args.detail:
+            print(rec_items(party, i))
+    hw = wounded(party)
+    if hw:
+        print(f"  残血 {len(hw)} 人：{', '.join('#' + str(i) for i in hw)}"
+              f"   (heal 一条命令搞定)")
+
+    print(f"\n【名单表】{roster.count} 条，其中真实角色 {len(real)} 条"
+          f"（其余 {roster.count - len(real)} 条是空位占位，不用管）")
+    print(ROW_HDR)
+    for i in real:
+        print(rec_flat(roster, i, names))
+        if args.detail:
+            print(rec_items(roster, i))
+
+    print("\n【存档槽】")
+    for k in range(4):
+        reg = Region(buf, f"s{k}")
+        if reg.empty():
+            print(f"  槽 {k + 1}  空")
+            continue
+        hw = wounded(reg)
+        tail = f"   残血 {len(hw)} 人" if hw else ""
+        print(f"  槽 {k + 1}  场景 {reg.scenario_id():<3} "
+              f"{reg.count} 人   {reg.money:,} 金{tail}")
+
+
+def cmd_get(args):
+    buf = load(args.file)
+    names = name_table(args.file)
+    reg = Region(buf, first_region(args.region))
+    fields = args.fields or ["name", "race", "class", "id", "kind", "level",
+                             "hp", "maxhp", "mp", "maxmp", "ap", "dp", "dx"] \
+        + [f"item{i}" for i in range(8)]
+
+    def cell(r, k):
+        if k == "name":
+            return f"name={char_name(r, names) or '-'}"
+        if k == "race":
+            return f"race={race_name(r, names) or '-'}"
+        if k == "class":
+            return f"class={class_name(r, names) or '-'}"
+        return f"{k}={get_field(r, k)}"
+
+    for mi in select_members(reg, args.member):
+        r = reg.rec(mi)
+        print(f"{REGION_LABEL[reg.name]}[{mi}]: " +
+              "  ".join(cell(r, k) for k in fields))
+
+
+def _parse_set_items(items):
+    """兼容两种写法：
+         set #0 level=20 hp=999            （region 默认 继续游戏）
+         set all #0 level=20 hp=999        （显式给 region）
+    """
+    spec = "continue"
+    if len(items) >= 2 and items[0] in REGION_WORDS:
+        spec, items = items[0], items[1:]
+    member, assigns = items[0], items[1:]
+    if not assigns:
+        raise SystemExit("没给要改的字段，例如：set #0 level=20 hp=999 maxhp=999")
+    return spec, member, assigns
+
+
+def cmd_set(args):
+    e = Edit(args.file)
+    spec, member, assigns = _parse_set_items(args.items)
+    pairs = []
+    for kv in assigns:
+        k, sep, v = kv.partition("=")
+        k = k.strip()
+        if not sep:
+            raise SystemExit(f"看不懂 '{kv}'，应为 字段=数值")
+        if k not in FIELDS:
+            raise SystemExit(f"没有字段 '{k}'（可用：{', '.join(sorted(FIELDS))}）")
+        pairs.append((k, int(v, 0)))
+
+    rows = []
+    for rname in expand_regions(spec):
+        reg = open_region(e, rname)
+        if reg is None:
+            print(f"  跳过 {REGION_LABEL[rname]}（空槽）")
+            continue
+        for mi in select_members(reg, member):
+            r = reg.rec(mi)
+            changed = []
+            for k, v in pairs:
+                old = get_field(r, k)
+                set_field(r, k, v)
+                if old != get_field(r, k):
+                    changed.append(f"{k} {old}->{get_field(r, k)}")
+            if args.recalc:
+                before = (u16(r, 0x48), u16(r, 0x4A), u16(r, 0x4C), u16(r, 0x4E))
+                apply_recalc(r)
+                after = (u16(r, 0x48), u16(r, 0x4A), u16(r, 0x4C), u16(r, 0x4E))
+                if before != after:
+                    changed.append(f"派生 AP/DP/DX/DE {before[0]}/{before[1]}/"
+                                   f"{before[2]}/{before[3]} -> "
+                                   f"{after[0]}/{after[1]}/{after[2]}/{after[3]}")
+            rows.append(f"  {REGION_LABEL[rname]}[{mi}] id={r[8]:<4} "
+                        + ("  ".join(changed) if changed else "（无变化）"))
+
+    if rows:
+        print("【修改】")
+        for s in rows:
+            print(s)
+    if "level" in {k for k, _ in pairs} and not (
+            {"maxhp", "maxmp", "ap", "dp", "dx"} & {k for k, _ in pairs}):
+        print("\n提示：只改了等级，上限值不会自动跟着涨——游戏只在真正的升级流程里"
+              "按成长表加。\n      要一并改就加：maxhp=... maxmp=... ap=... dp=... dx=...")
+    e.commit(dry=args.dry_run, backup=not args.no_backup)
+
+
+def cmd_money(args):
+    e = Edit(args.file)
+    raw = str(args.amount).strip()
+    add = args.add or raw.startswith("+")
+    try:
+        val = int(raw.lstrip("+"), 0)
+    except ValueError:
+        raise SystemExit(f"看不懂金额 '{raw}'（可写 9999 / 0x2710 / +5000）")
+    rows = []
+    for rname in expand_regions(args.region):
+        reg = open_region(e, rname)
+        if reg is None or reg.money_off is None:
+            continue
+        old = reg.money
+        new = old + val if add else val
+        if new < 0 or new > 0xFFFFFFFF:
+            raise SystemExit(f"金额越界：{new}")
+        reg.money = new
+        label = "继续游戏" if rname == "head" else REGION_LABEL[rname]
+        rows.append(f"  {label}   {old:,} -> {reg.money:,}")
+    if rows:
+        print("【金钱】")
+        for s in rows:
+            print(s)
+    e.commit(dry=args.dry_run, backup=not args.no_backup)
+
+
+def cmd_heal(args):
+    e = Edit(args.file)
+    rows = []
+    skipped = 0
+    for rname in expand_regions(args.region):
+        reg = open_region(e, rname)
+        if reg is None:
+            print(f"  跳过 {REGION_LABEL[rname]}（空槽）")
+            continue
+        idxs = select_members(reg, args.member)
+        keep = filter_real(reg, idxs, args.real_only)
+        skipped += len(idxs) - len(keep)
         for mi in keep:
             r = reg.rec(mi)
-            set_u16(r, 0x40, u16(r, 0x42))         # HP  = max
-            set_u16(r, 0x44, u16(r, 0x46))         # MP  = max
-        n += len(keep)
-        skipped += len(all_idx) - len(keep)
-    b = store(args.file, buf, backup=not args.no_backup, dry=args.dry_run)
-    print(f"healed {n} record(s)"
-          + (f", skipped {skipped} placeholder record(s)" if skipped else ""))
-    print(f"{'dry-run, nothing written' if args.dry_run else 'written'}"
-          + (f"  backup: {b}" if b else ""))
+            hp, mhp, mp, mmp = _qty(r)
+            if hp >= mhp and mp >= mmp:
+                continue
+            parts = []
+            if hp < mhp:
+                parts.append(f"HP {hp}->{mhp}")
+            if mp < mmp:
+                parts.append(f"MP {mp}->{mmp}")
+            set_u16(r, 0x40, mhp)
+            set_u16(r, 0x44, mmp)
+            rows.append(f"  {REGION_LABEL[rname]}[{mi}] id={r[8]:<4} "
+                        + "   ".join(parts))
+    if rows:
+        print("【满血满魔】")
+        for s in rows:
+            print(s)
+        print(f"  共 {len(rows)} 条记录")
+    else:
+        print("全员已经是满血满魔。")
+    if skipped:
+        print(f"  （跳过 {skipped} 条空位占位记录）")
+    e.commit(dry=args.dry_run, backup=not args.no_backup)
+
+
+def cmd_recalc(args):
+    e = Edit(args.file)
+    n = 0
+    diff = 0
+    for rname in expand_regions(args.region):
+        reg = open_region(e, rname)
+        if reg is None:
+            continue
+        for mi in select_members(reg, args.member):
+            r = reg.rec(mi)
+            before = (u16(r, 0x48), u16(r, 0x4A), u16(r, 0x4C), u16(r, 0x4E))
+            apply_recalc(r)
+            after = (u16(r, 0x48), u16(r, 0x4A), u16(r, 0x4C), u16(r, 0x4E))
+            n += 1
+            if before != after:
+                diff += 1
+                print(f"  {REGION_LABEL[rname]}[{mi}] id={r[8]:<4} "
+                      f"{before} -> {after}")
+    print(f"重算 {n} 条记录，其中 {diff} 条确实有变化。")
+    e.commit(dry=args.dry_run, backup=not args.no_backup)
 
 
 def cmd_check(args):
     """Compare the stored derived block (+0x48..+0x4E) against a fresh
     unit_recalc run - proves the item-bonus table is read correctly."""
     if not ITEM_BONUS:
-        raise SystemExit("item bonus table unavailable "
-                         "(need analysis/seg_dseg03.bin)")
+        raise SystemExit("道具加成表缺失（需要 analysis/seg_dseg03.bin）")
     buf = load(args.file)
     bad = 0
     total = 0
-    for rname in (expand_regions(args.region)):
+    for rname in expand_regions(args.region):
         reg = Region(buf, rname)
         if rname not in ("head", "roster") and reg.empty():
             continue
-        for i in range(reg.count):
+        for i in range(min(reg.count, reg.max_recs)):
             r = reg.rec(i)
             got = (u16(r, 0x48), u16(r, 0x4A), u16(r, 0x4C), u16(r, 0x4E))
             want = tuple(v & 0xFFFF for v in derived(r))
             total += 1
-            mark = "ok" if got == want else "DIFF"
             if got != want:
                 bad += 1
-            print(f"{rname}#{i:<2} id={r[8]:<3} stored AP/DP/DX/DE={got} "
-                  f"recalc={want}  {mark}")
-    print(f"\n{total - bad}/{total} records reproduce the game's own "
-          f"unit_recalc output")
-
-
-def cmd_recalc(args):
-    buf = load(args.file)
-    n = 0
-    for rname in (expand_regions(args.region)):
-        reg = Region(buf, rname)
-        if rname not in ("head", "roster") and reg.empty():
-            continue
-        for mi in select_members(reg, args.member):
-            apply_recalc(reg.rec(mi))
-            n += 1
-    b = store(args.file, buf, backup=not args.no_backup, dry=args.dry_run)
-    print(f"recalculated {n} record(s)")
-    print(f"{'dry-run, nothing written' if args.dry_run else 'written'}"
-          + (f"  backup: {b}" if b else ""))
+                print(f"  {REGION_LABEL[rname]}[{i}] id={r[8]:<4} "
+                      f"存档 {got}  重算 {want}  << 不一致")
+    print(f"{total - bad}/{total} 条记录与游戏自身的 unit_recalc 结果一致。")
+    return 0 if bad == 0 else 1
 
 
 def cmd_raw(args):
-    buf = load(args.file)
-    reg = Region(buf, args.region)
-    r = reg.rec(int(args.member, 0))
+    e = Edit(args.file)
+    reg = Region(e.buf, first_region(args.region))
+    r = reg.rec(int(args.member.lstrip("#"), 0))
     off = int(args.offset, 0)
     data = bytes(int(x, 16) for x in args.bytes)
     if off + len(data) > REC_STRIDE:
-        raise SystemExit("write would run past the 80-byte record")
+        raise SystemExit("这次写入会越过 80 字节记录边界")
+    old = bytes(r[off:off + len(data)])
     r[off:off + len(data)] = data
-    b = store(args.file, buf, backup=not args.no_backup, dry=args.dry_run)
-    print(f"wrote {len(data)} byte(s) at {reg.name}#{args.member} +0x{off:02X}: "
-          f"{data.hex()}")
-    print(f"{'dry-run, nothing written' if args.dry_run else 'written'}"
-          + (f"  backup: {b}" if b else ""))
+    print(f"  {REGION_LABEL[reg.name]}[{args.member}] +0x{off:02X}  "
+          f"{old.hex(' ')} -> {data.hex(' ')}")
+    e.commit(dry=args.dry_run, backup=not args.no_backup)
 
 
 def cmd_dump(args):
     buf = load(args.file)
-    reg = Region(buf, args.region)
+    reg = Region(buf, first_region(args.region))
     for mi in select_members(reg, args.member):
         r = bytes(reg.rec(mi))
-        print(f"{reg.name} #{mi}  ({reg.base + REC_STRIDE*mi:#06x})")
+        print(f"{REGION_LABEL[reg.name]}[{mi}]  (文件偏移 0x{reg.base + REC_STRIDE * mi:04X})")
         for o in range(0, REC_STRIDE, 16):
             hx = " ".join(f"{b:02X}" for b in r[o:o + 16])
             print(f"  +0x{o:02X}  {hx}")
 
 
+def cmd_restore(args):
+    path = args.file
+    baks = backups(path)                 # 先取快照，避免把刚生成的备份算进候选
+    if not baks:
+        print("这个存档还没有备份。")
+        return
+
+    if args.list or (not args.latest and not args.backup):
+        print(f"{path} 的备份（新的在上）：")
+        for i, b in enumerate(baks):
+            print(f"  [{i}] {bak_stamp(b)}   {os.path.basename(b)}")
+        if not args.latest and not args.backup:
+            print(f"\n恢复最新：{hint(path, 'restore --latest')}")
+            print(f"恢复指定：{hint(path, 'restore --backup <序号或文件名>')}")
+        return
+
+    if args.latest:
+        target = baks[0]
+    else:
+        key = str(args.backup)
+        if key.isdigit():
+            i = int(key)
+            if not 0 <= i < len(baks):
+                raise SystemExit(f"没有第 {i} 个备份（共 {len(baks)} 个）")
+            target = baks[i]
+        else:
+            hit = [b for b in baks if os.path.basename(b) == key]
+            target = hit[0] if hit else os.path.join(os.path.dirname(baks[0]), key)
+            if not os.path.isfile(target):
+                raise SystemExit(f"找不到备份 {key}")
+
+    keep = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
+    shutil.copy2(path, keep)
+    shutil.copy2(target, path)
+
+    buf = load(path)
+    ok = checksum_ok(buf)
+    print(f"已恢复  {os.path.basename(target)}  ->  {path}")
+    print(f"恢复前  {os.path.basename(keep)}")
+    print(f"校验和  {'OK' if ok else '不匹配（这个备份本身就有问题）'}")
+    if not ok:
+        return 1
+
+
+# --------------------------------------------------------------------------- #
+# 交互菜单
+# --------------------------------------------------------------------------- #
+MENU_TEXT = """
+ 1  全体满血满魔（继续游戏）
+ 2  全体满血满魔（含 4 个存档槽）
+ 3  修改金钱
+ 4  修改角色属性（等级 / HP / 攻防…）
+ 5  查看全部记录
+ 6  备份 / 回滚
+ 0  退出
+"""
+
+
+def _summary(path):
+    buf = load(path)
+    f = buf[HEAD_FIELD:HEAD_FIELD + 18]
+    money = struct.unpack_from("<I", buf, HEAD_MONEY)[0]
+    party = Region(buf, "head")
+    roster = Region(buf, "roster")
+    hw = wounded(party)
+    rw = wounded(roster)
+    slots = []
+    for k in range(4):
+        reg = Region(buf, f"s{k}")
+        slots.append("空" if reg.empty() else f"{reg.count}人/{reg.money}G")
+    print(f"\n=== {os.path.basename(path)}  {path} ===")
+    print(f"继续游戏：地点 {f[0]}  场景 {f[2]}  队伍 {f[9]} 人  金钱 {money:,}"
+          + (f"   [残血 {len(hw)} 人]" if hw else "   [满血]"))
+    print(f"名单表  ：{roster.count} 条"
+          + (f"   残血 {len(rw)} 人" if rw else "   全员满血"))
+    print(f"存档槽  ：1:{slots[0]}  2:{slots[1]}  3:{slots[2]}  4:{slots[3]}")
+
+
+def cmd_menu(args):
+    path = args.file
+    while True:
+        try:
+            _summary(path)
+            print(MENU_TEXT)
+            ch = input("请选择 [0-6]> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+
+        try:
+            if ch in ("0", "q", "Q"):
+                return 0
+            if ch == "1":
+                cmd_heal(argparse.Namespace(file=path, region="continue", member="*",
+                                            real_only=True, dry_run=False,
+                                            no_backup=False))
+            elif ch == "2":
+                cmd_heal(argparse.Namespace(file=path, region="all", member="*",
+                                            real_only=True, dry_run=False,
+                                            no_backup=False))
+            elif ch == "3":
+                s = input("金额（数字；+5000 表示在当前基础上增加）> ").strip()
+                if not s:
+                    continue
+                add = s.startswith("+")
+                amount = int(s.lstrip("+"), 0)
+                reg = input("范围：回车=继续游戏，a=全部区域 > ").strip().lower()
+                cmd_money(argparse.Namespace(file=path, amount=amount, add=add,
+                                             region="all" if reg == "a" else "continue",
+                                             dry_run=False, no_backup=False))
+            elif ch == "4":
+                who = input("改谁（0 / #0 / id=9 / * 全部）> ").strip()
+                if not who:
+                    continue
+                pairs = input("要改什么，如 level=40 hp=999 maxhp=999 > ").strip()
+                if not pairs:
+                    continue
+                cmd_set(argparse.Namespace(file=path, items=[who] + pairs.split(),
+                                           recalc=True, dry_run=False,
+                                           no_backup=False))
+            elif ch == "5":
+                cmd_info(argparse.Namespace(file=path, detail=True))
+            elif ch == "6":
+                cmd_restore(argparse.Namespace(file=path, list=True,
+                                               latest=False, backup=None))
+                s = input("要回滚到哪个备份？回车取消，序号或 l=最新 > ").strip()
+                if s:
+                    if s.lower() == "l":
+                        cmd_restore(argparse.Namespace(file=path, list=False,
+                                                       latest=True, backup=None))
+                    else:
+                        cmd_restore(argparse.Namespace(file=path, list=False,
+                                                       latest=False, backup=s))
+            else:
+                print("没有这个选项。")
+        except SystemExit as ex:
+            print(f"!! {ex}")
+        except Exception as ex:                      # noqa: BLE001 - 菜单不该崩
+            print(f"!! 出错了：{ex}")
+
+        try:
+            input("\n回车继续…")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+
+
+# --------------------------------------------------------------------------- #
+# 命令行
 # --------------------------------------------------------------------------- #
 def build_parser():
-    p = argparse.ArgumentParser(
-        description="FD2 (炎龙骑士团2) FD2.SAV 存档修改器",
-        formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--file", default="FD2.SAV", help="FD2.SAV 路径")
-    sub = p.add_subparsers(dest="cmd", required=True)
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("-f", "--file", metavar="SAV", default=argparse.SUPPRESS,
+                        help="FD2.SAV 路径（不填则自动查找；环境变量 FD2_SAV 亦可）")
 
-    s = sub.add_parser("info", help="解析并打印存档全部内容")
+    epilog = f"""常用：
+  {prog()}                             交互菜单（会自动查找存档）
+  {prog()} info                        看看现在谁残血
+  {prog()} heal                        继续游戏全员满血满魔
+  {prog()} heal --all                  连带 4 个存档槽一起
+  {prog()} money 99999                 继续游戏金钱改 99999
+  {prog()} money +5000                 加 5000
+  {prog()} set 0 level=40 hp=999 maxhp=999
+  {prog()} restore --latest            回滚到最近一次备份
+
+region 写法：continue（继续游戏，默认）| head | roster | s0..s3 | all | 逗号列表
+member 写法：#索引 | id=序号 | *（全体）
+"""
+    p = argparse.ArgumentParser(
+        parents=[common],
+        description="炎龙骑士团2 (FD2) 存档修改器",
+        epilog=epilog,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = p.add_subparsers(dest="cmd")
+
+    s = sub.add_parser("info", parents=[common], help="查看存档（谁残血一眼看到）")
+    s.add_argument("-d", "--detail", action="store_true", help="附带道具/装备槽")
     s.set_defaults(func=cmd_info)
 
-    s = sub.add_parser("get", help="读取某个记录")
-    s.add_argument("region", choices=REGIONS + ["all"])
+    s = sub.add_parser("get", parents=[common], help="读取某条记录的字段")
+    s.add_argument("region", help="continue|head|roster|s0..s3|all")
     s.add_argument("member", help="#索引 | id=<n> | *")
-    s.add_argument("fields", nargs="*", help="要打印的字段（默认全部）")
+    s.add_argument("fields", nargs="*", help="要打印的字段（默认常用字段）")
     s.set_defaults(func=cmd_get)
 
-    s = sub.add_parser("set", help="修改记录字段，如 set s0 #0 level=20 hp=999 maxhp=999")
-    s.add_argument("region", choices=REGIONS + ["all"])
-    s.add_argument("member", help="#索引 | id=<n> | *")
-    s.add_argument("assign", nargs="+", metavar="field=value")
-    s.add_argument("--recalc", action="store_true",
-                   help="改完后重算派生属性 (+0x48..+0x4E)")
+    s = sub.add_parser("set", parents=[common],
+                       help="改字段，如 set 0 level=40 hp=999 maxhp=999")
+    s.add_argument("items", nargs="+",
+                   metavar="member field=value",
+                   help="member 可写 0 / #0 / id=9 / *；也可在前面加 region")
+    s.add_argument("--no-recalc", dest="recalc", action="store_false",
+                   help="不重算派生属性（默认会重算，防止伤害不对）")
     s.add_argument("--dry-run", action="store_true")
     s.add_argument("--no-backup", action="store_true")
-    s.set_defaults(func=cmd_set)
+    s.set_defaults(func=cmd_set, recalc=True)
 
-    s = sub.add_parser("check", help="校验派生属性与游戏 unit_recalc 是否一致")
-    s.add_argument("--region", default="all",
-                   help="head|roster|s0..s3|continue|all，或逗号列表 head,roster")
+    s = sub.add_parser("check", parents=[common],
+                       help="校验派生属性是否与 unit_recalc 一致")
+    s.add_argument("--region", default="all")
     s.set_defaults(func=cmd_check)
 
-    s = sub.add_parser("recalc", help="重算派生属性 (+0x48..+0x4E)")
-    s.add_argument("--region", default="all",
-                   help="head|roster|s0..s3|continue|all，或逗号列表 head,roster")
+    s = sub.add_parser("recalc", parents=[common], help="重算派生属性")
+    s.add_argument("--region", default="all")
     s.add_argument("--member", default="*")
     s.add_argument("--dry-run", action="store_true")
     s.add_argument("--no-backup", action="store_true")
     s.set_defaults(func=cmd_recalc)
 
-    s = sub.add_parser("money", help="设置/增加金钱")
-    s.add_argument("amount", type=lambda x: int(x, 0), help="数额（可用 0x 前缀）")
-    s.add_argument("--region", default="all",
-                   help="head|roster|s0..s3|continue|all，或逗号列表 head,roster")
+    s = sub.add_parser("money", parents=[common], help="改金钱")
+    s.add_argument("amount",
+                   help="数额：9999 / 0x2710；带 + 号表示在当前基础上增加，如 +5000")
     s.add_argument("--add", action="store_true", help="在现有数值上累加")
+    s.add_argument("--region", default="continue")
+    s.add_argument("--all", dest="region", action="store_const", const="all",
+                   help="含 4 个存档槽")
     s.add_argument("--dry-run", action="store_true")
     s.add_argument("--no-backup", action="store_true")
     s.set_defaults(func=cmd_money)
 
-    s = sub.add_parser("heal", help="全体满血满魔")
-    s.add_argument("--region", default="all",
-                   help="head|roster|s0..s3|continue|all，或逗号列表 head,roster")
+    s = sub.add_parser("heal", parents=[common], help="满血满魔（默认继续游戏）")
+    s.add_argument("--region", default="continue")
+    s.add_argument("--all", dest="region", action="store_const", const="all",
+                   help="含 4 个存档槽")
     s.add_argument("--member", default="*")
-    s.add_argument("--real-only", action="store_true",
-                   help="只处理真实角色（记录 +6 == 2），跳过 id=96 之类的空位记录")
+    s.add_argument("--with-placeholders", dest="real_only", action="store_false",
+                   help="连 id=96 之类的空位记录一起改（一般不需要）")
     s.add_argument("--dry-run", action="store_true")
     s.add_argument("--no-backup", action="store_true")
-    s.set_defaults(func=cmd_heal)
+    s.set_defaults(func=cmd_heal, real_only=True)
 
-    s = sub.add_parser("dump", help="十六进制打印记录")
-    s.add_argument("region", choices=REGIONS + ["all"])
-    s.add_argument("member", nargs="?", default="#0")
+    s = sub.add_parser("dump", parents=[common], help="十六进制查看记录")
+    s.add_argument("region", help="continue|head|roster|s0..s3|all")
+    s.add_argument("member", nargs="?", default="0")
     s.set_defaults(func=cmd_dump)
 
-    s = sub.add_parser("raw", help="按字节写记录（高级）")
-    s.add_argument("region", choices=REGIONS + ["all"])
+    s = sub.add_parser("raw", parents=[common], help="按字节写记录（高级）")
+    s.add_argument("region", help="continue|head|roster|s0..s3|all")
     s.add_argument("member")
     s.add_argument("offset", help="记录内偏移，如 0x40")
     s.add_argument("bytes", nargs="+", help="十六进制字节，如 0xFF 0x7F")
     s.add_argument("--dry-run", action="store_true")
     s.add_argument("--no-backup", action="store_true")
     s.set_defaults(func=cmd_raw)
+
+    s = sub.add_parser("restore", parents=[common], help="从备份回滚")
+    s.add_argument("--list", action="store_true", help="只列备份")
+    s.add_argument("--latest", action="store_true", help="恢复最近一次备份")
+    s.add_argument("--backup", metavar="N|文件名", help="恢复指定备份")
+    s.set_defaults(func=cmd_restore)
+
+    p.set_defaults(func=cmd_menu)
     return p
-
-
-WRITE_CMDS = {"set", "money", "heal", "recalc", "raw"}
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    args.func(args)
-    if args.cmd in WRITE_CMDS and not getattr(args, "dry_run", False):
-        buf = load(args.file)
-        if not checksum_ok(buf):
-            print("!! post-write checksum verification FAILED", file=sys.stderr)
-            return 2
-        print("post-write checksum: OK")
-    return 0
+    args.file = find_save(getattr(args, "file", None))
+    return args.func(args) or 0
 
 
 if __name__ == "__main__":
