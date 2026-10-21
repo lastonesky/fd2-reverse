@@ -47,8 +47,9 @@ void map_cursor_window_save(void)
         guest_free((void *)(uintptr_t)dword_53A71);
     dword_53A71 = guest_malloc(BLOCK_SIZE);
 
-    src = dword_53A49 + MAP_VIEW_OFF + 24 * (dword_53AB9 - 1) +
-          10944 * (dword_53ABD - 1);
+    src = dword_53A49 + MAP_VIEW_OFF
+        + (intptr_t)((int)dword_53AB9 - 1) * 24
+        + (intptr_t)((int)dword_53ABD - 1) * 10944;
     for (row = 0; row < BLOCK_ROWS; ++row) {
         memmove((void *)(uintptr_t)(dword_53A71 + BLOCK_BYTES * (uint32_t)row),
                 src, (size_t)BLOCK_BYTES);
@@ -63,8 +64,9 @@ void map_cursor_window_restore(void)
     uint8_t *dst;
     int row;
 
-    dst = dword_53A49 + MAP_VIEW_OFF + 24 * (dword_53AB9 - 1) +
-          10944 * (dword_53ABD - 1);
+    dst = dword_53A49 + MAP_VIEW_OFF
+        + (intptr_t)((int)dword_53AB9 - 1) * 24
+        + (intptr_t)((int)dword_53ABD - 1) * 10944;
     for (row = 0; row < BLOCK_ROWS; ++row) {
         memmove(dst,
                 (const void *)(uintptr_t)(dword_53A71 +

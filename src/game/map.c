@@ -98,8 +98,11 @@ void map_blit_cell_sprite(void *dst, int x, int y)
     src = dword_53A5D + *(const uint32_t *)(dword_53A5D + 4 * tile + 0x0A);
     pal = dword_53A6D
         + *(const uint32_t *)(dword_53A6D + 4 * byte_51A97[dword_53C1F] + 6);
-    d   = (uint8_t *)dst + 0x8088 + 10944 * (y - dword_53AAD)
-        + 24 * (x - dword_53AA9);
+    /* x/y may be one cell outside the view (the edge tests above allow
+     * that); use signed offsets so the 64-bit pointer arithmetic does not
+     * wrap through +4 GiB. */
+    d   = (uint8_t *)dst + 0x8088 + (intptr_t)(y - (int)dword_53AAD) * 10944
+        + (intptr_t)(x - (int)dword_53AA9) * 24;
 
     if (cell[7] == 0xFF)
         sprite24_plain(src, d, 456);
@@ -589,10 +592,10 @@ void map_draw_status_popups(void)
                 const uint8_t *rec = dword_53A45 + 80u * (uint32_t)byte_53DFC[j];
                 uint8_t *dst = dword_53A49
                     + 0x8088u
-                    + 24u * (uint32_t)(rec[0] - dword_53AA9)
-                    + 10944u * (uint32_t)(rec[1] - dword_53AAD)
+                    + (intptr_t)((int)rec[0] - (int)dword_53AA9) * 24
+                    + (intptr_t)((int)rec[1] - (int)dword_53AAD) * 10944
                     + byte_53D34[j]
-                    + (uint32_t)(456 * ((int)v3[j % 4u + i] - 3));
+                    + (intptr_t)(456 * ((int)v3[j % 4u + i] - 3));
                 rle2_blit_trans(dst,
                     (const void *)(uintptr_t)(dword_53A81 +
                         *(const uint32_t *)(uintptr_t)(dword_53A81 +
@@ -628,8 +631,8 @@ void map_draw_party_icons(int unused, int table_idx, int count, const uint8_t *l
         if (x >= dword_53AA9 - 1 && x <= dword_51A87 + dword_53AA9 &&
             y >= dword_53AAD - 1 && y <= dword_51A8B + dword_53AAD + 1) {
             uint8_t *dst = dword_53A49 + 0x8088u
-                + 24u * (uint32_t)(x - dword_53AA9)
-                + 10944u * (uint32_t)(y - dword_53AAD) - 0xAB0u;
+                + (intptr_t)(x - (int)dword_53AA9) * 24
+                + (intptr_t)(y - (int)dword_53AAD) * 10944 - 0xAB0u;
             int ebx = kind * 12;
             const void *src;
             ebx += (dword_53C0B == 3) ? 2 : dword_53C0B;
@@ -677,8 +680,10 @@ void map_draw_party_icons_anim(int unused, int table_idx, int count,
             int x = rec[0], y = rec[1];
             if (x >= dword_53AA9 - 1 && x <= dword_51A87 + dword_53AA9 &&
                 y >= dword_53AAD - 1 && y <= dword_51A8B + dword_53AAD + 1) {
-                uint8_t *dst = dword_53A49 + 24u * (uint32_t)(x - dword_53AA9)
-                    + 32904u + 10944u * (uint32_t)(y - dword_53AAD) - 2736u;
+                uint8_t *dst = dword_53A49
+                    + (intptr_t)(x - (int)dword_53AA9) * 24
+                    + 32904u
+                    + (intptr_t)(y - (int)dword_53AAD) * 10944 - 2736u;
                 rle2_blit_trans(dst, v20, 456);
             }
         }

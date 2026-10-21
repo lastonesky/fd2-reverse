@@ -5,6 +5,7 @@
 #   pwsh -File build.ps1 -Console   # DEBUG ONLY: CONSOLE subsystem -> a console
 #                                   # window pops up; run it from a terminal
 #                                   # if you do not want the extra window
+#   pwsh -File build.ps1 -Test      # build, then run tools/run_tests.ps1
 #
 # The default links /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup, so normal play
 # shows only the game window; diagnostics still go to FD2_LOG (default
@@ -18,7 +19,7 @@
 #
 # Run the exe from the directory that holds the FD2 data files (FDOTHER.DAT,
 # FDMUS.DAT, ...), e.g.  E:\FD2 .
-param([switch]$Debug, [switch]$Console)
+param([switch]$Debug, [switch]$Console, [switch]$Test)
 
 $ErrorActionPreference = "Stop"
 $root   = $PSScriptRoot
@@ -92,4 +93,10 @@ if ($Console) {
     Write-Host "      subsystem=CONSOLE (a console window will appear - debug build)"
 } else {
     Write-Host "      subsystem=WINDOWS GUI (no console window; logs -> FD2_LOG)"
+}
+
+if ($Test) {
+    Write-Host "== running restored-logic regression tests =="
+    & (Join-Path $root "tools\run_tests.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "regression tests failed" }
 }

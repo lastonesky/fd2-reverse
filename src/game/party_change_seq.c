@@ -203,7 +203,10 @@ void party_change_map_seq(void)
                 m = 9;
             saved = res_draw_subimage(dword_53A81, dword_53A49 + 32904, 456,
                                       116, m * m + 84, 91);
-            dlg_draw_number(dword_53A49 + 0x812F + 456 * m * m, 456,
+            /* 0x1A6E4: add edi,0x5A before imul edi,0x1C8 - the number sits
+             * on the same row as the sprite (view row m*m+90), not at the
+             * view top. */
+            dlg_draw_number(dword_53A49 + 0x812F + 456 * (m * m + 0x5A), 456,
                             (int)dword_53BEF, 42, 3);
             gfx_copy_rows((void *)VGA_P(0xA0504u), 320, dword_53A49 + 32904, 456,
                           0x138, 192);

@@ -48,8 +48,9 @@ void map_draw_record_layer(uint8_t *base, int count, const uint8_t *list,
                 found = 1;
 
         {
-            uint8_t *dst = view + 24u * (uint32_t)(x - ox)
-                + 10944u * (uint32_t)(y - oy) - 2736u;
+            /* the edge test accepts x/y one cell outside the view */
+            uint8_t *dst = view + (intptr_t)(x - ox) * 24
+                + (intptr_t)(y - oy) * 10944 - 2736u;
 
             if (found) {
                 rle2_blit_trans(dst, overlay, 456);
@@ -94,8 +95,8 @@ void map_blink_units(int unused, int colour, int count, const uint8_t *list)
                   y >= oy - 1 && y <= oy + dword_51A8B + 1))
                 continue;
 
-            dst = dword_53A49 + 0x8088u + 24u * (uint32_t)(x - ox)
-                + 10944u * (uint32_t)(y - oy) - 2736u;
+            dst = dword_53A49 + 0x8088u + (intptr_t)(x - ox) * 24
+                + (intptr_t)(y - oy) * 10944 - 2736u;
             idx  = kind * 12 + ((dword_53C0B == 3) ? 2 : dword_53C0B);
             bank = dword_53A61;
             sprite24_ramp(bank + *(const uint32_t *)(uintptr_t)

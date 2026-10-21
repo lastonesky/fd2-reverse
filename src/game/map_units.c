@@ -55,8 +55,12 @@ void map_units_animate(void)
             && *(const uint16_t *)(const void *)(rec + 64) == 0
             && x >= ox - 1 && x <= (int)dword_51A87 + ox
             && y >= oy - 1 && y <= (int)dword_51A8B + oy + 1) {
-            v19[found++] = buf + CELL_STRIDE * (uint32_t)(y - 1 - oy)
-                               + 24u * (uint32_t)(x - 1 - ox) + CELL_BASE;
+            /* The edge test allows x/y one cell outside the view, so these
+             * differences can be negative.  Keep the offsets signed: an
+             * unsigned 32-bit wrap would add ~4 GiB instead of subtracting
+             * (was an access violation in the death animation). */
+            v19[found++] = buf + (intptr_t)(y - 1 - oy) * 10944
+                               + (intptr_t)(x - 1 - ox) * 24 + CELL_BASE;
         }
     }
 
@@ -147,8 +151,9 @@ void map_units_move_walk(int dst_x, int dst_y, void *scratch)
                            (dword_53AD1 + 4u * (uint32_t)(i + 114) + 6u));
 
         memmove(dword_53A49, scratch, 0x25680u);
-        rle2_blit_trans(dword_53A49 + 0x8088u + 24u * (uint32_t)(dst_x - ox)
-                        + 10944u * (uint32_t)(dst_y - oy) + 456u,
+        rle2_blit_trans(dword_53A49 + 0x8088u
+                        + (intptr_t)(dst_x - ox) * 24
+                        + (intptr_t)(dst_y - oy) * 10944 + 456u,
                         sprite, 456);
         dlg_portraits_refresh();
         gfx_copy_rows((void *)(uintptr_t)VGA_P(0xA0504u), 320, dword_53A49 + 0x8088u,
@@ -173,8 +178,8 @@ const void *map_units_move_reveal(int dst_x, int dst_y, void *scratch,
     int i;
 
     rle2_blit_trans((uint8_t *)scratch + 0x8088u
-                    + 24u * (uint32_t)(dst_x - ox)
-                    + 10944u * (uint32_t)(dst_y - oy) + 456u,
+                    + (intptr_t)(dst_x - ox) * 24
+                    + (intptr_t)(dst_y - oy) * 10944 + 456u,
                     sprite, 456);
 
     for (i = 5; i >= 0; --i) {

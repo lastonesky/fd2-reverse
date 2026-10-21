@@ -27,6 +27,7 @@ int map_move_toward(int target_x, int target_y, int actor, int mode)
     int profile = rec[32];
     int rec_x = rec[0];
     int rec_y = rec[1];
+    int mp    = rec[59];        /* 0x3B: movement points */
     const void *cost_row;
     void *dirs;
     uint8_t *reach;
@@ -45,7 +46,11 @@ int map_move_toward(int target_x, int target_y, int actor, int mode)
     reach = (uint8_t *)guest_malloc(0x800u);
     unit_mark_nearby(mode);
 
-    if (path_find(cost_row, rec_x, rec_y, profile, dirs, target_x, target_y, 0,
+    /* 0x14BA3/0x14C2D: the flood fill and both path searches use the
+     * record's movement points (+0x3B), not its cost-table profile (+0x20).
+     * Passing the profile here let high-profile units (e.g. villagers) walk
+     * 10+ cells per turn. */
+    if (path_find(cost_row, rec_x, rec_y, mp, dirs, target_x, target_y, 0,
                   (void *)map, (const void *)(uintptr_t)dword_53A69) == 255) {
         util_fix_records(map);
         n = path_find(cost_row, rec_x, rec_y, 28, dirs, target_x, target_y, 1,
@@ -59,7 +64,7 @@ int map_move_toward(int target_x, int target_y, int actor, int mode)
             cand_y = cur_y;
             util_fix_records(map);
             unit_mark_nearby(mode);
-            path_mark(cost_row, rec_x, rec_y, profile, (void *)map,
+            path_mark(cost_row, rec_x, rec_y, mp, (void *)map,
                       (const void *)(uintptr_t)dword_53A69);
             for (i = 0; i < n; ++i) {
                 int d = ((const uint8_t *)dirs)[i];
@@ -87,7 +92,7 @@ int map_move_toward(int target_x, int target_y, int actor, int mode)
 
     util_fix_records(map);
     unit_mark_nearby(mode);
-    path_mark(cost_row, rec_x, rec_y, profile, (void *)map,
+    path_mark(cost_row, rec_x, rec_y, mp, (void *)map,
               (const void *)(uintptr_t)dword_53A69);
     map_exclude_record_cells(actor, mode);
     n = ev5_14B16(reach);
@@ -118,7 +123,7 @@ int map_move_toward(int target_x, int target_y, int actor, int mode)
 
     util_fix_records(map);
     unit_mark_nearby(mode);
-    n = path_find(cost_row, rec_x, rec_y, profile, dirs, cand_x, cand_y, 0,
+    n = path_find(cost_row, rec_x, rec_y, mp, dirs, cand_x, cand_y, 0,
                   (void *)map, (const void *)(uintptr_t)dword_53A69);
     util_fix_records(map);
     if (n != 0)

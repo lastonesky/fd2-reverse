@@ -8,7 +8,7 @@
 |---|---|---|
 | `FD2SAV.BAT` | 命令行入口（双击=交互菜单） | `FD2SAV.BAT info` |
 | `FD2GUI.BAT` | 图形界面入口（双击即开） | — |
-| `fd2sav.py` | 存档读写/校验/满血/改钱/备份回滚 | `python tools/fd2sav.py info`<br>`… heal`（默认只治"继续游戏"）<br>`… heal --all`（含 4 个存档槽）<br>`… money 5000` / `… money +1000`<br>`… set 0 level=40 hp=999`<br>`… get continue 0 hp hp_max`<br>`… check` / `… restore` |
+| `fd2sav.py` | 存档读写/校验/满血/改钱/备份回滚；可改战场全部单位（含敌人、NPC） | `python tools/fd2sav.py info`<br>`… heal`（继续游戏所有单位，含敌人/NPC）<br>`… heal --all`（含 4 个存档槽）<br>`… money 5000` / `… money +1000`<br>`… set 0 level=40 hp=999`<br>`… set roster 11 hp=1`（#11 敌人也能改）<br>`… get continue 0 hp maxhp`<br>`… check` / `… restore` |
 | `fd2sav_gui.py` | 同上，tkinter 界面（`--selftest` 自检） | `python tools/fd2sav_gui.py` |
 | `sav_diff.py` | 两个存档解密后逐字节对比 | `python tools/sav_diff.py a.sav b.sav` |
 
@@ -41,6 +41,7 @@
 | `extract_data_types.py` | 从 `port/` 源码抽数据符号真实类型 → `analysis/data_type_overrides.csv` | `python tools/extract_data_types.py` |
 | `migrate_port_assets.py` | 把 `port/` 里已验证的 309 个翻译模块搬进 `port3/src/` | `python tools/migrate_port_assets.py` |
 | `prepare_image.py` | 从原版 FD2.EXE 重建数据段镜像（含 LE fixup；版权数据不入库） | `python tools/prepare_image.py` |
+| `run_tests.ps1` | 已还原逻辑回归测试（移动力/边界偏移，MSVC） | `pwsh -File tools/run_tests.ps1`<br>`pwsh -File build.ps1 -Test` |
 | `check_compile.sh` | 轻量编译校验（WSL） | `wsl bash tools/check_compile.sh [--full]` |
 | `scan64.sh` | 64 位可移植性扫描（WSL） | `wsl bash tools/scan64.sh all` |
 | `_fix_fd.py` | 一次性补丁脚本（修复 `gen_headers.py` 正则），**勿日常使用** | — |
