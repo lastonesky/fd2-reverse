@@ -17,7 +17,9 @@ guessing at the bytes:
 
   head ("继续游戏" / scenario_load 0x10010)
     0x08A3  u8[0xA00]  party table  (dword_53BF7, 32 records x 80)
-    0x12A3  u8[80*N]   roster table (dword_53A45, N = field[1])
+    0x12A3  u8[80*N]   battlefield unit table (dword_53A45, N = field[1]);
+                       this is every unit alive in the current scene, including
+                       NPC allies (+6 == 1) and enemies (+6 == 0)
     0x30A3  u8[0x20]   flag block   (dword_53AD5)
     0x30C3  u8[18]     scene field  f[0..17]
         f[0] location  f[1] roster count  f[2] scene/state id
@@ -35,7 +37,10 @@ guessing at the bytes:
     +0x00 u16   (id pair)
     +0x02 u8    icon index (rebuilt from FDICON.B24)
     +0x05 u8    flag byte (bit0 = rec_flag; |=0x80 used-state)
-    +0x06 u8    kind/type byte
+    +0x06 u8    faction: 0 = enemy, 1 = NPC/ally, 2 = player (unit_add 0x112A5
+                and world_load_party 0x1088D stamp 2; unit_entry_build 0x10C50
+                copies the FDFIELD scenario byte).  It is NOT an empty marker.
+                A truly unused slot is memset(rec,0,80) with rec[5] = 1.
     +0x07 u8    DATO portrait resource index
     +0x08 u8    identity byte (party/roster join key)
     +0x0A .. +0x19   8 x [state, item id] slots
@@ -90,6 +95,8 @@ DSEG03_CANDIDATES = [
 ]
 ITEM_TBL_OFF = 0x02AD
 ITEM_STRIDE = 23
+ITEM_NAMES_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "fd2data", "items.json")
 
 
 def load_item_bonus_table():
@@ -113,6 +120,161 @@ def load_item_bonus_table():
 
 
 ITEM_BONUS = load_item_bonus_table()
+
+
+def load_item_types():
+    """Item entry byte +0: the item's class/type.
+
+    1..0x14 = weapon, 0x15..0x1F = armour, 0x20 = consumable,
+    0x21 = gem, 0x22 = accessory/quest item.  The byte selects which frame
+    box_items_draw (0x184C0) draws and whether the item can be equipped.
+    """
+    for p in DSEG03_CANDIDATES:
+        p = os.path.normpath(p)
+        if not os.path.exists(p):
+            continue
+        d = open(p, "rb").read()
+        tbl = {}
+        for i in range(len(d) // ITEM_STRIDE):
+            o = ITEM_TBL_OFF + ITEM_STRIDE * i
+            if o + ITEM_STRIDE > len(d):
+                break
+            tbl[i] = d[o]
+        return tbl
+    return {}
+
+
+ITEM_TYPES = load_item_types()
+
+
+def load_item_names():
+    try:
+        with open(ITEM_NAMES_JSON, encoding="utf-8") as f:
+            raw = json.load(f)
+        return {int(k): v for k, v in raw.items()}
+    except (OSError, ValueError):
+        return {}
+
+
+ITEM_NAMES = load_item_names()
+
+
+def item_name(index):
+    """Display name for an item id (missing ids stay visible as placeholders)."""
+    return ITEM_NAMES.get(index, f"未知道具 #{index}")
+
+
+def item_type(index):
+    return ITEM_TYPES.get(index)
+
+
+def item_category(index):
+    t = item_type(index)
+    if t is None:
+        return "—"
+    if 1 <= t <= 0x14:
+        return "武器"
+    if 0x15 <= t <= 0x1F:
+        return "防具"
+    if t == 0x20:
+        return "道具"
+    if t == 0x21:
+        return "宝石"
+    if t == 0x22:
+        return "饰品/其他"
+    return f"类型 {t:#04x}"
+
+
+def item_is_weapon(index):
+    t = item_type(index)
+    return t is not None and 1 <= t <= 0x14
+
+
+def item_is_equipment(index):
+    """Weapons and armour can carry the state-byte 0x40 'equipped' bit."""
+    t = item_type(index)
+    return t is not None and 1 <= t <= 0x1F
+
+
+def item_bonus(index):
+    """(AP, DX, DP, DX-derived) from the tbl_602AD entry, or None."""
+    return ITEM_BONUS.get(index) if ITEM_BONUS else None
+
+
+def item_bonus_text(index):
+    b = item_bonus(index)
+    if not b:
+        return ""
+    names = ("AP", "DX", "DP", "DX+")
+    return "  ".join(f"{n}{v:+d}" for n, v in zip(names, b) if v)
+
+
+def slot_off(slot):
+    """Record offset of slot `slot`'s [state, item-id] pair."""
+    return 0x0A + 2 * slot
+
+
+def slot_state(rec, slot):
+    return rec[slot_off(slot)]
+
+
+def slot_item(rec, slot):
+    return rec[slot_off(slot) + 1]
+
+
+def slot_empty(rec, slot):
+    """Bit 7 of the state byte means empty (box_items_draw 0x184C0)."""
+    return bool(rec[slot_off(slot)] & 0x80)
+
+
+def set_slot(rec, slot, item, equip=None, empty=None):
+    """Write one inventory slot.  `item=None` (or 0xFF) empties it.
+
+    The game's two meaningful state-byte values are 0x80 (empty) and
+    0x40 (present and equipped); a present, unequipped item uses 0x00
+    (rec_slot_claim 0x1BB8C / rec_slot_remove 0x1B8E7).
+
+    Empty slots still carry a value byte the game never reads (rec_slot_remove
+    leaves the shifted byte there), so pass `empty=True` with the old `item`
+    to preserve it instead of zeroing unrelated bytes.
+    """
+    off = slot_off(slot)
+    if empty is None:
+        empty = item is None or item == 0xFF
+    if empty:
+        rec[off] = 0x80
+        rec[off + 1] = 0 if item is None else (item & 0xFF)
+        return
+    if equip is None:
+        equip = bool(rec[off] & 0x40) and not (rec[off] & 0x80)
+    rec[off + 1] = item & 0xFF
+    rec[off] = 0x40 if equip else 0x00
+
+
+def set_equipped(rec, slot, on):
+    """Mimic box_item_select (0x1C142): one equipped item per id half.
+
+    Weapons are ids < 0x80 and armour/consumables are ids >= 0x80 in the
+    original table; the game clears the 0x40 bit on every other equipped
+    slot in the same half before marking the chosen slot.
+    """
+    if slot_empty(rec, slot):
+        return False
+    off = slot_off(slot)
+    if on:
+        high = slot_item(rec, slot) >= 0x80
+        for k in range(8):
+            if k == slot:
+                continue
+            o = slot_off(k)
+            if rec[o] & 0x80:
+                continue
+            if (rec[o] & 0x40) and ((rec[o + 1] >= 0x80) == high):
+                rec[o] &= ~0x40
+        rec[off] = (rec[off] & ~0x80) | 0x40
+    else:
+        rec[off] &= ~0x40
+    return True
 
 
 # --------------------------------------------------------------------------- #
@@ -295,11 +457,17 @@ FIELDS = {
     "dx":     ("u16", 0x3E),
     "level":  ("u8",  0x21),
     "kind":   ("u8",  0x06),
+    "faction": ("u8", 0x06),          # alias: 0 敌方 / 1 友军 / 2 我方
     "id":     ("u8",  0x08),
     "portrait": ("u8", 0x07),
     "flag":   ("u8",  0x05),
     "class0": ("u8",  0x1F),
     "class1": ("u8",  0x20),
+    "x":      ("u8",  0x00),
+    "y":      ("u8",  0x01),
+    "dir":    ("u8",  0x03),
+    "large":  ("u8",  0x04),         # 占用两格的巨型单位
+    "status": ("u8",  0x34),         # rec_status_set 的 +52 状态字节
 }
 for _i in range(8):
     FIELDS[f"item{_i}"] = ("slot", 0x0A + 2 * _i)     # [state, item id]
@@ -368,27 +536,46 @@ def apply_recalc(rec) -> None:
 
 
 def select_members(reg: Region, sel: str):
-    """sel: '#i' index | 'id=<n>' | '*' all populated."""
+    """sel: '#i' index | 'id=<n>' | '*' all live units.
+
+    '*' only returns real units (enemies and NPCs included); use an explicit
+    '#i' to reach an empty/template slot."""
+    n = min(reg.count, reg.max_recs)
     if sel == "*":
-        n = reg.count
-        return list(range(0 if n else 0, max(n, 1)))
+        return [i for i in range(n) if is_real_char(reg.rec(i))]
     if sel.startswith("id="):
         want = int(sel[3:], 0)
-        hits = [i for i in range(reg.max_recs) if reg.rec(i)[8] == (want & 0xFF)]
+        hits = [i for i in range(n)
+                if reg.rec(i)[8] == (want & 0xFF)
+                and is_real_char(reg.rec(i))]
         if not hits:
-            raise SystemExit(f"no member with id {want} in {reg.name}")
+            raise SystemExit(f"no live member with id {want} in {reg.name}")
         return hits
     if sel.startswith("#"):
         return [int(sel[1:], 0)]
     return [int(sel, 0)]
 
 
+def faction_label(rec) -> str:
+    """+6: 0 enemy, 1 NPC/ally, 2 player (unit_entry_build 0x10C50)."""
+    return FACTION_NAMES.get(rec[6], f"?{rec[6]}")
+
+
+def is_blank_record(rec) -> bool:
+    """The exact unused-slot pattern written by world_load_party (0x1088D):
+    memset(rec, 0, 80), then rec[5] = 1.  Everything else is a real record."""
+    return rec[5] == 1 and not any(rec[k] for k in range(REC_STRIDE) if k != 5)
+
+
 def is_real_char(rec) -> bool:
-    """A live character record: unit_add (0x112A5) and world_load_party
-    (0x1088D) both stamp byte +6 with 2, while an unused map slot is
-    `memset(rec,0,80); rec[5]=1` - so +6 != 2 means "template / 空位",
-    not somebody whose HP should be touched."""
-    return rec[6] == 2
+    """A live battlefield record.
+
+    Byte +6 is the faction (0 enemy / 1 NPC ally / 2 player), not a "kind"
+    that marks a slot empty: unit_entry_build (0x10C50) fills enemies and NPCs
+    from FDFIELD with 0/1, and sys_menu saves the whole dword_53A45 table.
+    Only the explicit memset pattern above (and an all-zero beyond-count slot)
+    is empty."""
+    return bool(any(rec)) and not is_blank_record(rec)
 
 
 def filter_real(reg: Region, idxs, only_real: bool):
@@ -404,9 +591,11 @@ SAVE_NAME = "FD2.SAV"
 SAVE_ENV = "FD2_SAV"
 DEFAULT_DIRS = ["E:/FD2", "D:/FD2", "C:/FD2", "E:/GAMES/FD2", "D:/GAMES/FD2"]
 
+FACTION_NAMES = {0: "敌方", 1: "友军", 2: "我方"}
+
 REGION_LABEL = {
     "head":   "继续游戏·队伍",
-    "roster": "继续游戏·名单",
+    "roster": "继续游戏·战场单位",
     "s0":     "存档槽 1",
     "s1":     "存档槽 2",
     "s2":     "存档槽 3",
@@ -666,7 +855,7 @@ def _qty(r):
     return u16(r, 0x40), u16(r, 0x42), u16(r, 0x44), u16(r, 0x46)
 
 
-ROW_FMT = "  {:<4}{}{:<5}{:<4}{:>9}{:>10}{:>6}{:>5}{:>5}"
+ROW_FMT = "  {:<4}{}{}{:<4}{:<4}{:>9}{:>10}{:>6}{:>5}{:>5}"
 
 
 def _w(s):
@@ -679,14 +868,16 @@ def _pad(s, width):
     return s + " " * max(0, width - _w(s))
 
 
-ROW_HDR = ROW_FMT.format("#", _pad("名字", 12), "id", "Lv", "HP", "MP", "AP", "DP", "DX")
+ROW_HDR = ROW_FMT.format("#", _pad("名字", 12), _pad("阵营", 6),
+                         "id", "Lv", "HP", "MP", "AP", "DP", "DX")
 
 
 def rec_flat(reg, i, names=None):
     r = reg.rec(i)
     hp, mhp, mp, mmp = _qty(r)
     mark = "  << 残血" if hp < mhp else ""
-    return (ROW_FMT.format(i, _pad(char_name(r, names), 12), r[8], r[0x21],
+    return (ROW_FMT.format(i, _pad(char_name(r, names), 12),
+                           _pad(faction_label(r), 6), r[8], r[0x21],
                            f"{hp}/{mhp}", f"{mp}/{mmp}",
                            u16(r, 0x37), u16(r, 0x39), u16(r, 0x3E)) + mark)
 
@@ -717,8 +908,15 @@ def cmd_info(args):
     money = struct.unpack_from("<I", buf, HEAD_MONEY)[0]
     party = Region(buf, "head")
     roster = Region(buf, "roster")
-    real = [i for i in range(min(roster.count, roster.max_recs))
-            if is_real_char(roster.rec(i))]
+    n_units = min(roster.count, roster.max_recs)
+    real = [i for i in range(n_units) if is_real_char(roster.rec(i))]
+    fac = {}
+    for i in real:
+        k = roster.rec(i)[6]
+        fac[k] = fac.get(k, 0) + 1
+    fac_txt = " / ".join(f"{FACTION_NAMES.get(k, '?' + str(k))} {v}"
+                         for k, v in sorted(fac.items())) or "无"
+    blanks = n_units - len(real)
 
     print(f"存档    {args.file}")
     print(f"        22,987 B   校验和 {'OK' if checksum_ok(buf) else '不匹配!'}"
@@ -738,13 +936,17 @@ def cmd_info(args):
         print(f"  残血 {len(hw)} 人：{', '.join('#' + str(i) for i in hw)}"
               f"   (heal 一条命令搞定)")
 
-    print(f"\n【名单表】{roster.count} 条，其中真实角色 {len(real)} 条"
-          f"（其余 {roster.count - len(real)} 条是空位占位，不用管）")
+    print(f"\n【战场单位表】{roster.count} 条，实际单位 {len(real)} 条（{fac_txt}）"
+          + (f"，空位 {blanks} 条" if blanks else ""))
     print(ROW_HDR)
     for i in real:
         print(rec_flat(roster, i, names))
         if args.detail:
             print(rec_items(roster, i))
+    rw = wounded(roster)
+    if rw:
+        print(f"  残血 {len(rw)} 个单位：{', '.join('#' + str(i) for i in rw)}"
+              f"   (heal 一条命令搞定，敌人/NPC 也会被包含)")
 
     print("\n【存档槽】")
     for k in range(4):
@@ -762,8 +964,9 @@ def cmd_get(args):
     buf = load(args.file)
     names = name_table(args.file)
     reg = Region(buf, first_region(args.region))
-    fields = args.fields or ["name", "race", "class", "id", "kind", "level",
-                             "hp", "maxhp", "mp", "maxmp", "ap", "dp", "dx"] \
+    fields = args.fields or ["name", "faction", "race", "class", "id", "kind", "level",
+                             "hp", "maxhp", "mp", "maxmp", "ap", "dp", "dx",
+                             "x", "y"] \
         + [f"item{i}" for i in range(8)]
 
     def cell(r, k):
@@ -881,6 +1084,8 @@ def cmd_heal(args):
             print(f"  跳过 {REGION_LABEL[rname]}（空槽）")
             continue
         idxs = select_members(reg, args.member)
+        if args.member == "*" and not args.real_only:
+            idxs = list(range(min(reg.count, reg.max_recs)))
         keep = filter_real(reg, idxs, args.real_only)
         skipped += len(idxs) - len(keep)
         for mi in keep:
@@ -895,17 +1100,17 @@ def cmd_heal(args):
                 parts.append(f"MP {mp}->{mmp}")
             set_u16(r, 0x40, mhp)
             set_u16(r, 0x44, mmp)
-            rows.append(f"  {REGION_LABEL[rname]}[{mi}] id={r[8]:<4} "
-                        + "   ".join(parts))
+            rows.append(f"  {REGION_LABEL[rname]}[{mi}] [{faction_label(r)}] "
+                        f"id={r[8]:<4} " + "   ".join(parts))
     if rows:
         print("【满血满魔】")
         for s in rows:
             print(s)
         print(f"  共 {len(rows)} 条记录")
     else:
-        print("全员已经是满血满魔。")
+        print("全部单位已经是满血满魔。")
     if skipped:
-        print(f"  （跳过 {skipped} 条空位占位记录）")
+        print(f"  （跳过 {skipped} 条空位/未使用记录）")
     e.commit(dry=args.dry_run, backup=not args.no_backup)
 
 
@@ -1055,8 +1260,8 @@ def _summary(path):
     print(f"\n=== {os.path.basename(path)}  {path} ===")
     print(f"继续游戏：地点 {f[0]}  场景 {f[2]}  队伍 {f[9]} 人  金钱 {money:,}"
           + (f"   [残血 {len(hw)} 人]" if hw else "   [满血]"))
-    print(f"名单表  ：{roster.count} 条"
-          + (f"   残血 {len(rw)} 人" if rw else "   全员满血"))
+    print(f"战场单位：{roster.count} 条（含敌人/NPC）"
+          + (f"   残血 {len(rw)} 个" if rw else "   全部满血"))
     print(f"存档槽  ：1:{slots[0]}  2:{slots[1]}  3:{slots[2]}  4:{slots[3]}")
 
 
@@ -1140,15 +1345,17 @@ def build_parser():
     epilog = f"""常用：
   {prog()}                             交互菜单（会自动查找存档）
   {prog()} info                        看看现在谁残血
-  {prog()} heal                        继续游戏全员满血满魔
+  {prog()} heal                        继续游戏所有单位（含敌人/NPC）满血满魔
   {prog()} heal --all                  连带 4 个存档槽一起
   {prog()} money 99999                 继续游戏金钱改 99999
   {prog()} money +5000                 加 5000
   {prog()} set 0 level=40 hp=999 maxhp=999
+  {prog()} set roster 11 hp=1          改战场单位（#11 是敌人也行）
+  {prog()} set roster '*' hp=999       战场所有单位一起改
   {prog()} restore --latest            回滚到最近一次备份
 
 region 写法：continue（继续游戏，默认）| head | roster | s0..s3 | all | 逗号列表
-member 写法：#索引 | id=序号 | *（全体）
+member 写法：#索引 | id=序号 | *（所有真实单位，含敌人和 NPC）
 """
     p = argparse.ArgumentParser(
         parents=[common],
@@ -1207,7 +1414,7 @@ member 写法：#索引 | id=序号 | *（全体）
                    help="含 4 个存档槽")
     s.add_argument("--member", default="*")
     s.add_argument("--with-placeholders", dest="real_only", action="store_false",
-                   help="连 id=96 之类的空位记录一起改（一般不需要）")
+                   help="连真正的空位/模板记录也一起改（配合 *；一般不需要）")
     s.add_argument("--dry-run", action="store_true")
     s.add_argument("--no-backup", action="store_true")
     s.set_defaults(func=cmd_heal, real_only=True)

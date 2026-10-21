@@ -3,7 +3,8 @@
 """fd2sav_gui.py — FD2（炎龙骑士团 2）存档修改器 · 图形界面
 
 核心逻辑全部复用 tools/fd2sav.py（解密 / 校验 / 记录字段 / 派生属性重算），
-本文件只负责交互：区域列表、角色表格、字段编辑、批量满血、备份回滚。
+本文件只负责交互：区域列表、角色表格、字段编辑、双击编辑背包/装备、
+批量满血、备份回滚。
 
 运行需要 tkinter。它不是 pip 包（是 CPython 编译期绑定的 _tkinter + Tcl/Tk），
 装不上；但系统里的 CPython 3.12 已经自带：
@@ -36,6 +37,7 @@ MONO = ("Consolas", 9)
 COLS = [
     ("idx",  "#",     40, "center", False),
     ("name", "名字", 100, "w",      True),
+    ("side", "阵营",  56, "center", False),
     ("id",   "id",    40, "center", False),
     ("lv",   "Lv",    42, "center", False),
     ("hp",   "HP",   104, "e",      True),
@@ -152,7 +154,7 @@ class App(tk.Tk):
         self.show_empty_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(left, text="显示空位记录", variable=self.show_empty_var,
                         command=self.refresh_table).pack(anchor="w", pady=(8, 0))
-        ttk.Label(left, text="提示：继续游戏的\n队伍表与名单表是\n两份独立副本，\n「整个存档满血」\n可一次改全。",
+        ttk.Label(left, text="提示：继续游戏的\n队伍表与战场单位表\n是两份独立副本，\n战场表含敌人/NPC，\n「整个存档满血」可全改。",
                   foreground="#666", justify="left").pack(anchor="w", pady=(10, 0))
         pw.add(left, weight=0)
 
@@ -270,6 +272,8 @@ class App(tk.Tk):
 
         ttk.Button(box, text="回满此角色", command=self.heal_one).grid(
             row=1, column=16, columnspan=5, sticky="e")
+        ttk.Button(box, text="背包 / 装备…", command=self.open_item_editor).grid(
+            row=0, column=16, columnspan=5, sticky="e")
 
         box.bind("<Enter>", lambda _e: None)
         self.editor = box
@@ -379,18 +383,23 @@ class App(tk.Tk):
                 self.rv.insert("", "end", iid=name, values=(label, "空槽", ""),
                                tags=("empty",))
                 continue
-            real = [i for i in range(reg.max_recs) if core.is_real_char(reg.rec(i))]
+            real = self._live(reg)
             wnd = sum(1 for i in real
                       if core.u16(reg.rec(i), 0x40) < core.u16(reg.rec(i), 0x42))
             money = reg.money
-            info = f"{len(real)} 人" + (f" · {money:,}" if money is not None else "")
+            info = f"{len(real)} 单位" + (f" · {money:,}" if money is not None else "")
             self.rv.insert("", "end", iid=name, values=(label, info, f"{wnd} 残" if wnd else ""),
                            tags=("wound",) if wnd else ())
         self._loading = False
 
+    def _live(self, reg):
+        n = min(reg.count, reg.max_recs)
+        return [i for i in range(n) if core.is_real_char(reg.rec(i))]
+
     def _idxs(self, reg):
         out = []
-        for i in range(reg.max_recs):
+        n = min(reg.count, reg.max_recs)
+        for i in range(n):
             r = reg.rec(i)
             if core.is_real_char(r):
                 out.append(i)
@@ -420,7 +429,8 @@ class App(tk.Tk):
                 else:
                     note, tags = "", ()
                 self.tv.insert("", "end", iid=str(i), values=(
-                    i, core.char_name(r, self.names), r[8], r[0x21],
+                    i, core.char_name(r, self.names),
+                    core.faction_label(r) if real else "\u2014", r[8], r[0x21],
                     f"{hp} / {mhp}", f"{mp} / {mmp}",
                     core.u16(r, 0x37), core.u16(r, 0x39), core.u16(r, 0x3E), note),
                     tags=tags)
@@ -447,8 +457,16 @@ class App(tk.Tk):
         if empty_slot:
             self.head_var.set(f"{label}    空槽")
             return
-        real = [i for i in range(reg.max_recs) if core.is_real_char(reg.rec(i))]
-        parts = [f"{label}", f"{len(real)} 人"]
+        real = self._live(reg)
+        parts = [f"{label}", f"{len(real)} 单位"]
+        if self.region_name == "roster" and real:
+            fac = {}
+            for i in real:
+                k = reg.rec(i)[6]
+                fac[k] = fac.get(k, 0) + 1
+            parts.append("/".join(
+                f"{core.FACTION_NAMES.get(k, '?' + str(k))}{v}"
+                for k, v in sorted(fac.items())))
         if reg.money is not None:
             parts.append(f"金钱 {reg.money:,}")
         if self.region_name == "head":
@@ -482,9 +500,212 @@ class App(tk.Tk):
         self._load_fields()
 
     def _on_double(self, _evt=None):
-        """双击行 = 回满该角色（最常见的操作，给个快捷方式）。"""
+        """双击行 = 打开背包/装备编辑器（敌人和 NPC 也一样）。"""
         if self.cur is not None:
-            self.heal_one()
+            self.open_item_editor()
+
+    def open_item_editor(self):
+        """双击角色后的背包编辑窗：8 个槽位 + 装备状态。
+
+        改动写在对话框的临时副本里，点「确定」才落到内存缓冲；主窗口还要
+        再点「保存到存档」才会写盘。装备位按 box_item_select (0x1C142) 的
+        规则处理：同一半区（武器 id<0x80 / 其他 id>=0x80）只能装备一件。
+        """
+        if not self.edit or self.cur is None:
+            return
+        reg = self.reg
+        if reg is None or self.cur >= reg.max_recs:
+            return
+        r = reg.rec(self.cur)
+        if not core.is_real_char(r):
+            self._info("空位记录", "这条记录是空位，先选一个真实角色再编辑背包。")
+            return
+
+        name = core.char_name(r, self.names) or f"#{self.cur}"
+        who = f"#{self.cur}   {name}   [{core.faction_label(r)}]   id={r[8]}"
+
+        win = tk.Toplevel(self)
+        win.title(f"背包 / 装备 - {name}")
+        win.transient(self)
+        win.resizable(False, False)
+        win.grab_set()
+
+        body = ttk.Frame(win, padding=(14, 12, 14, 8))
+        body.grid(row=0, column=0, sticky="nsew")
+        ttk.Label(body, text=who, font=FONT_T).grid(
+            row=0, column=0, columnspan=6, sticky="w", pady=(0, 8))
+
+        hdr = ("槽", "物品", "类型", "加成", "装备", "")
+        for c, text in enumerate(hdr):
+            ttk.Label(body, text=text, font=FONT_B).grid(
+                row=1, column=c, sticky="w", padx=(0, 8), pady=(0, 2))
+
+        empty_label = "（空）"
+        # Only real (non-empty) items matter for the dropdown range; empty
+        # slots may hold stray hidden bytes such as 0xFF.
+        cur_items = [core.slot_item(r, k) for k in range(8)
+                     if not core.slot_empty(r, k)]
+        if core.ITEM_NAMES:
+            max_id = max(core.ITEM_NAMES)
+        elif core.ITEM_TYPES:
+            max_id = min(255, max(core.ITEM_TYPES))
+        else:
+            max_id = 214
+        max_id = max([max_id] + cur_items)
+        ids = sorted(set(range(max_id + 1)) | set(cur_items))
+        values = [empty_label] + [f"{i:3d}    {core.item_name(i)}" for i in ids]
+        label_to_id = {empty_label: None}
+        id_to_label = {}
+        for i in ids:
+            lab = f"{i:3d}    {core.item_name(i)}"
+            label_to_id[lab] = i
+            id_to_label[i] = lab
+
+        work = []
+        for k in range(8):
+            empty = core.slot_empty(r, k)
+            work.append({
+                "empty": empty,
+                # Keep the hidden value byte of empty slots: the game only
+                # checks state bit 0x80, and confirming an untouched dialog
+                # must not rewrite unrelated bytes.
+                "item": core.slot_item(r, k),
+                "equip": (not empty) and bool(core.slot_state(r, k) & 0x40),
+            })
+
+        combo_vars = [tk.StringVar() for _ in range(8)]
+        equip_vars = [tk.BooleanVar() for _ in range(8)]
+        type_vars = [tk.StringVar() for _ in range(8)]
+        bonus_vars = [tk.StringVar() for _ in range(8)]
+        checks = []
+
+        def same_half_clear(slot):
+            """One equipped item per id half, exactly like box_item_select."""
+            item = work[slot]["item"]
+            high = item >= 0x80
+            for j, d in enumerate(work):
+                if j == slot or d["empty"] or not d["equip"]:
+                    continue
+                if (d["item"] >= 0x80) == high:
+                    d["equip"] = False
+
+        def sync_row(k):
+            d = work[k]
+            item = d["item"]
+            if d["empty"]:
+                combo_vars[k].set(empty_label)
+                type_vars[k].set("—")
+                bonus_vars[k].set("")
+                equip_vars[k].set(False)
+            else:
+                combo_vars[k].set(id_to_label.get(
+                    item, f"{item:3d}    {core.item_name(item)}"))
+                type_vars[k].set(core.item_category(item))
+                bonus_vars[k].set(core.item_bonus_text(item))
+                equip_vars[k].set(bool(d["equip"]))
+            can = (not d["empty"]) and core.item_is_equipment(item)
+            try:
+                checks[k].state(["!disabled"] if can else ["disabled"])
+            except tk.TclError:
+                pass
+
+        def sync_all():
+            for k in range(8):
+                sync_row(k)
+
+        def on_item(k):
+            item = label_to_id.get(combo_vars[k].get())
+            old = work[k]
+            if item is None:
+                old["empty"] = True
+                old["equip"] = False
+            else:
+                keep = bool(old["equip"]) and core.item_is_equipment(item)
+                work[k] = {"empty": False, "item": item, "equip": keep}
+                if keep:
+                    same_half_clear(k)
+            sync_all()
+
+        def on_clear(k):
+            work[k]["empty"] = True
+            work[k]["equip"] = False
+            sync_all()
+
+        def on_equip(k):
+            d = work[k]
+            on = bool(equip_vars[k].get())
+            if d["empty"] or not core.item_is_equipment(d["item"]):
+                on = False
+            d["equip"] = on
+            if on:
+                same_half_clear(k)
+            sync_all()
+
+        for k in range(8):
+            row = 2 + k
+            ttk.Label(body, text=f"{k + 1}", font=FONT_B).grid(
+                row=row, column=0, sticky="w", padx=(0, 8), pady=2)
+            cmb = ttk.Combobox(body, textvariable=combo_vars[k], values=values,
+                               state="readonly", width=30, font=FONT)
+            cmb.grid(row=row, column=1, sticky="w", padx=(0, 8), pady=2)
+            cmb.bind("<<ComboboxSelected>>", lambda _e, i=k: on_item(i))
+            ttk.Label(body, textvariable=type_vars[k], width=8).grid(
+                row=row, column=2, sticky="w", padx=(0, 8))
+            ttk.Label(body, textvariable=bonus_vars[k], width=24,
+                      foreground="#1565c0").grid(
+                row=row, column=3, sticky="w", padx=(0, 8))
+            chk = ttk.Checkbutton(body, text="装备中", variable=equip_vars[k],
+                                  command=lambda i=k: on_equip(i))
+            chk.grid(row=row, column=4, sticky="w", padx=(0, 8))
+            checks.append(chk)
+            ttk.Button(body, text="清空", width=6,
+                       command=lambda i=k: on_clear(i)).grid(
+                row=row, column=5, sticky="w")
+
+        sync_all()
+
+        bar = ttk.Frame(win, padding=(14, 4, 14, 12))
+        bar.grid(row=1, column=0, sticky="ew")
+        ttk.Label(bar,
+                  text="改动先留在内存；回主窗口点「保存到存档」才写盘。\n"
+                       "同一类（武器 / 防具·其他）同时只能装备一件。",
+                  foreground="#666", justify="left").pack(side="left")
+
+        def close():
+            try:
+                win.grab_release()
+            except tk.TclError:
+                pass
+            win.destroy()
+
+        def apply():
+            for k, d in enumerate(work):
+                core.set_slot(r, k, d["item"], equip=bool(d["equip"]),
+                              empty=bool(d["empty"]))
+            core.apply_recalc(r)      # 装备变了 -> 派生 AP/DP/DX 跟着重算
+            close()
+            self.refresh_regions()
+            self._sync_row(self.cur, r)
+            self._load_fields()
+            self.update_status()
+
+        ttk.Button(bar, text="取消", command=close).pack(side="right", padx=(6, 0))
+        ttk.Button(bar, text="确定", command=apply).pack(side="right")
+        win.bind("<Escape>", lambda _e: close())
+        win.protocol("WM_DELETE_WINDOW", close)
+        self._place_item_editor(win)
+        win.focus_set()
+
+    def _place_item_editor(self, win):
+        """把背包窗放在主窗口右侧（不遮住正在编辑的角色行）。"""
+        win.update_idletasks()
+        w, h = win.winfo_reqwidth(), win.winfo_reqheight()
+        x = self.winfo_rootx() + self.winfo_width() - w - int(24 * self.S)
+        y = self.winfo_rooty() + int(80 * self.S)
+        sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+        x = max(0, min(x, sw - w))
+        y = max(0, min(y, sh - h))
+        win.geometry(f"+{x}+{y}")
 
     def _load_fields(self):
         self._loading = True
@@ -505,12 +726,13 @@ class App(tk.Tk):
             who = f"#{self.cur}"
             if nm:
                 who += f"   {nm}"
-            who += f"   id={r[8]}"
+            real = core.is_real_char(r)
+            who += f"   [{core.faction_label(r) if real else '空位'}]   id={r[8]}"
             cls = core.class_name(r, self.names)
             race = core.race_name(r, self.names)
             if race or cls:
                 who += f"   {'/'.join(x for x in (race, cls) if x)}"
-            if not core.is_real_char(r):
+            if not real:
                 who += "   （空位记录）"
             self.editor.configure(text=f"选中角色   {who}")
             self.var_lv.set(str(r[0x21]))
@@ -594,7 +816,9 @@ class App(tk.Tk):
             note, tags = "缺魔", ()
         else:
             note, tags = "", ()
-        self.tv.item(str(i), values=(i, core.char_name(r, self.names), r[8], r[0x21],
+        self.tv.item(str(i), values=(i, core.char_name(r, self.names),
+                                     core.faction_label(r) if core.is_real_char(r) else "\u2014",
+                                     r[8], r[0x21],
                                      f"{hp} / {mhp}",
                                      f"{mp} / {mmp}", core.u16(r, 0x37),
                                      core.u16(r, 0x39), core.u16(r, 0x3E), note),
@@ -620,7 +844,7 @@ class App(tk.Tk):
             reg = core.Region(self.edit.buf, name)
             if name not in ("head", "roster") and reg.empty():
                 continue
-            for i in range(reg.max_recs):
+            for i in range(min(reg.count, reg.max_recs)):
                 r = reg.rec(i)
                 if not core.is_real_char(r):
                     continue
@@ -654,7 +878,7 @@ class App(tk.Tk):
         reg = self.reg
         if reg is None or reg.money_off is None or (
                 self.region_name not in ("head", "roster") and reg.empty()):
-            self._info("这里没有金钱", "名单表不单独存金钱。\n"
+            self._info("这里没有金钱", "战场单位表不单独存金钱。\n"
                                     "金钱在「继续游戏·队伍」和 4 个存档槽里。")
             return
         try:
@@ -808,7 +1032,7 @@ class App(tk.Tk):
             nb = len(core.backups(self.path)) if self.path else 0
             self.status.configure(
                 text=f"已同步 · 校验和 OK · 备份 {nb} 个 · "
-                     f"左键选人、双击回满、改完点「保存到存档」")
+                     f"左键选人、双击编辑背包/装备、改完点「保存到存档」")
 
     def set_status(self, text):
         self.status.configure(text=text)
@@ -872,11 +1096,50 @@ def selftest(src):
     ck("区域列表 6 行", len(app.rv.get_children()) == 6,
        str(len(app.rv.get_children())))
     ck("默认区域=继续游戏·队伍", app.region_name == "head")
-    ck("队伍表显示 5 人", len(app.tv.get_children()) == 5,
-       str(len(app.tv.get_children())))
+    head_real = len(app._live(app.reg))
+    ck("队伍表行数 = 真实角色数", len(app.tv.get_children()) == head_real,
+       f"{len(app.tv.get_children())}/{head_real}")
     ck("名字表已加载", len(app.names) > 100, f"{len(app.names)} 条")
     first_vals = app.tv.item(app.tv.get_children()[0], "values")
-    ck("首行名字=索爾", str(first_vals[1]) == "索爾", str(first_vals[:3]))
+    ck("首行有名字", bool(str(first_vals[1])), str(first_vals[:3]))
+
+    # 战场单位表：敌人/NPC 也必须能选中、编辑
+    app.select_region("roster")
+    app.update()
+    roster_real = len(app._live(app.reg))
+    ck("战场表行数 = 真实单位数", len(app.tv.get_children()) == roster_real,
+       f"{len(app.tv.get_children())}/{roster_real}")
+    enemies = [i for i in app._live(app.reg) if app.reg.rec(i)[6] == 0]
+    ck("战场表含敌人", bool(enemies), str(enemies[:5]))
+    enemy = enemies[0] if enemies else app._live(app.reg)[0]
+    ck("敌人记录被判为真实单位", core.is_real_char(app.reg.rec(enemy)))
+    app.tv.selection_set(str(enemy))
+    app.update()
+    ck("敌人编辑框已启用", str(app.sp_mhp.cget("state")) == "normal",
+       str(app.sp_mhp.cget("state")))
+    app.var_hp.set("7")
+    app.update()
+    ck("改敌人 HP 落到缓冲", core.u16(app.reg.rec(enemy), 0x40) == 7,
+       str(core.u16(app.reg.rec(enemy), 0x40)))
+    app.select_region("head")
+    app.update()
+
+    # 背包字段：槽位写入 / 同半区只能装备一件
+    fake = bytearray(80)
+    core.set_slot(fake, 0, 11, equip=True)          # 炎龍劍
+    core.set_slot(fake, 1, 10, equip=False)         # 龍神劍
+    core.set_equipped(fake, 1, True)
+    ck("背包槽写入+装备位", core.slot_item(fake, 0) == 11
+       and core.slot_item(fake, 1) == 10
+       and core.slot_state(fake, 1) & 0x40
+       and not (core.slot_state(fake, 0) & 0x40))
+    core.set_slot(fake, 2, 132, equip=True)         # 鎧甲（另一半區）
+    ck("武器與防具可各裝備一件",
+       core.slot_state(fake, 1) & 0x40 and core.slot_state(fake, 2) & 0x40)
+    core.set_slot(fake, 3, None)
+    ck("清空槽位写 0x80", core.slot_empty(fake, 3))
+    ck("道具表已加载", len(core.ITEM_NAMES) > 100 and bool(core.ITEM_TYPES),
+       f"names={len(core.ITEM_NAMES)} types={len(core.ITEM_TYPES)}")
 
     # 选中第一条并改 HP
     first = app.tv.get_children()[0]

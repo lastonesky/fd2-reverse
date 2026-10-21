@@ -9,7 +9,7 @@
 | `FD2SAV.BAT` | 命令行入口（双击=交互菜单） | `FD2SAV.BAT info` |
 | `FD2GUI.BAT` | 图形界面入口（双击即开） | — |
 | `fd2sav.py` | 存档读写/校验/满血/改钱/备份回滚；可改战场全部单位（含敌人、NPC） | `python tools/fd2sav.py info`<br>`… heal`（继续游戏所有单位，含敌人/NPC）<br>`… heal --all`（含 4 个存档槽）<br>`… money 5000` / `… money +1000`<br>`… set 0 level=40 hp=999`<br>`… set roster 11 hp=1`（#11 敌人也能改）<br>`… get continue 0 hp maxhp`<br>`… check` / `… restore` |
-| `fd2sav_gui.py` | 同上，tkinter 界面（`--selftest` 自检） | `python tools/fd2sav_gui.py` |
+| `fd2sav_gui.py` | 同上，tkinter 界面（`--selftest` 自检）；战场单位表按阵营显示我方/友军/敌方；**双击角色编辑背包（含敌人），武器/防具可勾选是否装备** | `python tools/fd2sav_gui.py` |
 | `sav_diff.py` | 两个存档解密后逐字节对比 | `python tools/sav_diff.py a.sav b.sav` |
 
 ## 2. 文本与字形
