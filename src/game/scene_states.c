@@ -354,7 +354,7 @@ void scene_state_15(void)
     flag = (count > 4);
     sub_11506();                                    /* unit_refresh */
     if (dword_53BEF > 18 || flag == 1 ||
-        *(const uint16_t *)(const void *)(uintptr_t)dword_53A45 < 0x140u) {
+        *(const uint16_t *)(const void *)((uintptr_t)dword_53A45 + 0x42) < 0x140u) {
         vm(2);
         dword_51A83 = 0;
         sub_1366A(49);
