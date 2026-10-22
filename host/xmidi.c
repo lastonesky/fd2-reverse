@@ -28,7 +28,8 @@
  *   - A Note-On carries its own length: `9n note velocity <VLQ>`, and the
  *     stream contains almost no Note-Off events. The parser expands each
  *     note-on into an explicit note-off at tick + length.
- *   - The resolution is a fixed 120 ticks per beat (not 60).
+ *   - The time base is AIL's own fixed sequencer rate, not the file's tempo
+ *     meta events (see effective_tick_rate below).
  */
 
 #if defined(_WIN32)
@@ -47,8 +48,23 @@ typedef void *HMIDIOUT;
 #include "synth.h"
 #include "audio.h"
 
-#define XMIDI_TICKS_PER_BEAT 60          /* XMI's fixed resolution */
+#define XMIDI_TICKS_PER_BEAT 60          /* XMI's nominal resolution      */
 #define XMIDI_DEFAULT_TEMPO  500000u     /* microseconds per beat (120 BPM) */
+/*
+ * AIL's XMIDI sequencer does NOT use FF 51 tempo events for playback timing.
+ * In the original FD2.EXE (AIL obj0, sub_43270 / sub_434D1) the FF 51 handler
+ * only stores tempo<<4 in rec+0x6C, which drives a beat/time-signature counter.
+ * Event timing is driven by rec+0x44 (AIL's tempo percentage, default 100)
+ * accumulating into rec+0x54; with the game never calling
+ * AIL_set_sequence_tempo, that makes every song play at the same fixed
+ * sequencer rate.  The AIL timer runs at 120 ticks/s (8333 us per tick), the
+ * same 60 ticks/beat x 120 BPM value measured in port2/re/AUDIO.md.
+ *
+ * Honourning the tempo meta here made 塞拉村 (track 3, FF51 = 315789 us =>
+ * 190 BPM) play 190/120 = 1.58x too fast; the shop theme (60 BPM) was half
+ * speed.  Keep parsing FF 51 for diagnostics only and play at the fixed rate.
+ */
+#define XMIDI_FIXED_TICKS_PER_SEC 120.0
 
 typedef struct {
     uint32_t tick;          /* absolute time, in ticks                */
@@ -68,22 +84,14 @@ static uint32_t      g_tempo_us = XMIDI_DEFAULT_TEMPO;
 static int           g_tick_rate;       /* 0 = derive from tempo          */
 static int           g_backend = 1;     /* 0 = MIDI Mapper, 1 = built-in synth */
 
-/* XMI has no division field: its resolution is a fixed 60 ticks per beat, so
- * the wall-clock rate follows the tempo meta event (FF 51 03). The first tempo
- * in the sequence is used; game music in FD2 keeps a constant tempo.
- *
- * Evidence for 60 (this was mis-set to 120 for a while, which played every
- * song at double speed):
- *   - WildMIDI's xmi2mid.c converts an XMI tick to 8.3333 ms at the default
- *     500000 us/beat, which is exactly 60 ticks per beat.
- *   - fd2_re (an independent reverse-engineering of this same game) converts
- *     the same files with PPQN=60 and reports 137 beats for the song with
- *     2256 notes - our parse of it gives 8237 ticks = 137.3 beats. */
+/* Original AIL playback rate. g_tempo_us is parsed only so the log can show
+ * what the file claims; it must not change the wall-clock rate.
+ * A command-line override (xmidi_set_tick_rate) is still honoured for tests. */
 static double effective_tick_rate(void)
 {
     if (g_tick_rate > 0)
         return (double)g_tick_rate;
-    return (double)XMIDI_TICKS_PER_BEAT * 1000000.0 / (double)g_tempo_us;
+    return XMIDI_FIXED_TICKS_PER_SEC;
 }
 
 /* ------------------------------------------------------------ parsing --- */
@@ -241,10 +249,10 @@ static int parse_evnt(const uint8_t *ev, uint32_t len, int *out_skips)
            " %d unmodelled bytes, last tick %u)\n",
            g_count, notes, offs, skips,
            g_count ? g_events[g_count - 1].tick : 0);
-    printf("xmidi: tempo %u us/beat (%.3f BPM), %u ticks/beat -> %.4f ticks/s, "
-           "song %.3f s\n",
+    printf("xmidi: tempo meta %u us/beat (%.3f BPM, ignored by AIL) -> "
+           "fixed %.1f ticks/s, song %.3f s\n",
            (unsigned)g_tempo_us, 60000000.0 / (double)g_tempo_us,
-           (unsigned)XMIDI_TICKS_PER_BEAT, effective_tick_rate(),
+           effective_tick_rate(),
            (double)(g_count ? g_events[g_count - 1].tick : 0) /
                effective_tick_rate());
     if (out_skips)
@@ -505,12 +513,11 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
         plat_atomic_write(&g_playing, 0);
         return 0;
     }
-    printf("xmidi: %d events, %u ticks, tempo %u us/beat (%.1f BPM) -> %.1f s "
-           "at %.1f ticks/s, %d skipped bytes, loop=%d\n",
+    printf("xmidi: %d events, %u ticks, tempo meta %u us/beat (%.1f BPM) -> "
+           "%.1f s at fixed %.1f ticks/s, %d skipped bytes, loop=%d\n",
            g_count, (unsigned)g_events[g_count - 1].tick, (unsigned)g_tempo_us,
            60000000.0 / (double)g_tempo_us,
-           (double)g_events[g_count - 1].tick * (double)g_tempo_us /
-               (XMIDI_TICKS_PER_BEAT * 1000000.0),
+           (double)g_events[g_count - 1].tick / effective_tick_rate(),
            effective_tick_rate(), skips, loop_count);
     return 1;
 }

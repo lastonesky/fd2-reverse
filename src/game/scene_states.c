@@ -89,7 +89,10 @@ void scene_state_27(void)
 /* 0x230F2 - funcs_25E23[2]
  * The original copies three 7-byte tables out of the data segment (0x520BA xs,
  * 0x520C1 ys, 0x520C8 kind) into locals and passes them on; only reads happen,
- * so here the image is passed directly. The rec_flag branch skips placement. */
+ * so here the image is passed directly. The rec_flag branch skips placement
+ * AND the join: the surviving-Tino arm (rec[6] flag clear) runs vm(7) and then
+ * unit_add(2) (Tino, res0 name slot 3 = id 2) at 0x231AF; the other arm only
+ * runs vm(6). Both arms then inc the state at 0x2328A. */
 void scene_state_02(void)
 {
     const uint8_t *xs   = (const uint8_t *)&fd2_data1[0x20BA];
@@ -102,6 +105,7 @@ void scene_state_02(void)
     } else {
         scene_place_records(xs, ys, (uintptr_t)kind, 0, 6, 0, 0, 0, 0, 2u);
         vm(7);
+        sub_112A5(2);                   /* unit_add: Tino joins (0x231AF) */
     }
     dword_53C03++;
 }

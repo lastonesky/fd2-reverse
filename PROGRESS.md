@@ -85,7 +85,7 @@
 | `0x15487` / `0x1B5EA` | 其他模块的纯 epilogue（`return <eax>`） | 外部函数 |
 
 **已备好但待写**（需 `scene_place_records`（0x233C6，已验证资产）先迁入）：
-idx [2] `sub_230F2`（三张 7 字节表 0x520BA/C1/C8 = xs{8,7,9,6,10,8,8}/ys{3,3,3,2,2,4,1}/kind{2,2,2,3,1,2,0}；`rec_flag(6)` 分支→vm6 或 place_records(...,0,6,0,0,0,0,2)+vm7）、
+idx [2] `sub_230F2`（三张 7 字节表 0x520BA/C1/C8 = xs{8,7,9,6,10,8,8}/ys{3,3,3,2,2,4,1}/kind{2,2,2,3,1,2,0}；`rec_flag(6)` 分支→vm6 或 place_records(...,0,6,0,0,0,0,2)+vm7+**unit_add(2)（0x231AF，鐵諾入队；id 2 = res0 名表槽 3）**；两分支都到 0x2328A → ++state）、
 idx [4] `sub_231F9`（xs{12,11,13,10,10,14,14}/ys 字面量/kind{2,2,2,3,3,1,1}；place_records(...,0,6,41,12,8,0,origin=0x400000006)+vm9+unit_add(10)+refresh+ ++state）。
 
 **余量**：`funcs_25E23` 待还原 24→**20**；`function-map.csv` 已更新。
@@ -3951,3 +3951,23 @@ Alt/Cmd 状态。
 §7.23 的投影约束兜住。已覆盖 `E:\FD2\FDOTHER.simp.DAT`。
 预览 `E:\FD2\candidates\wqy16_final.png`（上=原版14px、下=WQY16 全量）。
 源字体 `E:\tmp\xwqy\...\wenquanyi_12pt.pcf`（另可从 `E:\FD2\fonts\` 备份，如需）。
+
+### 7.37 音乐速度：AIL 不按 XMIDI tempo 元事件播放
+
+**现象**：第 5 章塞拉村（BGM track 3）比 DOS 原版快很多。
+
+**根因**：`host/xmidi.c` 之前把 FF 51 tempo 元事件当成播放速度：
+`tick_rate = 60e6/tempo_us`。track 3 的 tempo 是 315789us（190 BPM），于是按 190
+ticks/s 播放。但原版 AIL 的 XMIDI 播放器**不用 FF 51 定时**：
+
+- AIL `sub_434D1`（FF 51 处理）只把 `tempo << 4` 存进 `rec+0x6C`，供拍号/节拍计数；
+- 真正的事件计时来自 `rec+0x44`（AIL 的 tempo 百分比，默认 100）累加到
+  `rec+0x54`，每满 100 处理一个 delta tick；
+- 游戏从不调用 `AIL_set_sequence_tempo`，所以所有曲目都按 AIL 定时器固定
+  120 ticks/s（8333us/tick = 60 ticks/beat × 120 BPM）播放。
+
+track 3 在端口里因此快了 190/120 = 1.58 倍；商店曲（60 BPM）则慢一倍。
+
+**修复**：`effective_tick_rate()` 改为固定 120 ticks/s，FF 51 只保留在日志里作诊断。
+日志格式：`tempo meta ... (ignored by AIL) -> fixed 120.0 ticks/s, song ... s`。
+track 3 现在应为 6678/120 = **55.65 s**；开场 track 18 为 68.64 s。

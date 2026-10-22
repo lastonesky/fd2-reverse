@@ -43,6 +43,7 @@ guessing at the bytes:
                 A truly unused slot is memset(rec,0,80) with rec[5] = 1.
     +0x07 u8    DATO portrait resource index
     +0x08 u8    identity byte (party/roster join key)
+    +0x3B u8    movement points (MV; map_move.c reads rec[0x3B])
     +0x0A .. +0x19   8 x [state, item id] slots
     +0x1F u8    class/race (D[0])      +0x20 u8  class/race (D[1])
     +0x21 u8    LEVEL
@@ -456,6 +457,7 @@ FIELDS = {
     "dp":     ("u16", 0x39),
     "dx":     ("u16", 0x3E),
     "level":  ("u8",  0x21),
+    "mv":     ("u8",  0x3B),         # movement points 移动力
     "kind":   ("u8",  0x06),
     "faction": ("u8", 0x06),          # alias: 0 敌方 / 1 友军 / 2 我方
     "id":     ("u8",  0x08),

@@ -40,6 +40,7 @@ COLS = [
     ("side", "阵营",  56, "center", False),
     ("id",   "id",    40, "center", False),
     ("lv",   "Lv",    42, "center", False),
+    ("mv",   "MV",    44, "center", False),
     ("hp",   "HP",   104, "e",      True),
     ("mp",   "MP",   104, "e",      True),
     ("ap",   "AP",    50, "e",      False),
@@ -114,6 +115,21 @@ class App(tk.Tk):
         st.configure("Treeview.Heading", font=FONT_B)
         st.configure("TLabelframe.Label", font=FONT_B)
         st.configure("Big.TButton", font=FONT_T)
+
+    def _make_modal(self, win):
+        """Map `win` first, then grab it.
+
+        On X11/Wayland a Toplevel created with tk.Toplevel() is not viewable
+        until the window manager has mapped it; calling grab_set() before that
+        raises TclError("grab failed: window not viewable").  wait_visibility()
+        lets Tk process the map event, so the grab succeeds on Linux too.
+        """
+        try:
+            win.wait_visibility()
+            win.grab_set()
+        except tk.TclError:
+            # The dialog was closed/destroyed before it became viewable.
+            pass
 
     def _build(self):
         self._style()
@@ -225,6 +241,7 @@ class App(tk.Tk):
         box.columnconfigure(20, weight=1)
 
         self.var_lv = tk.StringVar()
+        self.var_mv = tk.StringVar()
         self.var_hp = tk.StringVar()
         self.var_mhp = tk.StringVar()
         self.var_mp = tk.StringVar()
@@ -232,7 +249,8 @@ class App(tk.Tk):
         self.var_ap = tk.StringVar()
         self.var_dp = tk.StringVar()
         self.var_dx = tk.StringVar()
-        for v in (self.var_lv, self.var_hp, self.var_mhp, self.var_mp, self.var_mmp,
+        for v in (self.var_lv, self.var_mv, self.var_hp, self.var_mhp,
+                  self.var_mp, self.var_mmp,
                   self.var_ap, self.var_dp, self.var_dx):
             v.trace_add("write", self._on_field_change)
 
@@ -256,6 +274,8 @@ class App(tk.Tk):
         spin(self.var_mp, 0, 7)
         lbl("/", 0, 8)
         self.sp_mmp = spin(self.var_mmp, 0, 9)
+        lbl("MV", 0, 10, True)
+        spin(self.var_mv, 0, 11, 4, 255)
 
         # row 1: 基础属性 + 派生值 + 回满
         lbl("基础", 1, 0, True)
@@ -431,6 +451,7 @@ class App(tk.Tk):
                 self.tv.insert("", "end", iid=str(i), values=(
                     i, core.char_name(r, self.names),
                     core.faction_label(r) if real else "\u2014", r[8], r[0x21],
+                    r[0x3B],
                     f"{hp} / {mhp}", f"{mp} / {mmp}",
                     core.u16(r, 0x37), core.u16(r, 0x39), core.u16(r, 0x3E), note),
                     tags=tags)
@@ -528,7 +549,6 @@ class App(tk.Tk):
         win.title(f"背包 / 装备 - {name}")
         win.transient(self)
         win.resizable(False, False)
-        win.grab_set()
 
         body = ttk.Frame(win, padding=(14, 12, 14, 8))
         body.grid(row=0, column=0, sticky="nsew")
@@ -694,6 +714,7 @@ class App(tk.Tk):
         win.bind("<Escape>", lambda _e: close())
         win.protocol("WM_DELETE_WINDOW", close)
         self._place_item_editor(win)
+        self._make_modal(win)
         win.focus_set()
 
     def _place_item_editor(self, win):
@@ -716,8 +737,9 @@ class App(tk.Tk):
                 r = reg.rec(self.cur)
         if r is None:
             self.editor.configure(text="选中角色")
-            for v in (self.var_lv, self.var_hp, self.var_mhp, self.var_mp,
-                      self.var_mmp, self.var_ap, self.var_dp, self.var_dx):
+            for v in (self.var_lv, self.var_mv, self.var_hp, self.var_mhp,
+                      self.var_mp, self.var_mmp, self.var_ap, self.var_dp,
+                      self.var_dx):
                 v.set("")
             self.derived_var.set("派生 —")
             self._set_editor_state(False)
@@ -736,6 +758,7 @@ class App(tk.Tk):
                 who += "   （空位记录）"
             self.editor.configure(text=f"选中角色   {who}")
             self.var_lv.set(str(r[0x21]))
+            self.var_mv.set(str(r[0x3B]))
             self.var_hp.set(str(core.u16(r, 0x40)))
             self.var_mhp.set(str(core.u16(r, 0x42)))
             self.var_mp.set(str(core.u16(r, 0x44)))
@@ -782,6 +805,9 @@ class App(tk.Tk):
         lv = num(self.var_lv.get(), r[0x21], 255)
         if lv is not None:
             r[0x21] = lv
+        mv = num(self.var_mv.get(), r[0x3B], 255)
+        if mv is not None:
+            r[0x3B] = mv
         for var, off, hi in ((self.var_hp, 0x40, 9999), (self.var_mhp, 0x42, 9999),
                              (self.var_mp, 0x44, 9999), (self.var_mmp, 0x46, 9999)):
             v = num(var.get(), core.u16(r, off), hi)
@@ -818,7 +844,7 @@ class App(tk.Tk):
             note, tags = "", ()
         self.tv.item(str(i), values=(i, core.char_name(r, self.names),
                                      core.faction_label(r) if core.is_real_char(r) else "\u2014",
-                                     r[8], r[0x21],
+                                     r[8], r[0x21], r[0x3B],
                                      f"{hp} / {mhp}",
                                      f"{mp} / {mmp}", core.u16(r, 0x37),
                                      core.u16(r, 0x39), core.u16(r, 0x3E), note),
@@ -964,7 +990,6 @@ class App(tk.Tk):
         win = tk.Toplevel(self)
         win.title("备份 / 回滚")
         win.transient(self)
-        win.grab_set()
         win.geometry("640x400")
         win.columnconfigure(0, weight=1)
         win.rowconfigure(1, weight=1)
@@ -1016,6 +1041,8 @@ class App(tk.Tk):
         if not baks:
             ttk.Label(bar, text="还没有备份——第一次保存时会自动生成。",
                       foreground="#666").pack(side="left")
+
+        self._make_modal(win)
 
     # -------------------------------------------------------------- 杂项
     def update_status(self):
