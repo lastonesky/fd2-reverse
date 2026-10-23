@@ -68,6 +68,20 @@ typedef void  (*blit_fn)(void *dst, const void *src, int len);
 typedef int   (*pending_fn)(void);
 
 
+/* Last-resort record pointer for a portrait op whose `rec` is NULL because
+ * rec_find() found nothing.  The box mode is 0 in that case, so
+ * dlg_open_box() never uses the two bytes open_and_blit() reads. */
+static uint8_t vm_no_rec[2] = { 0, 0 };
+
+static uint8_t *vm_face_rec(uint8_t *rec)
+{
+    if (rec == NULL)
+        rec = (uint8_t *)dword_53A45;
+    if (rec == NULL)
+        rec = vm_no_rec;
+    return rec;
+}
+
 /* Close whatever box is open - the same three calls in the same order the
  * machine code uses at the top of -1/-17/-18/-19/-20. */
 static void close_open_box(void *box, int mode)
@@ -192,17 +206,29 @@ uint8_t *vm_run(void *stream, int sub, uint8_t *addr, int pitch,
 
             close_open_box(box, mode);
             dword_53C67 = BOX_TOP;
-            mode = (rec_find(id) == -1) ? 0 : 2;
+            int found = rec_find(id);
+
+            mode = (found == -1) ? 0 : 2;
             if (id != FACE_KEEP) {
                 rec = (uint8_t *)dword_53C1B;
-                id  = rec[7];
+                /* rec_find() clears dword_53C1B at entry, so a miss leaves
+                 * rec NULL here.  mode is 0 in that case and the operand
+                 * itself is the DATO portrait id - keep it instead of
+                 * dereferencing NULL. */
+                if (rec != NULL)
+                    id = rec[7];
             } else if (rec == NULL) {
                 /* the only read of EDI before any write inside this call */
                 printf("vm: -17/%d as the first portrait op - the original"
-                       " reads the caller's EDI; using the last rec_find"
-                       " record\n", id);
+                       " reads the caller's EDI; falling back to the last"
+                       " rec_find record\n", id);
                 rec = (uint8_t *)dword_53C1B;
             }
+            /* rec_find() zeroed dword_53C1B if no record carries this id.
+             * mode is then 0, and dlg_open_box() ignores the two record
+             * bytes open_and_blit() reads (rec[0]/rec[1]); any valid
+             * pointer keeps the machine code's call sequence intact. */
+            rec = vm_face_rec(rec);
             dword_53A85 = res_load("DATO.DAT", dword_53A85, id);
             p = next + 1;                       /* opcode + operand        */
             open_and_blit(BOX_TOP, rec, mode, 1, &box, &rec, &start, &cur);
@@ -218,7 +244,9 @@ uint8_t *vm_run(void *stream, int sub, uint8_t *addr, int pitch,
             dword_53C67 = BOX_BOTTOM;
             mode = (rec_find(id) == -1) ? 0 : 0x70;
             rec  = (uint8_t *)dword_53C1B;
-            id   = rec[7];
+            if (rec != NULL)
+                id = rec[7];
+            rec = vm_face_rec(rec);
             dword_53A85 = res_load("DATO.DAT", dword_53A85, id);
             p = next + 1;
             open_and_blit(BOX_BOTTOM, rec, mode, 0, &box, &rec, &start, &cur);
