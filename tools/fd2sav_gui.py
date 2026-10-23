@@ -12,7 +12,9 @@
 直接双击 tools\\FD2GUI.BAT 即可（BAT 会挑一个带 tkinter 的解释器）。
 
 设计原则：
-  * 所有改动先落在内存缓冲，点「保存到存档」才写盘，写盘自动留时间戳备份；
+  * 所有改动先落在内存缓冲，点「保存到存档」才写盘；写盘自动留备份，但
+    一次载入只留一份（第一次写盘时生成，之后再保存仍用同一个备份名，
+    内容停在载入那一刻），重新载入才会得到下一份备份；
   * 任何一次写盘都重算尾部校验和（util_sum_tail4）；
   * 改基础 AP/DP/DX 自动重算派生值（unit_recalc），否则战斗伤害不生效。
 """
@@ -939,7 +941,7 @@ class App(tk.Tk):
             return
         nbytes = self.edit.changed_bytes()
         try:
-            bak = core.store(self.path, self.edit.buf, backup=True)
+            bak = self.edit.save(backup=True)
         except SystemExit as e:
             self._error("写入失败", str(e))
             return
@@ -959,12 +961,14 @@ class App(tk.Tk):
                         "请用「备份 / 回滚」恢复刚才的备份。")
             return
 
+        bak = self.edit.bak                 # 本次载入的备份
         self.edit = core.Edit(self.path)
+        self.edit.bak = bak                 # 重读后继续沿用，不另起备份
         self.refresh_regions()
         self.refresh_table()
         msg = f"已写入 {self.path}   改动 {nbytes} 字节，校验和 OK"
         if bak:
-            msg += f"   备份 {os.path.basename(bak)}"
+            msg += f"   备份 {os.path.basename(bak)}（本次载入只建这一份）"
         self.set_status(msg)
         if not self.silent:
             self._info("保存成功",
@@ -974,11 +978,7 @@ class App(tk.Tk):
 
     # -------------------------------------------------------------- 备份
     def _quick_backup(self):
-        base = f"{self.path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
-        p, n = base, 1
-        while os.path.exists(p):
-            n += 1
-            p = f"{base}-{n}"
+        p = core.new_backup_path(self.path)
         shutil.copy2(self.path, p)
         os.utime(p, None)
         return p
@@ -1223,6 +1223,31 @@ def selftest(src):
     ck("写盘后校验和 OK", core.checksum_ok(core.load(tmp)))
     ck("写盘后状态已同步", not app.edit.dirty)
     ck("生成了备份", len(core.backups(tmp)) >= 1, str(len(core.backups(tmp))))
+    bak1 = app.edit.bak
+    ck("备份名记在编辑会话上", bool(bak1) and os.path.exists(bak1 or ""), str(bak1))
+
+    # 同一会话再存一次（不动）也不建新备份，仍用同一个名字
+    bak_snapshot = open(bak1, "rb").read()
+    app.var_hp.set("3")
+    app.update()
+    ck("同一会话能再产生改动", app.edit.dirty)
+    app.do_save()
+    app.update()
+    ck("再次保存真的写盘", not app.edit.dirty)
+    ck("再次保存复用同一备份", app.edit.bak == bak1, str(app.edit.bak))
+    ck("备份数没变多", len(core.backups(tmp)) == 1, str(len(core.backups(tmp))))
+    ck("备份内容停在载入那一刻", open(bak1, "rb").read() == bak_snapshot)
+
+    # 重新载入 = 新会话，下一份备份才允许出现
+    app.reload()
+    app.update()
+    ck("重载后备份会话清空", app.edit.bak is None, str(app.edit.bak))
+    app.var_hp.set("4")
+    app.update()
+    app.do_save()
+    app.update()
+    ck("重载后另起一份备份", len(core.backups(tmp)) == 2
+       and app.edit.bak != bak1, str(len(core.backups(tmp))))
 
     # 撤销
     app.var_hp.set("2")

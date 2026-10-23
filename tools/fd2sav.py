@@ -56,8 +56,10 @@ guessing at the bytes:
                 the game recomputes these from the equipped items, so an editor
                 usually only touches the base values at +0x37/+0x39/+0x3E)
 
-Raw bytes are the authority.  Every write re-stamps the checksum, re-obfuscates
-and leaves a timestamped .bak next to the file.
+Raw bytes are the authority.  Every write re-stamps the checksum and
+re-obfuscates.  A load leaves a timestamped .bak next to the file -- but only
+one: the first write of a session creates it, later writes of the same session
+reuse that same name (see Edit.save).
 """
 from __future__ import annotations
 
@@ -315,7 +317,24 @@ def load(path: str) -> bytearray:
     return deobfuscate(raw)
 
 
-def store(path: str, buf: bytearray, backup=True, dry=False) -> str | None:
+def new_backup_path(path: str) -> str:
+    """给这份存档起一个新的备份名；同一秒内重复也不覆盖（追加 -2、-3）。"""
+    base = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
+    p, n = base, 1
+    while os.path.exists(p):
+        n += 1
+        p = f"{base}-{n}"
+    return p
+
+
+def store(path: str, buf: bytearray, backup=True, dry=False,
+          reuse_bak: str | None = None) -> str | None:
+    """写盘。
+
+    reuse_bak 是「本次载入已经留过的备份」的名字：给了就继续用这一个，
+    并保持它的内容（即载入时的样子），不再重复拷贝。所以一次载入 = 一份
+    备份，连点保存也不会刷出一长串 .bak。传 None 则新起一个时间戳备份。
+    """
     if len(buf) != SAVE_SIZE:
         raise SystemExit("refusing to write: buffer size changed")
     stamp(buf)
@@ -325,14 +344,10 @@ def store(path: str, buf: bytearray, backup=True, dry=False) -> str | None:
     if dry:
         return None
     if backup and os.path.exists(path):
-        base = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
-        bpath = base
-        n = 1
-        while os.path.exists(bpath):          # 同一秒内连续写两次也不覆盖
-            n += 1
-            bpath = f"{base}-{n}"
-        shutil.copy2(path, bpath)
-        os.utime(bpath, None)                 # 备份时间应是“此刻”，不继承源文件
+        bpath = reuse_bak or new_backup_path(path)
+        if not os.path.exists(bpath):         # 复用时不覆盖，备份停在载入那一刻
+            shutil.copy2(path, bpath)
+            os.utime(bpath, None)             # 备份时间应是“此刻”，不继承源文件
     try:
         with open(path, "wb") as f:
             f.write(obf)
@@ -802,6 +817,7 @@ class Edit:
         self.path = path
         self.buf = load(path)
         self.orig = bytes(self.buf)
+        self.bak = None          # 本次载入的备份：第一次写盘时生成，之后一直复用
 
     @property
     def dirty(self):
@@ -810,6 +826,13 @@ class Edit:
     def changed_bytes(self):
         return sum(1 for a, b in zip(self.orig, bytes(self.buf)) if a != b)
 
+    def save(self, backup=True):
+        """写盘。本次载入只在第一次写盘时生成备份，之后再保存仍写同一个备份名。"""
+        bpath = store(self.path, self.buf, backup=backup, reuse_bak=self.bak)
+        if bpath:
+            self.bak = bpath
+        return bpath
+
     def commit(self, dry=False, backup=True):
         if not self.dirty:
             print("\n没有需要改动的内容，文件未写。")
@@ -817,7 +840,7 @@ class Edit:
         if dry:
             print("\n--dry-run：以上改动没有写入。")
             return None
-        bpath = store(self.path, self.buf, backup=backup)
+        bpath = self.save(backup=backup)
         if not checksum_ok(load(self.path)):
             print("!! 写后校验失败，请用 restore --latest 回滚", file=sys.stderr)
             raise SystemExit(2)
@@ -1220,7 +1243,7 @@ def cmd_restore(args):
             if not os.path.isfile(target):
                 raise SystemExit(f"找不到备份 {key}")
 
-    keep = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
+    keep = new_backup_path(path)
     shutil.copy2(path, keep)
     shutil.copy2(target, path)
 

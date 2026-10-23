@@ -41,3 +41,23 @@ docs/dialogue.pdf
 *.log
 __pycache__/
 .workbuddy/
+
+# IDA 打开仓库根目录的 FD2.EXE 时会就地在旁边摊开数据库：.i64（打包）、
+# 未打包时的 .id0/.id1/.id2/.nam/.til，以及崩溃后留下的 .crash-* 目录。
+# 这些全是临时产物（带全部命名/原型的那份 IDB 登记在 EXTERNAL_ARTIFACTS.md，
+# 路径 E:\FD2\FD2.EXE.i64），不进仓库。
+/FD2.EXE.i64
+/FD2.EXE.i64.crash-*/
+/FD2.EXE.id[0-9]
+/FD2.EXE.id1
+/FD2.EXE.nam
+/FD2.EXE.til
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
+
+# shell 重定向/命令误用留下的文件（例如 `magick ... > --help`、
+# `python tools/fd2sav.py --help > --help`），曾攒下 30MB 垃圾。
+/--help
