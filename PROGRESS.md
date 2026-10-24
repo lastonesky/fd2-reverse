@@ -3999,3 +3999,32 @@ track 3 现在应为 6678/120 = **55.65 s**；开场 track 18 为 68.64 s。
 **验证**：用 `--keyplay=c13log.txt` 回放原按键序列，修复前必现 `0x14005D698`
 崩溃；修复后不再产生 crash 记录，对话正常开始播放（对白音效出现）。文本子流 11
 解出的原文与「流浪漢送寶物」剧情一致。
+
+### 7.39 修复：一次性 BGM（转职/道具/购买音效）被无限循环
+
+**现象**：使用勇者徽章转职时，原版转职音乐只播一次；移植版会播完一遍后再从头播第二遍
+（通常只听到第二遍开头就被切回场景 BGM）。
+
+**根因**：原版 `bgm_play`（0x25977）的调用顺序是
+`AIL_init_sequence → AIL_start_sequence → … → AIL_set_sequence_loop_count`。
+真正的 AIL 会把后设置的 loop count 应用到正在播放的序列；而 port 的 AIL 宿主层在
+`AIL_start_sequence` 时就直接开始渲染，使用的是**上一首曲子的 loop count**。
+
+典型链路（`item_menu.c` 使用转职道具）：
+
+```
+bgm_play(11, 0)   ← 循环的场景 BGM，序列句柄 loop_count = 0
+bgm_play(16, 1)   ← 转职/道具音效，应只播一次
+```
+
+第二次调用时 `q->loop_count` 仍是 0，`xmidi_play` 收到 0（无限循环），
+所以 `16` 号音效会一直循环；等动画结束 `bgm_play(11, 0)` 切回时，第二遍刚播了个开头。
+购买音效 `bgm_play(17, 1)` 同样受影响。
+
+**修复**（`src/game/bgm.c`）：在 `AIL_start_sequence` **之前**调用
+`AIL_set_sequence_loop_count`。原版是 start 后设置、由 AIL 动态应用；对宿主的
+“start 时即决定 loop 模式”实现，把设置提前到 start 前是等价且必要的。loop count
+仍来自原调用参数：`0` = 持续循环，`1` = 只播一次，不改游戏语义。
+
+**验证**：源码顺序已确认；重建后 `xmidi_play` 对 `bgm_play(16,1)` / `(17,1)`
+收到 `loop=1`，渲染时不再加循环尾。实际转职/购买流程待回放确认。

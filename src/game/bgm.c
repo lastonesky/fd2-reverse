@@ -58,6 +58,13 @@ void bgm_play(int track, int loop_count)
     fd2_mem_lock(dword_53EE0, dword_53BFF);          /* res_load set 53BFF       */
 
     AIL_init_sequence(dword_53ED0, dword_53EE0, 0);
+    /* The machine code sets the loop count after AIL_start_sequence (0x25A4x).
+     * The host AIL layer starts rendering from the current count, so a one-shot
+     * fanfare (16/17 with count 1) following a looping BGM (count 0) used to
+     * start with count 0 and loop forever.  AIL applies the count to the
+     * running sequence; setting it before start is the same observable
+     * behaviour and lets the synth pick the correct one-shot/loop mode. */
+    AIL_set_sequence_loop_count(dword_53ED0, loop_count);
     AIL_start_sequence(dword_53ED0);
 
     if (byte_51E61) {
@@ -70,5 +77,4 @@ void bgm_play(int track, int loop_count)
     } else {
         AIL_set_sequence_volume(dword_53ED0, 0, 0);
     }
-    AIL_set_sequence_loop_count(dword_53ED0, loop_count);
 }
