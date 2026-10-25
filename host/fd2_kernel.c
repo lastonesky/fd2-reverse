@@ -399,16 +399,21 @@ static void keylog_note(uint8_t scan, uint8_t ascii)
  * (sokol key_repeat / the g_down[] dedup in main_sokol.c), so without this
  * the game would see one make per press and move exactly one cell.
  *
- * We reproduce the hardware rule "the last key pressed repeats": a make arms
- * the slot, a matching break disarms it, and a repeat thread pushes further
- * make codes straight into the BDA ring (not through keylog_note - those are
- * synthetic, the keylog must stay the real input).  Tune with
+ * We reproduce the rule "the last key pressed repeats": a make arms the
+ * slot, a matching break disarms it, and a repeat thread pushes further make
+ * codes straight into the BDA ring (not through keylog_note - those are
+ * synthetic, the keylog must stay the real input).
+ *
+ * Defaults match DOSBox-X's keyboard controller reset state (KEYBOARD_Reset:
+ * repeat.pause = 500 ms, repeat.rate = 33 ms) rather than the older PC/AT
+ * BIOS typematic default (~10.9 chars/s = 92 ms), because the DOSBox-X
+ * reference build players compare against repeats at 33 ms.  Tune with
  * FD2_TYPEMATIC_DELAY (ms, default 500) and FD2_TYPEMATIC_RATE (ms, default
- * 90); FD2_TYPEMATIC=0 disables it. */
+ * 33); FD2_TYPEMATIC=0 disables it. */
 static int      g_rep_enabled = 1;
 static int      g_rep_debug;
 static unsigned g_rep_delay = 500;
-static unsigned g_rep_period = 90;
+static unsigned g_rep_period = 33;
 static uint8_t  g_rep_scan;
 static uint8_t  g_rep_ascii;
 static int      g_rep_held;
