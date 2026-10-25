@@ -141,6 +141,8 @@ src/
 | `--hang-exit` | `FD2_HANG_EXIT` | 看门狗判定挂起时直接关窗（默认只记日志） |
 | `--stall-ms=N` | `FD2_STALL_MS` | 挂起判定阈值（毫秒） |
 | `--typematic=0` | `FD2_TYPEMATIC` | 关掉方向键连发 |
+| `--typematic-delay=N` | `FD2_TYPEMATIC_DELAY` | 长按后开始连发的延迟，默认 500 ms |
+| `--typematic-rate=N` | `FD2_TYPEMATIC_RATE` | 连发周期，默认 33 ms（≈30 次/秒，对齐 DOSBox-X 默认） |
 
 例：
 

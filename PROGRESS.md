@@ -3251,13 +3251,18 @@ C1/C3 只清了全局变量和十六进制 VGA 地址，局部变量、返回值
 **修复（方案 B，模拟 DOS BIOS typematic）**：`host/fd2_kernel.c` 新增：
 - `repeat_note()`：make 记下"最后按下的键"并起 500ms 定时；匹配的 break 解除。重复 make 直接进
   BDA 键环（不过 `keylog_note`，录制里只保留真实输入）。
-- `repeat_thread()`：10ms 轮询，到点后每 90ms 推一个 make，直到松开。
-- 可调：`FD2_TYPEMATIC_DELAY`（默认 500ms）、`FD2_TYPEMATIC_RATE`（默认 90ms）、
+- `repeat_thread()`：10ms 轮询，到点后按周期推一个 make，直到松开。
+- 可调：`FD2_TYPEMATIC_DELAY`（默认 500ms）、`FD2_TYPEMATIC_RATE`（默认 33ms，
+  ≈30 次/秒，对齐 DOSBox-X 的 `KEYBOARD_Reset()` 默认 `pause=500, rate=33`）、
   `FD2_TYPEMATIC=0` 关闭、`FD2_TYPEMATIC_DEBUG=1` 打印每次重复。
 - 自动按键/回放（`FD2_KEYS`/`FD2_KEYPLAY` 都是 make 后立即 break）不会触发重复。
 
 **验证**：`FD2_KEYPLAY` 一个 500ms 按下、4500ms 松开的 Down，`FD2_TYPEMATIC_DEBUG=1` 下
 日志出现 38 次 `fd2: repeat scan=50`（≈92ms 周期），4500ms break 后停止。
+
+**后续调整（连发手感）**：最初按真实 PC/AT BIOS 默认把 `FD2_TYPEMATIC_RATE` 设为 90ms
+（≈11 次/秒），实机对比 DOSBox-X 时明显偏慢（DOSBox-X 的 8042 复位默认 `rate=33ms`）。
+现默认改为 **33ms**，延迟仍为 500ms；需要旧手感可显式传 `--typematic-rate=90`。
 
 **另**：`fd2_code`（原版机器码 258KB）在 native 构建里已无被执行代码引用，是死数据，后续可删。
 
@@ -4167,3 +4172,20 @@ Ctrl+F10 永远匹配不上；这也解释了用户在教会前按 Ctrl+F10 没�
 `docs/hidden-events.md` 补 §1.4：G（扫描码 0x22）是城镇/地点画面的 BGM
 循环键（0..9 共 10 轨，顺序循环，不是随机），不是教会专属，也不是隐藏商店。
 同时注明 DOSBox-X 默认用 Ctrl+F10 释放鼠标，会截获对应隐藏商店组合键。
+
+### 7.51 修复：进入第 23 关（内部 state 22）时崩溃（空记录表）
+
+用户从城镇返回地图/进入章节切换时，Linux 引擎在 `scene_enter_22` 段错误。
+`journalctl`/coredump 显示 `scene_enter_22+0x70` 读 `[base+0x40]` 时 fault=0x40，
+即 `dword_53A45 == NULL`。
+
+根因：`scene_enter_22` 在函数开头先把 `dword_53A45` 缓存到局部 `base`，然后
+才调用 `sub_205DA()`（`menu_reload_world` → `world_load_party`）。后者会
+`free` 旧表并 `malloc` 新表，机器码在循环里每次都重新读 `ds:0x3a45`
+（0x33707、0x3387C），port 却一直用调用前的旧值（此路径下为 NULL）。
+
+修复：移除缓存，循环和 `base[1283]/[1363]` 写入都改为实时读取
+`dword_53A45`。已重建 `host/build/fd2engine` 并部署到本轮 Linux 机器的
+`/run/media/ted/MyData/FD2/fd2engine`（即 AGENTS.md 里写作 `E:\FD2` 的
+数据目录；旧二进制备份为 `fd2engine.bak-*`）。Windows 版需在 Windows 侧用
+`build.ps1` 重建。
