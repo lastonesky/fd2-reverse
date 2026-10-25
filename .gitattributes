@@ -1,0 +1,19 @@
+# Normalize text files to LF in the repository and in the working tree.
+# The project is edited on both Arch Linux and Windows; without this, CRLF/LF
+# converts whole files into spurious diffs.  PowerShell and cmd handle LF.
+* text=auto eol=lf
+
+*.png  binary
+*.bmp  binary
+*.gif  binary
+*.jpg  binary
+*.ico  binary
+*.i64  binary
+*.til  binary
+*.bin  binary
+*.o    binary
+*.obj  binary
+*.exe  binary
+*.dll  binary
+*.pdf  binary
+*.zst  binary

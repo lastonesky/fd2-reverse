@@ -59,11 +59,31 @@ cp -p /e/FD2/FD2.SAV ./FD2.SAV
 > 缓冲区（与 19:21 备份差 13 字节、checksum 有效），才没有丢进度。
 > **教训：测试基线必须来自“当前”存档；旧临时文件永远不能当回滚源。**
 
+### 0.4 双环境：Arch Linux 与 Windows
+
+用户经常在同一份代码上切换 Arch Linux 和 Windows。**报告、日志和命令里写真实路径，
+不要把一个系统的盘符套到另一个系统上。**
+
+| | Arch Linux | Windows |
+|---|---|---|
+| 数据目录 | `/run/media/ted/MyData/FD2` | `E:\FD2` |
+| 仓库 | `/run/media/ted/MyData/FD2/port3` | `E:\FD2\port3` |
+| 引擎 | `port3/host/build/fd2engine`（ELF） | `port3/build/fd2engine.exe`（PE） |
+| 构建 | `make engine` | `pwsh -File build.ps1` |
+
+- `E:\FD2`、`/e/FD2`、`/mnt/e/FD2` 只是历史上 Windows/WSL 的写法；在本机 Linux 上
+  以 `findmnt`/实际挂载点为准（当前是 btrfs，挂在 `/run/media/ted/MyData`）。
+- **代码修复必须在两个平台各自重建后才算完成**；只重建 Linux 时，明确写出 Windows
+  侧仍需 `build.ps1`。
+- 两边的 `FD2.SAV` 是两份独立文件，切换前先比 md5；不要把一边的存档当另一边的备份。
+- 跨系统同步靠 git。未提交的改动不会自动过去；换系统前先确认 `git status`。
+
 ---
 
 ## 1. 仓库与数据边界
 
-- 仓库是 `E:\FD2\port3`；游戏数据在 `E:\FD2`，**不在 git 里**。
+- 仓库在 Windows 是 `E:\FD2\port3`，在本机 Linux 是
+  `/run/media/ted/MyData/FD2/port3`；游戏数据在对应 `FD2` 目录，**不在 git 里**。
 - `FD2.EXE`、`FD2.SAV*`、`*.DAT`、`*.B24` 等是用户资产，**不要提交**。
 - `src/fd2_image.c`、`analysis/seg_*.bin` 是构建生成物，按 `.gitignore` 处理。
 - 不要 `git add -A` 把用户数据或临时回放日志带进提交。
