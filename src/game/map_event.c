@@ -101,7 +101,10 @@ int map_cell_event(int rec_index)
                     = (uint16_t)rf;
                 j___delay(100);
                 msg_open_portrait(rec[7]);
-                dword_53ADD = r + 181;
+                /* 0x19372: the second sub-text of VM 425 is the *discarded*
+                 * item (rf + 181), not the map-window result.  Using `r` here
+                 * made it always item 1 + 181 = 闊劍. */
+                dword_53ADD = (uint32_t)(rf + 181);
                 vm_run(dword_53A7D, 0x1A9,VGA_P(0xA9F23u), 320, 205, 76, 74, 19, 1);
                 dlg_blit_dato(dword_53A85, dword_53C67, 0);
                 dlg_wait_key(0);

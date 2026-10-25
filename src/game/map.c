@@ -35,6 +35,17 @@
 /* --- map view rendering core (round 37) ------------------------------- */
 #define BDA_W(off)  (*(volatile uint16_t *)(uintptr_t)(DOS_LOWMEM_BASE + (off)))
 
+/* Map-cell table address.  dword_53AC1 is uint32_t, so writing the index as
+ * `x + dword_53AC1 * y` makes the whole expression unsigned: x == -1 (used by
+ * map_render_view / map_blit_cell_sprite for the cell just left of the view)
+ * becomes 0xFFFFFFFF and on 64-bit adds 4 GiB instead of subtracting 4.  Keep
+ * the index signed and widen it before scaling. */
+static uint8_t *map_cell_ptr(int x, int y)
+{
+    intptr_t idx = (intptr_t)x + (intptr_t)(int32_t)dword_53AC1 * y;
+    return dword_53A51 + 4 * idx;
+}
+
 void map_blit_tile(int x, int y, int index)
 {
     const uint8_t *src;
@@ -55,7 +66,7 @@ void map_blit_tile(int x, int y, int index)
  * out[2..3] = flags (0x1F), out[4..7] = the 4 bytes of dword_53A69[tile]. */
 void map_cell_info(int x, int y, uint8_t *out)
 {
-    const uint8_t *cell = dword_53A51 + 4 * (x + dword_53AC1 * y);
+    const uint8_t *cell = map_cell_ptr(x, y);
     uint16_t tile  = *(const uint16_t *)(cell + 4) & 0x03FFu;
     uint16_t flags = (uint16_t)(cell[6] & 0x1F);
     const uint8_t *t = (const uint8_t *)(uintptr_t)(dword_53A69 + 4 * tile);
@@ -87,7 +98,7 @@ void map_blit_cell_sprite(void *dst, int x, int y)
     if (y < 0)
         return;
 
-    cell = dword_53A51 + 4 * (x + dword_53AC1 * y);
+    cell = map_cell_ptr(x, y);
     tile = *(const uint16_t *)(cell + 4) & 0x03FFu;
     v    = *(const uint8_t *)(uintptr_t)(dword_53A69 + 4 * tile);
     if (v & 8)
@@ -225,8 +236,7 @@ void map_render_view(uint8_t *dst, int pitch, int w, int h, int ox, int oy)
         + *(const uint32_t *)(dword_53A6D + 4 * byte_51A97[dword_53C1F] + 6);
 
     for (row = 0; row < h; row++) {
-        const uint8_t *cell = dword_53A51
-            + 4 * (ox + dword_53AC1 * (oy + row)) + 4;
+        const uint8_t *cell = map_cell_ptr(ox, oy + row) + 4;
         uint8_t *d = dst + 24 * pitch * row;
 
         for (i = 0; i < w; i++) {
@@ -341,7 +351,7 @@ void map_reveal_cursor(void)
         map_blit_tile(x + 1, y + 1, 18);
         break;
     case 6:
-        *(uint8_t *)(dword_53A51 + 4 * (x + dword_53AC1 * y) + 7) = 0;
+        map_cell_ptr(x, y)[7] = 0;
         break;
     default:
         break;

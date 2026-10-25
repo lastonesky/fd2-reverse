@@ -110,8 +110,13 @@ void party_panel_band_c(const uint8_t *src, int step)
 /* 0x1B0AD */
 void party_panel_band_d(const uint8_t *src, int step)
 {
-    int width = 170;
-    int dsty  = 155;
+    /* Machine ebp=0x10 is the row count; only the clipped path replaces it
+     * (ebp = dsty - 200 = t - 45).  The copy width is always 0xAA.  Using
+     * 170 as the default here made steps 10..12 copy 170 rows instead of 16,
+     * reading ~40 KB past the caller's 0xFA00 scratch buffer (intermittent
+     * access-violation crash when that over-read crossed an unmapped page). */
+    int rows = 16;
+    int dsty = 155;
     int i;
     const uint8_t *s;
     uint8_t       *d;
@@ -123,12 +128,12 @@ void party_panel_band_d(const uint8_t *src, int step)
         int t = 9 * (4 - (step - 5));
         dsty = t + 155;
         if (t + 171 > 200)
-            width = t - 45;
+            rows = t - 45;
     }
 
     s = src + 49675;
     d = dword_53A49 + dsty * 320 + 75;
-    for (i = 0; i < width; ++i) {
+    for (i = 0; i < rows; ++i) {
         memmove(d, s, 0xAA);
         s += 320;
         d += 320;

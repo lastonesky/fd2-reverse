@@ -814,8 +814,10 @@ void figure_scene_play(int unit)
  * True ABI = cdecl, four stack arguments: the single call site (0x3003f) pushes
  * four values, but the `push 0x100; call 0x3702F` Watcom stack probe makes
  * Hex-Rays drop all but the first, so its `int(int)` prototype is wrong.
- * TRAP: the machine frees `v19` (the BG strip `bg_a`) twice on teardown; kept
- * as is. */
+ * TRAP: the machine frees `v19` (the BG strip `bg_a`) twice on teardown
+ * (0x2D6F1).  The Watcom heap tolerated it; the host CRT does not - the
+ * second free raises STATUS_HEAP_CORRUPTION (C0000374).  Only the first free
+ * is kept. */
 void figure_party_show(int unit, int mode, int count, const uint8_t *units)
 {
     uint8_t        cell[8];       /* map_cell_info output (byte 6 = DAT index)*/
@@ -960,7 +962,8 @@ void figure_party_show(int unit, int mode, int count, const uint8_t *units)
     guest_free(bg_a);
     guest_free(bg_pick);
     guest_free(tai);
-    guest_free(bg_a);   /* the machine frees v19 a second time */
+    /* The original repeats guest_free(bg_a) here (0x2D6F1); dropped - it is a
+     * double free on the host heap.  See the TRAP note above. */
     guest_free(screen);
     guest_free(work);
     guest_free((void *)(uintptr_t)dword_5413F[0]);
