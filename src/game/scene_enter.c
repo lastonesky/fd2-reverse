@@ -196,7 +196,6 @@ void scene_enter_29(void)
  * scripted sequence ending in vm(4) + 0x134E4 + 0x12D7B(0) (tail 0x33594). */
 void scene_enter_22(void)
 {
-    uint8_t *base = (uint8_t *)(uintptr_t)dword_53A45;
     int i;
 
     sub_205DA();
@@ -204,8 +203,11 @@ void scene_enter_22(void)
         sub_32975(i);
     sub_135DD(14, 32);
     sub_24618(dword_53AB9 + 6, dword_53ABD + 5, 10, 8);
+    /* The machine reloads ds:0x3a45 fresh on every iteration (0x33707 a1 45
+     * 3a 00 00): sub_205DA above frees and reallocates that table via
+     * world_load_party, so a pointer captured before the call is stale/null. */
     for (i = 0; i < 16; ++i) {
-        uint8_t *rec = base + 80u * (uint32_t)i;
+        uint8_t *rec = (uint8_t *)(uintptr_t)dword_53A45 + 80u * (uint32_t)i;
         if (*(const uint16_t *)(const void *)(rec + 64) != 0) {
             rec[5] = 0;
             rec[3] = 2;
@@ -231,8 +233,10 @@ void scene_enter_22(void)
     sub_11CAC(0);
     sub_11DF2(0, 255, 0);
     j___delay(500);
-    base[1283] = 2;                                 /* record 16, kind +3 */
-    base[1363] = 2;                                 /* record 17, kind +3 */
+    /* Same live reload at 0x3387C / 0x33886 (a1 45 3a 00 00 before each
+     * write); sub_10B4E() and the vm() calls in between may replace it. */
+    ((uint8_t *)(uintptr_t)dword_53A45)[1283] = 2;  /* record 16, kind +3 */
+    ((uint8_t *)(uintptr_t)dword_53A45)[1363] = 2;  /* record 17, kind +3 */
     vm(4);
     sub_134E4();
     sub_12D7B(0);                                   /* tail 0x33594 */
