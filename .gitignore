@@ -61,3 +61,6 @@ __pycache__/
 # shell 重定向/命令误用留下的文件（例如 `magick ... > --help`、
 # `python tools/fd2sav.py --help > --help`），曾攒下 30MB 垃圾。
 /--help
+
+# 隔离测试目录（见 AGENTS.md §0.2），里面常有 FD2.SAV 副本和大体积游戏数据。
+/testdata/
