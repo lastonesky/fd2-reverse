@@ -166,6 +166,13 @@ extern const int               fr_key_table_count;
 
 const char *fr_key_name(fr_key k);
 uint8_t     fr_key_scan(fr_key k);       /* 0 for FRK_NONE               */
+/* BIOS scan for a key with modifiers held.  Only F1..F10 differ from the
+ * unmodified scan: Ctrl+F1..F10 = 0x5E..0x67, Alt+F1..F10 = 0x68..0x71,
+ * Shift+F1..F10 = 0x54..0x5D.  Modifier bits: */
+#define FR_MOD_SHIFT 1u
+#define FR_MOD_CTRL  2u
+#define FR_MOD_ALT   4u
+uint8_t     fr_key_scan_mod(fr_key k, unsigned mods);
 int         fr_key_extended(fr_key k);
 
 /* US-layout, unshifted ASCII for a key - what ToAscii() would produce on

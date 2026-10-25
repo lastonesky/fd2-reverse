@@ -36,6 +36,20 @@ uint8_t fr_key_scan(fr_key k)
     return 0;
 }
 
+uint8_t fr_key_scan_mod(fr_key k, unsigned mods)
+{
+    if (k >= FRK_F1 && k <= FRK_F10) {
+        unsigned n = (unsigned)(k - FRK_F1);
+        if (mods & FR_MOD_CTRL)
+            return (uint8_t)(0x5Eu + n);
+        if (mods & FR_MOD_ALT)
+            return (uint8_t)(0x68u + n);
+        if (mods & FR_MOD_SHIFT)
+            return (uint8_t)(0x54u + n);
+    }
+    return fr_key_scan(k);
+}
+
 int fr_key_extended(fr_key k)
 {
     int i;

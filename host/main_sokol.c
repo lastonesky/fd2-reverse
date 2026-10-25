@@ -56,6 +56,7 @@ static uint64_t g_t0_ms = 0;
  * ---------------------------------------------------------------------- */
 
 static int g_down[256];              /* VK held state, to drop key repeats */
+static uint8_t g_down_scan[256];     /* scan code used on the make event    */
 
 /* sapp_keycode -> Windows virtual key. The ASCII range maps 1:1 only for
  * letters, digits and space; punctuation and everything >= 256 does not. */
@@ -154,9 +155,26 @@ static uint8_t ascii_for_vk(int vk)
     return 0;
 }
 
+/* BIOS scan code for a VK, including the Ctrl/Alt/Shift+F1..F10 forms the
+ * game's hidden-shop table uses (0x5E.., 0x68.., 0x54..).  Plain
+ * MapVirtualKeyA only returns the unmodified F-key make code (0x3B..0x44). */
+static uint8_t scan_for_vk(int vk)
+{
+    fr_key k = fr_key_from_vk(vk);
+    unsigned mods = 0;
+
+    if (k >= FRK_F1 && k <= FRK_F10) {
+        if (GetKeyState(VK_CONTROL) & 0x8000) mods |= FR_MOD_CTRL;
+        if (GetKeyState(VK_MENU)    & 0x8000) mods |= FR_MOD_ALT;
+        if (GetKeyState(VK_SHIFT)   & 0x8000) mods |= FR_MOD_SHIFT;
+        return fr_key_scan_mod(k, mods);
+    }
+    return (uint8_t)MapVirtualKeyA((UINT)vk, MAPVK_VK_TO_VSC);
+}
+
 static void push_vk(int vk, int down)
 {
-    UINT sc;
+    uint8_t sc;
 
     if (vk <= 0 || vk >= 256)
         return;
@@ -165,11 +183,15 @@ static void push_vk(int vk, int down)
     if (down) {
         if (g_down[vk]) return;
         g_down[vk] = 1;
+        sc = scan_for_vk(vk);
+        g_down_scan[vk] = sc;
     } else {
         if (!g_down[vk]) return;
         g_down[vk] = 0;
+        sc = g_down_scan[vk];
+        if (!sc)
+            sc = scan_for_vk(vk);
     }
-    sc = MapVirtualKeyA((UINT)vk, MAPVK_VK_TO_VSC);
     fd2_engine_key((uint8_t)(down ? sc : (sc | 0x80)), ascii_for_vk(vk));
 }
 
@@ -194,6 +216,7 @@ void input_post_key(fr_key key)
  * ---------------------------------------------------------------------- */
 
 static unsigned char g_down[FRK_COUNT]; /* fr_key held state, drop repeats */
+static unsigned char g_down_scan[FRK_COUNT]; /* scan used on the make event */
 static int           g_char_pending;    /* last make code may still be patched */
 
 /* sapp_keycode -> portable key. sokol's X11 backend builds these codes from
@@ -280,13 +303,24 @@ static uint8_t scan_ascii(fr_key key, uint8_t *scan)
     return fr_key_extended(key) ? 0xE0 : 0;
 }
 
-static void push_fr_key(fr_key key, int down)
+static void push_fr_key(fr_key key, int down, unsigned mods)
 {
     uint8_t scan, ascii;
 
     if (key == FRK_NONE)
         return;
-    ascii = scan_ascii(key, &scan);
+    if (down) {
+        if (g_down[key]) return;
+        g_down[key] = 1;
+        scan = fr_key_scan_mod(key, mods);
+        g_down_scan[key] = scan;
+    } else {
+        if (!g_down[key]) return;
+        g_down[key] = 0;
+        scan = g_down_scan[key];
+        if (!scan)
+            scan = fr_key_scan(key);
+    }
     if (!scan)
         return;
     /* Seed the BIOS ascii byte here, exactly like input_post_key().  X11 only
@@ -294,15 +328,7 @@ static void push_fr_key(fr_key key, int down)
      * Return/Tab/Backspace are not in that table - so without this, Enter
      * reaches the game as AL=0 and only Space (which does get a CHAR event)
      * confirms a menu selection.  A real CHAR event still overwrites it. */
-    if (!fr_key_extended(key))
-        ascii = fr_key_ascii(key);
-    if (down) {
-        if (g_down[key]) return;
-        g_down[key] = 1;
-    } else {
-        if (!g_down[key]) return;
-        g_down[key] = 0;
-    }
+    ascii = fr_key_extended(key) ? 0xE0 : fr_key_ascii(key);
     fd2_engine_key((uint8_t)(down ? scan : (scan | 0x80)), ascii);
     g_char_pending = down && !fr_key_extended(key);
 }
@@ -493,14 +519,17 @@ static void event_cb(const sapp_event *e)
         }
         if (key == FRK_NONE || 0)
             break;
-        push_fr_key(key, 1);
+        push_fr_key(key, 1,
+                    ((e->modifiers & SAPP_MODIFIER_CTRL)  ? FR_MOD_CTRL  : 0u) |
+                    ((e->modifiers & SAPP_MODIFIER_ALT)   ? FR_MOD_ALT   : 0u) |
+                    ((e->modifiers & SAPP_MODIFIER_SHIFT) ? FR_MOD_SHIFT : 0u));
         break;
     }
     case SAPP_EVENTTYPE_KEY_UP:
         if (0)
             break;
         g_char_pending = 0;        /* a break code never carries a char */
-        push_fr_key(sapp_to_fr_key((int)e->key_code), 0);
+        push_fr_key(sapp_to_fr_key((int)e->key_code), 0, 0u);
         break;
     case SAPP_EVENTTYPE_CHAR:
         /* sokol's X11 backend runs XLookupString for us: this event carries
