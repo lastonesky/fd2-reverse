@@ -4028,3 +4028,142 @@ bgm_play(16, 1)   ← 转职/道具音效，应只播一次
 
 **验证**：源码顺序已确认；重建后 `xmidi_play` 对 `bgm_play(16,1)` / `(17,1)`
 收到 `loop=1`，渲染时不再加循环尾。实际转职/购买流程待回放确认。
+
+### 7.40 修复：查看胜利条件时崩溃（队伍面板 band_d 越界读）
+
+**现象**：游戏中打开系统菜单 → 查看胜利条件，进程 `C0000005` 退出；重启后
+`Continue` 再打开同一菜单却不再崩溃。
+
+**崩溃日志**：`fd2_crash.log` 最后一条 RIP 在系统 `memmove`，调用栈为
+`party_panel_band_d+0x85 → party_panel_run+0xF3 → sys_menu_system+0x682`，
+`fault=0x0BDD002B` 正好是 `memmove` 的源地址。
+
+**根因**：`party_panel_band_d`（原版 0x1B0AD）把原机器默认行数 `ebp=0x10`
+（16 行）误译成了 `width=170`。原版只在 `step 5..9` 的裁剪分支里改 `ebp`，
+其余情况（`step 10..12`）仍只拷 16 行；移植版却拷 170 行，源地址从
+`scratch+49675` 一直读到 `scratch+103755`，越过 `guest_malloc(0xFA00)` 分配的
+64,000 字节缓冲区约 40 KB。是否触发缺页取决于堆布局，所以表现为
+“第一次崩溃、重启后不崩”的间歇性故障。
+
+**修复**（`src/game/party_panel.c`）：默认行数改回 16，裁剪分支只改行数，
+每行宽度固定 0xAA。已重建 `build/fd2engine.exe`；未启动游戏，未触碰存档。
+
+### 7.41 修复：密帝施放音速刃后 `C0000374` 堆损坏（figure_party_show 双重 free）
+
+**现象**：游戏中密帝释放音速刃，效果结束后进程以 `C0000374`
+（STATUS_HEAP_CORRUPTION）退出；与 7.40 的 `C0000005` 读越界不是同一个问题。
+
+**崩溃日志**：最后一条 RIP 在 ntdll 堆校验，用户态返回地址
+`party_panel` 无关，而是
+`figure_party_show+0x6E0 → figure_effect_play+0x12E5 → action_menu_run`。
+`0x140035210` 正是第二次 `free(bg_a)` 的返回地址。
+
+**根因**：原版 0x2CF30 的收尾确实把 BG strip `v19`（`bg_a`）释放了两次
+（0x2D6C4 与 0x2D6F1）。Watcom 堆容忍了这次重复释放；移植版直接使用宿主
+CRT 的 `free`，第二次释放同一块内存被 Windows 堆判定为损坏并抛
+`C0000374`。音速刃走的是 `figure_party_show`（mode 24/28..31）路径，所以第一次
+用到这个演出就必现。
+
+**修复**（`src/game/figure_view.c`）：保留第一次 `guest_free(bg_a)`，删除原版
+重复的第二次释放，并更新 TRAP 注释。已重建 `build/fd2engine.exe`；未启动游戏，
+未触碰存档。
+
+### 7.42 修复：宝箱/宝藏道具满时，“放回去”提示的物品名错误
+
+**现象**：空地上挖到宝藏、道具栏已满，选择把“大地之剑”放回去，对话框却说
+把“阔剑”放了回去；旧版一直存在。
+
+**根因**：`map_event.c` 的 kind==0（宝藏/宝箱）交换分支在调用 VM 425
+（“拿起{子文本}, 把{子文本}放了回去!”）前，把第二个子文本设成了
+`dword_53ADD = r + 181`，其中 `r` 是前面 `map_window_run()` 的返回值（此时为 1），
+于是永远显示 item 1 的名字“闊劍”。原版 0x19372 写的是
+`mov eax,[var_18]; add eax,0B5h; mov dword_53ADD,eax`，其中 `var_18`
+就是 `rec_field_byte(rec_index, dword_53C57)` 读出的、玩家选择丢弃的道具 id。
+
+**影响范围**：只影响第二段提示文字。事件表里保存的“留在地上的道具”
+（`[flag+0x54] = rf`）本身是正确的，因此再挖时拿到的仍是玩家选择的那件。
+
+**修复**（`src/game/map_event.c`）：改为 `dword_53ADD = rf + 181`。
+已重建 `build/fd2engine.exe`；未启动游戏，未触碰存档。
+
+### 7.43 修复：地图边缘向左/向上移动一按回车就崩（负坐标 32 位无符号提升）
+
+**现象**：指使龙骑士走向宝箱，刚按回车开始移动立即 `C0000005`；崩溃地址
+`0x10B0604C0` 恰好等于地图 cell 表指针 `dword_53A51=0x0B0604C0` 加 4 GiB。
+
+**调用栈**：`map_render_view+0x370 (movzwl (%rdi)) ← map_scroll_left+0x12C
+← map_scroll_path+0x3E ← map_record_engage`。
+
+**根因**：`map_render_view` 计算 cell 地址时写成
+
+```c
+dword_53A51 + 4 * (ox + dword_53AC1 * (oy + row)) + 4
+```
+
+`dword_53AC1`（地图宽度）是 `uint32_t`，于是整个下标表达式按无符号 32 位运算。
+向左滚动时 `ox = dword_53AA9 - 1`，在地图/视口左边缘 `ox == -1`，下标变成
+`0xFFFFFFFF`；`shl 2` 后为 `0xFFFFFFFC`，再加到 64 位指针时被零扩展，结果是
+`base + 4 GiB - 4`，首次绘制就缺页。向上滚动在地图上边缘有同样问题
+（`oy == -1`）。
+
+**修复**（`src/game/map.c`）：新增 `map_cell_ptr(x,y)`，用 `intptr_t` 做有符号
+下标并显式 `movslq` 宽度；`map_cell_info`、`map_blit_cell_sprite`、
+`map_render_view` 和光标清理路径统一走该 helper。已重建
+`build/fd2engine.exe`；未启动游戏，未触碰存档。
+
+### 7.44 文档：补全全关卡隐藏事件格总表
+
+把 `tools/fd2secrets.py` 对 `FDFIELD.DAT`/`FDSHAP.DAT` 的完整扫描结果整理进
+`docs/game-knowledge.md` §11：29 个 state、共 182 个直接给道具/金钱的特殊事件格，
+列出坐标、内容、物品 ID/金额和事件 flag；§7.5 与快速索引加了指向 §11 的说明。
+
+### 7.45 文档：隐藏事件格独立成册，并补充全地点隐藏商店
+
+把 `docs/game-knowledge.md` 里的全关卡隐藏事件格移到新文档
+`docs/hidden-events.md`，§7.5 与快速索引改为链接到该文档。
+
+同时从 dseg03 的 per-place 表（0x6238D，31 字节/项，访问器 0x4E809 先
+`dec` 再乘 31，因此 state 1 对应第 1 项）解出隐藏商店入口：state、地点、
+需要停留的场所项（酒店/武器店/出口/道具店/教会）、ASCII 热键，以及该
+state 的隐藏商店 8 格商品。共 23 个入口；酒店入口单列 6 个。
+
+### 7.46 文档：隐藏事件/隐藏商店表改用「关卡 N + 名称」
+
+`docs/hidden-events.md` 中不再用裸 `state n`：统一写成「关卡 N 地名」，
+序章 state 0 写作「初始关卡 孤岛」；保留一句说明：关卡编号沿用内部
+state（0-based），关卡 19 即剧情第 20 章死之沼泽。
+
+### 7.47 文档：隐藏事件/隐藏商店表改为章节编号
+
+`docs/hidden-events.md` 的表头和正文标题改为「第N章 + 地名」：
+内部 state 0 = 第一章 孤島，state 1 = 第二章 羅德鎮，依此类推；
+第二十章 死亡般的沉寂即死之沼泽。隐藏商店表、酒店速查表同步改号。
+
+### 7.48 修复/文档：隐藏商店按键是扫描码功能键，不是字母
+
+用户按文档在第二十一章亚述森林教会前按 `g`，结果触发 BGM 切换而不是隐藏商店。
+根因：per-place 表 `ent[2]` 存的是 BIOS **扫描码**，`0x67` 对应 **Ctrl+F10**；
+`g` 的扫描码是 `0x22`，正好被前面的 BGM 切换分支吃掉。此前把扫描码误读成
+ASCII 字母，端口还加了 `ascii == ent[2]` 兜底，才让字母表看似能用。
+
+修复：`scene_core.c` 只比较 `scan == ent[2]`，移除 ASCII 兜底；注释写明
+`0x54=Shift+F1 … 0x67=Ctrl+F10`。已重建 `build/fd2engine.exe`。
+`docs/hidden-events.md` 的隐藏商店表全部改为真实组合键：
+Shift+F1、Ctrl+F2、Alt+F3、……、Ctrl+F6，并注明按字母 g 会切 BGM。
+
+### 7.49 修复：port 的 Ctrl/Alt/Shift+F1..F10 扫描码
+
+原版隐藏商店表存的是带修饰键的功能键扫描码（Ctrl+F10=0x67 等）。port 的
+Win32 按键层只做 `MapVirtualKeyA(VK_F10)`，得到普通 F10 的 0x44，所以
+Ctrl+F10 永远匹配不上；这也解释了用户在教会前按 Ctrl+F10 没反应。
+
+修复：`keys.c/h` 增加 `fr_key_scan_mod()`；`main_sokol.c` 的 Win32
+`push_vk()` 在 F1..F10 按下时读取 Ctrl/Alt/Shift 状态并生成
+0x5E../0x68../0x54.. 扫描码，key-up 复用按下时的扫描码；POSIX 路径同样
+用 sokol modifiers。已重建并部署到 `E:\FD2\fd2engine.exe`。
+
+### 7.50 文档：城镇 G 键切 BGM 与 DOSBox-X 热键冲突
+
+`docs/hidden-events.md` 补 §1.4：G（扫描码 0x22）是城镇/地点画面的 BGM
+循环键（0..9 共 10 轨，顺序循环，不是随机），不是教会专属，也不是隐藏商店。
+同时注明 DOSBox-X 默认用 Ctrl+F10 释放鼠标，会截获对应隐藏商店组合键。

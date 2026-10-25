@@ -436,6 +436,9 @@ if (rand() % 100 < crit)
 
 ### 7.5 隐藏事件中的转职/成长道具
 
+> 本节只列转职/成长类道具；**全部关卡的道具与金钱隐藏格**见
+> [hidden-events.md](hidden-events.md)。
+
 用 `tools/fd2secrets.py` 扫描 FDFIELD 事件表得到（state = 场景索引，0-based；坐标为特殊事件格）：
 
 | state | flag | 道具 | 坐标 |
@@ -798,6 +801,8 @@ for (i = 0xD1; i < 0xD7; i++)      // 209..214
 
 ---
 
+---
+
 ## 9. 快速索引
 
 - 法术命中/伤害：`src/game/item_use.c` `unit_action_damage()` / `unit_damage()`
@@ -811,3 +816,4 @@ for (i = 0xD1; i < 0xD7; i++)      // 209..214
 - 职业装备表：`0x6188A`（7 字节/项）
 - 转职映射：`0x523D5`（旧类型→道具）、`0x615FE`（转职后职业）
 - 隐藏事件扫描：`python3 tools/fd2secrets.py --all --items`
+- 全关卡隐藏格清单：见 [hidden-events.md](hidden-events.md)
