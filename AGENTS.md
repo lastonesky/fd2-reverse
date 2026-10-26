@@ -114,6 +114,14 @@ wsl -- bash -lc 'cd /mnt/e/FD2/port3 && make engine'   # -> host/build/fd2engine
 
 回放 `c13log.txt` 这类按键日志前，先执行 §0 的存档快照。
 
+### 2.1 Ghidra MCP（第二意见）
+
+需要拿 Ghidra 交叉验证 `FD2.EXE` 时，先读 `.pi/skills/ghidra-fd2/SKILL.md`。要点：
+地址与 `FD2.EXE.i64` **1:1**（image base 0，无需 rebase）；但默认只加载 3 个工具组、
+`open_project` 在 `headless` 组、脚本通道要求**在 Ghidra 进程自己的环境**里设
+`GHIDRA_MCP_ALLOW_SCRIPTS=1`，且自动分析只出 ~706 函数（IDA 1369），空洞需手工补建。
+分析会话里**不要**调 `save_program` / `exit_ghidra`，收尾用 `close_program(save=false)`。
+
 ---
 
 ## 3. 提交、推送、发布
