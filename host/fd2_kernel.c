@@ -15,6 +15,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
+#include <time.h>
 #if defined(_WIN32)
 #include <windows.h>
 #endif
@@ -31,6 +33,27 @@ extern void fd2_data_init(void);
 void fd2_install_crash_handler(void);
 
 uintptr_t dos_lowmem_base;
+
+/* ---- startup phase trace (docs/STARTUP-LATENCY.md) --------------------
+ * Every phase prints "[+N ms] ..." with N = ms since the top of
+ * fd2_engine_init().  The first-run-after-boot latency that Windows shows
+ * (several seconds once per boot, fast afterwards) can only be diagnosed
+ * with these markers; the log used to have no time information at all.
+ * Note the trace starts *inside* main(): the gap between the launcher's
+ * double-click and this first line (CreateProcess -> CRT -> AV image scan
+ * of fd2engine.exe -> DLL loads) must be measured externally. */
+static uint64_t g_fd2_t0_ms;
+
+void fd2_tlog(const char *fmt, ...)
+{
+    va_list ap;
+
+    printf("[+%6llu ms] ", (unsigned long long)(plat_now_ms() - g_fd2_t0_ms));
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+    putchar(10);
+}
 
 /* BDA keyboard ring (offsets are the BIOS ones, relative to 0x400). */
 #define KB_HEAD   0x41A
@@ -301,6 +324,7 @@ static void game_thread(void *arg)
 #if defined(_WIN32)
     g_game_tid = (DWORD)plat_thread_id();
 #endif
+    fd2_tlog("game thread: fd2_game_main() entered (boot.c: AIL + resource loads follow)");
     fd2_game_main(0, NULL);
     g_quit = 1;
 }
@@ -655,6 +679,16 @@ int fd2_engine_init(int argc, char **argv)
     if (freopen(log, "w", stdout)) { }
     if (freopen(log, "a", stderr)) { }
     setvbuf(stdout, NULL, _IONBF, 0);
+    g_fd2_t0_ms = plat_now_ms();
+    {
+        /* Wall clock, so a launcher-side stopwatch (double-click) can be
+         * compared against the in-log phase markers. */
+        time_t t = time(NULL);
+        struct tm *tv = localtime(&t);
+        char wall[32];
+        if (tv && strftime(wall, sizeof wall, "%H:%M:%S", tv))
+            printf("fd2: process start (main reached, wall %s)\n", wall);
+    }
 
 #if defined(_WIN32)
     timeBeginPeriod(1);   /* 1 ms timer: BIOS tick really runs at 18.2 Hz */
@@ -729,6 +763,7 @@ int fd2_engine_init(int argc, char **argv)
     }
     audio_set_muted(0);
     host_args_dump();
+    fd2_tlog("engine init done (WASAPI audio + AIL bring-up finished)");
     printf("fd2: engine init (log=%s, keys=%d)\n", log, g_nkeys);
     printf("fd2: usage: fd2engine [--unfocus=mute|pause|none|fade] "
            "[--unfocus-fade-ms=N] [--volume=N] [--upscale=...] [--aspect=...] "
@@ -754,6 +789,7 @@ void fd2_engine_start(void)
         plat_thread(key_thread, NULL);
     if (g_nplay)
         plat_thread(keyplay_thread, NULL);
+    fd2_tlog("threads started (game + 18.2 Hz tick + stat + stall)");
 }
 
 void fd2_engine_frame(void)

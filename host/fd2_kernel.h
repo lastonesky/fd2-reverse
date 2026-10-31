@@ -17,6 +17,12 @@ extern uintptr_t dos_lowmem_base;
  * audio device, AIL_startup.  Returns 0 on success. */
 int  fd2_engine_init(int argc, char **argv);
 
+/* Startup phase marker: prints "[+N ms] <fmt>" where N is milliseconds since
+ * fd2_engine_init() began (which is essentially process start - everything
+ * before that, e.g. an AV image scan of the exe, is NOT covered and must be
+ * measured externally, see docs/STARTUP-LATENCY.md). */
+void fd2_tlog(const char *fmt, ...);
+
 /* Start the game thread and the BIOS tick thread. */
 void fd2_engine_start(void);
 

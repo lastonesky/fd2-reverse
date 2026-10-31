@@ -4189,3 +4189,17 @@ Ctrl+F10 永远匹配不上；这也解释了用户在教会前按 Ctrl+F10 没�
 `/run/media/ted/MyData/FD2/fd2engine`（即 AGENTS.md 里写作 `E:\FD2` 的
 数据目录；旧二进制备份为 `fd2engine.bak-*`）。Windows 版需在 Windows 侧用
 `build.ps1` 重建。
+
+### 7.52 诊断：Windows 每日首启慢几秒 → 启动阶段时间戳埋点 + 环境分析
+
+用户反馈：Windows 每天第一次启动要等好几秒才出画面，同一次开机内第二次启动
+则瞬时。实测（testdata 隔离）热态下 main() → 开机画面仅 0.23 s；E:（Btrfs/
+WinBtrfs，NVMe）即使冷读也有 284–733 MB/s，且第一画面前引擎只读 <1 MB 数据
+——排除磁盘/引擎因素。慢的部分是“每次开机后第一次”才发生的一次性成本：
+Defender 对未签名自编译 exe 的镜像扫描（每次 build 重建后必重扫）、开机后首个
+D3D11 设备冷启动、以及 SysMain 被禁用导致无任何预取；64 GB 内存的 standby
+list 则解释了“第二次为何瞬时”。
+
+本轮给启动路径加了毫秒时间戳埋点（`fd2_tlog`，见 `docs/STARTUP-LATENCY.md`
+§4–5），下次开机首跑即可从 `fd2engine.log` 直接读出几秒花在哪个阶段。
+Windows `build.ps1` 与 Linux `make engine` 均已重建。

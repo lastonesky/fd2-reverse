@@ -12,6 +12,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "fd2_kernel.h"   /* fd2_tlog: startup phase trace */
 #include "platform.h"      /* plat_mutex: front-buffer handover */
 #include "render.h"
 #include "../src/game/vga.h"
@@ -58,6 +59,10 @@ void fd2_video_publish(void)
     memcpy(g_front_palette, fd2_palette, sizeof g_front_palette);
     plat_mutex_unlock(&g_fb_lock);
     fd2_video_publish_count++;
+    /* publish #1 = the blank frame fd2_video_init() pushes; #2 is the first
+     * frame the game itself produced (i.e. the boot screen is on screen). */
+    if (fd2_video_publish_count == 2)
+        fd2_tlog("game: first game-produced frame published (boot screen on screen)");
 }
 
 void fd2_video_frame(void)

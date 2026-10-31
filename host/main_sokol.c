@@ -364,6 +364,7 @@ static void init_cb(void)
         return;
     }
     printf("host: render backend = %s\n", render_name());
+    fd2_tlog("render init done (D3D11 device + swapchain ready)");
     fd2_engine_start();
 #if defined(_WIN32)
     {
@@ -381,7 +382,13 @@ static void init_cb(void)
 
 static void frame_cb(void)
 {
+    static int first_frame;
+
     fd2_engine_frame();
+    if (!first_frame) {
+        first_frame = 1;
+        fd2_tlog("first frame presented to the window");
+    }
     if (fd2_engine_game_over()) {
         sapp_quit();          /* game thread returned: close, do not freeze */
         return;
@@ -581,6 +588,8 @@ int main(int argc, char **argv)
                g_quit_policy == QUIT_NONE ? "none" : "button");
         g_t0_ms = plat_now_ms();
     }
+
+    fd2_tlog("main: entering sapp_run (window + D3D11 device are created inside)");
 
     g_rd.native_window = NULL;
     g_rd.logical_w = 320;
