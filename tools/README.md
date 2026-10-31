@@ -2,6 +2,16 @@
 
 所有命令在**仓库根目录**执行。游戏数据默认在 `E:/FD2/`（可用参数改）。
 
+**Python 依赖**：只用标准库，无需 pip 安装；唯一例外是 GUI 需要的 tkinter
+（CPython 编译期绑定的 `_tkinter` + Tcl/Tk，不是 pip 包）：
+
+- Windows：系统 CPython 自带，双击 `tools\FD2GUI.BAT` 即可；
+- Arch Linux：`sudo pacman -S tk`（会带上 `tcl`），然后 `python3 tools/fd2sav_gui.py`；
+- Debian/Ubuntu：`sudo apt install python3-tk`。
+
+报 `ImportError: libtk8.6.so: cannot open shared object file` 就是缺这个系统包。
+（`FD2GUI.BAT` / `FD2SAV.BAT` 是 Windows 批处理，Linux 上直接用 `python3` 调脚本。）
+
 ## 1. 存档（玩家用）
 
 | 工具 | 作用 | 用法 |

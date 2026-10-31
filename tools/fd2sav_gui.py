@@ -7,9 +7,16 @@
 批量满血、备份回滚。
 
 运行需要 tkinter。它不是 pip 包（是 CPython 编译期绑定的 _tkinter + Tcl/Tk），
-装不上；但系统里的 CPython 3.12 已经自带：
+`pip install tkinter` 无效，必须装到 Tcl/Tk 运行库。
+
+Windows：系统里的 CPython 3.12 自带 tkinter，直接双击 tools\\FD2GUI.BAT 即可
+（BAT 会挑一个带 tkinter 的解释器）；若报 `ImportError: _tkinter`，换用
     C:\\Users\\Ted\\AppData\\Roaming\\uv\\python\\cpython-3.12-windows-x86_64-none\\pythonw.exe
-直接双击 tools\\FD2GUI.BAT 即可（BAT 会挑一个带 tkinter 的解释器）。
+
+Arch Linux：python 本身不带 Tk，缺 `libtk8.6.so` 时装系统包
+    sudo pacman -S tk        # 依赖 tcl 会一起装；装完 python3 -c "import tkinter" 应通过
+然后 `python3 tools/fd2sav_gui.py`（FD2GUI.BAT 是 Windows 专用，Linux 上别用）。
+Debian/Ubuntu 对应 `sudo apt install python3-tk`。
 
 设计原则：
   * 所有改动先落在内存缓冲，点「保存到存档」才写盘；写盘自动留备份，但
