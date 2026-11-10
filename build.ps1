@@ -6,6 +6,10 @@
 #                                   # window pops up; run it from a terminal
 #                                   # if you do not want the extra window
 #   pwsh -File build.ps1 -Test      # build, then run tools/run_tests.ps1
+#   pwsh -File build.ps1 -Trace     # add the FD2_TRACE_BOOT startup markers
+#                                   # (boot.c fd2_tlog; needed by
+#                                   #  testdata\boot_probe.ps1 to time a cold
+#                                   #  start segment by segment; ~0 cost)
 #
 # The default links /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup, so normal play
 # shows only the game window; diagnostics still go to FD2_LOG (default
@@ -19,7 +23,7 @@
 #
 # Run the exe from the directory that holds the FD2 data files (FDOTHER.DAT,
 # FDMUS.DAT, ...), e.g.  E:\FD2 .
-param([switch]$Debug, [switch]$Console, [switch]$Test)
+param([switch]$Debug, [switch]$Console, [switch]$Test, [switch]$Trace)
 
 $ErrorActionPreference = "Stop"
 $root   = $PSScriptRoot
@@ -28,16 +32,17 @@ $hostd  = Join-Path $root "host"
 $out    = Join-Path $root "build"
 $sokol  = Join-Path $hostd "vendor\sokol"
 
-# VS 2022/18 Enterprise (fall back to the 2019 Professional install).
-$vcvars = @(
-    "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat",
-    "C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\VC\Auxiliary\Build\vcvars64.bat"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $vcvars) { throw "vcvars64.bat not found" }
+# The compiler environment is set up later via tools\msvc_env.ps1 (it handles
+# both "vcvars64.bat works" and "it doesn't" - see the comment there).
 if (-not (Test-Path $sokol)) { throw "vendor/sokol missing (was host/ imported?)" }
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 
-$cfg    = if ($Debug) { "/Od /Zi /MDd" } else { "/O2 /MD" }
+$cfg    = if ($Debug) { "/Od /Zi /MDd" } else { "/O2 /MD /DNDEBUG" }
+# /DNDEBUG: sokol only skips its validation/debug paths when NDEBUG is defined
+#          (sokol_app.h: `#if !defined(NDEBUG) #define SOKOL_DEBUG`).  Without it
+#          every start created the D3D11 *debug layer* device: +94 ms on device
+#          creation (250 -> 156 ms), and the layer can refuse the device outright
+#          when the Graphics Tools feature is missing.  -Debug keeps asserts. 
 # /utf-8 : every source is UTF-8 (lots of Chinese comments).  Without it MSVC
 #          decodes them in the system code page (936) and emits C4819 on almost
 #          every file (and sokol_app.h).  Verified there are no non-ASCII string
@@ -46,7 +51,9 @@ $cfg    = if ($Debug) { "/Od /Zi /MDd" } else { "/O2 /MD" }
 #          small `int` loop counters with uint32_t globals by design; the POSIX
 #          build tolerates the same with -Wno-sign-compare (tools/check_compile.sh),
 #          so keep the two platforms consistent instead of casting every site.
-$cflags = "/nologo /W3 /utf-8 /wd4018 /EHsc /GS- /D_CRT_SECURE_NO_WARNINGS $cfg"
+# (PowerShell variable names are case-insensitive: don't reuse $Trace.)
+$traceFlag = if ($Trace) { " /DFD2_TRACE_BOOT" } else { "" }
+$cflags = "/nologo /W3 /utf-8 /wd4018 /EHsc /GS- /D_CRT_SECURE_NO_WARNINGS $cfg$traceFlag"
 $inc    = "/I `"$hostd`" /I `"$src`" /I `"$src\game`" /I `"$src\include`" /I `"$sokol`""
 
 $hostSrcs = @(
@@ -81,12 +88,23 @@ Write-Host "== preparing data-segment image (src/fd2_image.c) =="
 & $python.Source (Join-Path $root "tools\prepare_image.py")
 if ($LASTEXITCODE -ne 0) { throw "tools/prepare_image.py failed - see the message above" }
 
-# Run cl in the vcvars environment.  When already inside a dev prompt
-# (VSCMD_VER set) vcvars is not re-run.
-$vcprompt = if ($env:VSCMD_VER) { "" } else { "`"$vcvars`" >nul && " }
-$cmdline = "$vcprompt cl $cflags $inc /Fe:`"$out\fd2engine.exe`" /Fo:`"$objdir\\`" $($all -join ' ') $libs $link"
+# Run cl in the vcvars environment (tools\msvc_env.ps1 falls back to rebuilding
+# INCLUDE/LIB from the install layout when vcvars itself is unusable).
+. (Join-Path $root "tools\msvc_env.ps1")
+$vcvars = Set-MsvcEnvironment
+
+# Write the compiler invocation to a response file so the exact build is
+# reproducible (and stays under the command-line limit).
+$rsp = @(
+    $cflags
+    $inc
+    "/Fo`"$objdir\\`""
+    "/Fe`"$out\fd2engine.exe`""
+) + $all + @($libs) + @($link)
+Set-Content (Join-Path $out "build.rsp") $rsp -Encoding ascii
+
 Write-Host "== building fd2engine.exe (x64, sokol/D3D11) =="
-cmd /c $cmdline
+cmd /c "cl.exe @`"$out\build.rsp`""
 if ($LASTEXITCODE -ne 0) { throw "build failed" }
 Write-Host "   -> $out\fd2engine.exe"
 if ($Console) {

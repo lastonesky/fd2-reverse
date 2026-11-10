@@ -12,12 +12,9 @@ $root   = Split-Path $PSScriptRoot -Parent
 $src    = Join-Path $root "src"
 $out    = Join-Path $root "build"
 $obj    = Join-Path $out  "tests.obj"
-$vcvars = @(
-    "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat",
-    "C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\VC\Auxiliary\Build\vcvars64.bat"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $vcvars) { throw "vcvars64.bat not found" }
-
+# cl.exe environment: vcvars64.bat when usable, otherwise rebuilt by hand.
+. (Join-Path $PSScriptRoot "msvc_env.ps1")
+Set-MsvcEnvironment
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 New-Item -ItemType Directory -Force -Path $obj | Out-Null
 
@@ -41,7 +38,7 @@ foreach ($t in $tests) {
     $files = @("tools/tests/$($t.name).c") + $t.srcs + @("src/fd2_native.c", "src/fd2_image.c") |
         ForEach-Object { Join-Path $root $_ }
     $exe = Join-Path $out "$($t.name).exe"
-    $line = "`"$vcvars`" >nul && cd /d `"$obj`" && cl $cflags $inc /Fe:`"$exe`" $($files -join ' ')"
+    $line = "cd /d `"$obj`" && cl $cflags $inc /Fe:`"$exe`" $($files -join ' ')"
     cmd /c $line
     if ($LASTEXITCODE -ne 0) { throw "$($t.name) build failed" }
     & $exe
