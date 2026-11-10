@@ -4203,3 +4203,50 @@ list 则解释了“第二次为何瞬时”。
 本轮给启动路径加了毫秒时间戳埋点（`fd2_tlog`，见 `docs/STARTUP-LATENCY.md`
 §4–5），下次开机首跑即可从 `fd2engine.log` 直接读出几秒花在哪个阶段。
 Windows `build.ps1` 与 Linux `make engine` 均已重建。
+
+### 7.53 修复：Windows 每日首启黑屏 1.2–9 s —— `midiOutOpen` 无条件打开系统 MIDI
+
+现象（用户描述）：开机后第一次双击，窗口立刻出来但**纯黑**，1–4 s 后才出现
+汉堂 LOGO；同一次开机内第二次瞬时。
+
+用 `testdata\boot_probe.ps1`（登录自启一次性取证）在 22:01 开机首跑抓到分段：
+
+| 分段 | 首跑 | 二跑 | +90 s | +180 s |
+|---|---|---|---|---|
+| 进程创建 | 61 ms | 6 | 4 | 5 |
+| 窗口出现 | 113 ms | 64 | 49 | 34 |
+| D3D11 设备+交换链 | 188 ms | 187 | 219 | 203 |
+| **设备就绪 → LOGO** | **62 ms** | 63 | 47 | 62 |
+
+修复前同一格是 1266 ms，日志停在 `boot: 7. state machine begin`，9 s 的
+autoquit 都没走到下一行——即卡在 `sub_25977(0x12, 0)`（播 BGM 18）里。
+对照暖态日志：暖态 `midiOutOpen` 之后有 `xmidi: device volume = …`，冷态**没有
+这一行**，说明阻塞在 `midiOutOpen(MIDI_MAPPER)`——Windows GS 波表合成器的首次
+初始化。
+
+根因：`host/xmidi.c` 里 `midiOutOpen` 是**无条件**执行的，而默认后端是内置合成器
+（`g_backend = 1`，一个 MIDI 消息都不发给系统），且 `xmidi_set_backend()` 全仓
+无调用点，winmidi 后端根本选不到。于是每次启动都白付一次系统 MIDI 设备初始化，
+而它发生在首帧之前的游戏线程上 → 窗口已建好、画面还没画 → 纯黑。
+
+修复：抽出 `winmidi_open()`，只在三种真正需要时调用——`--midi-backend` 选
+winmidi、内置合成器失败回退、`--midi-test`。暖态 `state machine begin → BGM 18`
+110 → 47 ms（= synth 渲染耗时），`main → LOGO` 391 → 328 ms。
+
+### 7.54 崩溃日志按异常码过滤；`/DNDEBUG` 转正；build.ps1 自建编译环境
+
+- `fd2_platform.c` 的 VEH 只滤过 `0x406D1388`/`0x40010006` 两个码，于是
+  `DBG_PRINTEXCEPTION_WIDE_C`（0x4001000A，OutputDebugStringW）与 MSVC C++
+  throw（0xE06D7363，D3D 运行时每次建设备都会抛）被当成崩溃写进
+  `fd2_crash.log`：一轮探针跑完攒下 391 条、310 KB 全属这两个码。改为按
+  **严重性位**判断（bit31=0 即 SEVERITY_SUCCESS/INFORMATIONAL，不可能是故障）
+  + 单列 C++ throw；真·未处理异常仍走 `fd2_unhandled()` 落盘。另加 512 KB 上限
+  （超了先删再写），避免装机目录里的日志无限增长。
+- 正式构建加 `/DNDEBUG`：sokol 仅在定义了 NDEBUG 时才关掉调试路径
+  (`#if !defined(NDEBUG) #define SOKOL_DEBUG`)，否则每次启动都建 **D3D11 调试层
+  设备**。实测（暖态，各 3 次）设备创建 250 → 156 ms，`main → LOGO`
+  390 → 297 ms。`-Debug` 构建保留 assert。
+- `build.ps1` 新增 `-Trace`（加 `FD2_TRACE_BOOT`，boot_probe 需要它做分段）；
+  并在 vcvars 失败时（vcvars64.bat 要调 `reg.exe`，受限 shell 里会被拦）按安装
+  目录直接重建 `INCLUDE`/`LIB`/`PATH`，同时把编译命令行写成 `build\build.rsp`
+  以便复现。

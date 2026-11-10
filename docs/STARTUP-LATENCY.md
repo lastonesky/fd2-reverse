@@ -102,3 +102,37 @@ Windows（`build\fd2engine.exe`）与 Linux（`host/build/fd2engine`）均已重
 - **数据文件冷读**：实测 E: 冷读 284–733 MB/s，第一画面前读取量 < 1 MB（§2）。
 - **Btrfs 驱动慢**：WinBtrfs 1.10.0 顺序读接近 NVMe 原生速度；打开延迟 0–2 ms（暖态）。
 - **引擎内部等待**：热态 0.23 s 出画面；引擎没有任何依赖"当天首次"的逻辑。
+
+## 8. 定案（2026-11-10）：不是 Defender、不是磁盘，也不是 D3D
+
+用 `testdata\boot_probe.ps1`（登录自启，跑完把自己改名成 `.doneN`，不会重复）在
+两次真实开机后取到了首跑分段。关键是先把"黑窗口"拆开：窗口 113 ms 就出现了、
+D3D11 设备 188 ms 就绪，**但画面要等到设备就绪后 1266 ms** 才出来，而同一台机器
+同一段热态只要 62 ms。所以既不是进程启动，也不是驱动/设备，而是游戏线程在
+首帧之前干了别的事。
+
+引擎内埋点（`FD2_TRACE_BOOT`）把它定位到唯一一行：`boot: 7. state machine begin`
+之后不再前进 —— 卡在 `sub_25977(0x12, 0)`（播 BGM 18），再往下就是首帧。
+
+对照热/冷日志：热态 `midiOutOpen` 之后有 `xmidi: device volume = …`，冷态没有
+这一行 —— 阻塞在 `midiOutOpen(MIDI_MAPPER)`，即 Windows GS 波表合成器的首次
+初始化（系统组件，冷启动几百毫秒到几秒，之后就常驻）。
+
+`host/xmidi.c` 里这次调用是**无条件**的，但默认后端是内置合成器，一个 MIDI 消息
+都不发给系统；`xmidi_set_backend()` 全仓库没有调用点，winmidi 后端根本选不到。
+修复：抽出 `winmidi_open()`，只在 `--midi-backend=winmidi`、内置合成器失败回退、
+`--midi-test` 时才开。
+
+| | 修复前 | 修复后 |
+|---|---|---|
+| 设备就绪 → LOGO（冷启动首跑） | 1266 ms | **62 ms** |
+| 设备就绪 → LOGO（热态） | 62 ms | 62 ms |
+| `main → LOGO`（热态） | 391 ms | 281–328 ms |
+
+另外把 `/DNDEBUG` 加进正式构建（sokol 只在没有 NDEBUG 时才 `#define SOKOL_DEBUG`，
+否则每次启动都建 D3D11 调试层设备）：设备创建 250 → 156 ms，`main → LOGO`
+390 → 297 ms。
+
+复测方式：`build.ps1 -Trace` 生成带分段埋点的引擎，再跑 `testdata\boot_probe.ps1`。
+想看冷启动就重启后让登录自启项自己跑，并且**先别开 WorkBuddy 或浏览器**——它们
+会先把 GPU 和系统组件拉热。
