@@ -383,6 +383,42 @@ static void player_thread(void *param)
     plat_atomic_write(&g_playing, 0);
 }
 
+#if defined(_WIN32)
+/* Open the Windows MIDI Mapper (GS Wavetable Synth) and bring its output level
+ * up.  Kept as a helper because it must only run when the mapper is really
+ * going to be used: midiOutOpen makes winmm initialise the wavetable synth,
+ * and on a freshly booted machine that blocks for seconds (9 s measured on
+ * 2026-11-10, still 0.5 s one minute later).  It used to run unconditionally,
+ * on the game thread, before the first frame - which is exactly the black
+ * window the player stares at: the built-in synthesiser (the default) never
+ * sends a MIDI message, so opening the device for it bought nothing. */
+static int winmidi_open(void)
+{
+    DWORD voldw = 0;
+    MMRESULT gr, sr;
+
+    if (g_midi)
+        return 1;
+    if (midiOutOpen(&g_midi, MIDI_MAPPER, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
+        printf("xmidi: midiOutOpen failed - no MIDI synthesiser available\n");
+        g_midi = NULL;
+        return 0;
+    }
+    /* The GS Wavetable Synth's output level is a *system* mixer setting
+     * ("SW Synth" / MIDI), independent of the game. If it is muted the
+     * sequence plays into silence, so read it back and raise it if needed. */
+    gr = midiOutGetVolume(g_midi, &voldw);
+    printf("xmidi: device volume = 0x%08X (get ret %u)\n",
+           (unsigned)voldw, (unsigned)gr);
+    if (gr == MMSYSERR_NOERROR && voldw == 0) {
+        sr = midiOutSetVolume(g_midi, 0xFFFFFFFFu);
+        printf("xmidi: device was muted -> raised to maximum (ret %u)\n",
+               (unsigned)sr);
+    }
+    return 1;
+}
+#endif
+
 int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
 {
     const uint8_t *evnt;
@@ -405,27 +441,10 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
         return 0;
 
 #if defined(_WIN32)
-    if (!g_midi) {
-        if (midiOutOpen(&g_midi, MIDI_MAPPER, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
-            printf("xmidi: midiOutOpen failed - no MIDI synthesiser available\n");
-            g_midi = NULL;
-            return 0;
-        }
-        /* The GS Wavetable Synth's output level is a *system* mixer setting
-         * ("SW Synth" / MIDI), independent of the game. If it is muted the
-         * sequence plays into silence, so read it back and raise it if needed. */
-        {
-            DWORD voldw = 0;
-            MMRESULT gr = midiOutGetVolume(g_midi, &voldw);
-            printf("xmidi: device volume = 0x%08X (get ret %u)\n",
-                   (unsigned)voldw, (unsigned)gr);
-            if (gr == MMSYSERR_NOERROR && voldw == 0) {
-                MMRESULT sr = midiOutSetVolume(g_midi, 0xFFFFFFFFu);
-                printf("xmidi: device was muted -> raised to maximum (ret %u)\n",
-                       (unsigned)sr);
-            }
-        }
-    }
+    /* Only touch the system MIDI device when this sequence is actually going
+     * to be played through it (see winmidi_open). */
+    if (g_backend == 0 && !winmidi_open())
+        return 0;
 #else
     g_midi = NULL;
 #endif
@@ -445,9 +464,16 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
                        g_loop_count == 0))
             return 1;
         printf("xmidi: built-in synth failed, falling back to the MIDI Mapper\n");
+#if defined(_WIN32)
+        if (!winmidi_open())
+            return 0;
+#endif
     }
 
     if (g_midi_test) {
+#if defined(_WIN32)
+        winmidi_open();
+#endif
         printf("xmidi: MIDI test tone (middle C, 1 s) - if this is inaudible the "
                "system synthesiser is muted or unavailable\n");
         midi_send(0x007B3C90);              /* note on ch0, note 60, vel 123 */
