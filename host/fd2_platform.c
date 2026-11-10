@@ -113,6 +113,18 @@ int j___delay(int ms)
 #if defined(_WIN32)
 #include <windows.h>
 
+/* Keep the log from growing without bound (it is append-only and lives in the
+ * install directory).  512 KB is ~100 crash records. */
+#define CRASH_LOG_CAP (512u * 1024u)
+
+static int crash_log_too_big(void)
+{
+    WIN32_FILE_ATTRIBUTE_DATA fa;
+    if (!GetFileAttributesExA("fd2_crash.log", GetFileExInfoStandard, &fa))
+        return 0;
+    return fa.nFileSizeHigh != 0 || fa.nFileSizeLow > CRASH_LOG_CAP;
+}
+
 static void crash_write(const char *prefix, EXCEPTION_POINTERS *ep)
 {
     char buf[4096];
@@ -150,6 +162,8 @@ static void crash_write(const char *prefix, EXCEPTION_POINTERS *ep)
     }
     for (i = 0; i < (int)k && n < (int)sizeof buf - 40; i++)
         n += wsprintfA(buf + n, "  #%02d %p\r\n", i, frames[i]);
+    if (crash_log_too_big())
+        DeleteFileA("fd2_crash.log");
     h = CreateFileA("fd2_crash.log", FILE_APPEND_DATA, FILE_SHARE_READ, NULL,
                     OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h != INVALID_HANDLE_VALUE) {
@@ -165,12 +179,35 @@ static LONG WINAPI fd2_unhandled(EXCEPTION_POINTERS *ep)
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
+/* Notifications, not faults.  A VEH sees *every* exception before anyone can
+ * catch it, so a C++ throw-and-catch inside DXGI/D3D11 - or OutputDebugString -
+ * would otherwise be recorded as a crash.  Two rules:
+ *
+ *   1. SEVERITY_SUCCESS / SEVERITY_INFORMATIONAL (bit 31 clear).  That band is
+ *      0x0xxxxxxx and 0x4xxxxxxx and it *cannot* contain a fault:
+ *          0x40010006  DBG_PRINTEXCEPTION_C      OutputDebugStringA
+ *          0x4001000A  DBG_PRINTEXCEPTION_WIDE_C OutputDebugStringW
+ *          0x406D1388  MS_VC_EXCEPTION          SetThreadName
+ *          0x40080201  STATUS_ORIGINATE_ERROR    WinRT
+ *      Real faults are 0x8xxxxxxx (RAISE_EXCEPTION) and 0xCxxxxxxx (ERROR).
+ *   2. The MSVC C++ throw code, which is ERROR severity but is raised and
+ *      caught by the D3D runtime on every device creation.  A throw that is
+ *      really unhandled still reaches fd2_unhandled() below, so nothing is
+ *      lost by skipping it here.
+ */
+static int crash_is_benign(DWORD code)
+{
+    if ((code & 0x80000000u) == 0)      /* SEVERITY_* < ERROR */
+        return 1;
+    if (code == 0xE06D7363u)            /* MSVC C++ EH throw */
+        return 1;
+    return 0;
+}
+
 static LONG WINAPI fd2_veh(EXCEPTION_POINTERS *ep)
 {
     DWORD code = ep->ExceptionRecord->ExceptionCode;
-    /* 0x406D1388 = MS_VC_EXCEPTION (thread naming); 0x40010006 =
-     * DBG_PRINTEXCEPTION_C (OutputDebugString) - both benign. */
-    if (code != 0x406D1388u && code != 0x40010006u)
+    if (!crash_is_benign(code))
         crash_write("veh", ep);
     return EXCEPTION_CONTINUE_SEARCH;
 }
