@@ -358,6 +358,10 @@ void input_post_key(fr_key key)
 
 static void init_cb(void)
 {
+    /* sokol_app creates the Win32 window and the D3D11 device + swapchain
+     * before calling us; the gap from "entering sapp_run" to here is the cold
+     * GPU-driver cost (first D3D app after boot). */
+    fd2_tlog("init_cb entered (window + D3D11 device + swapchain created)");
     if (render_init(&g_rd) != 0) {
         printf("host: render init failed (sokol)\n");
         sapp_quit();

@@ -46,6 +46,7 @@
 #include "sokol_gfx.h"
 #include "sokol_glue.h"
 #include "sokol_log.h"
+#include "fd2_kernel.h"   /* fd2_tlog: split device vs shader-compile cost */
 
 #if defined(SOKOL_GLCORE)
 #include <GL/gl.h>
@@ -450,6 +451,7 @@ int render_init(const render_desc *desc)
         printf("sokol: sg_setup failed\n");
         return -1;
     }
+    fd2_tlog("sokol: sg_setup done (resource pools on the sokol_app device)");
 
     /* 320x200 texture, rewritten every frame with the guest framebuffer */
     memset(&id, 0, sizeof id);
@@ -509,6 +511,10 @@ int render_init(const render_desc *desc)
     }
 
     g_ok = 1;
+    /* D3DCompile + driver-side pipeline creation happen inside make_program;
+     * on the first launch after boot the compiler DLL and the driver's shader
+     * cache are cold, which is one of the suspects for the black window. */
+    fd2_tlog("sokol: shaders compiled + render pipeline created");
     printf("sokol: backend=%s image=%dx%d img=%d view=%d sampler=%d vbuf=%d "
            "shader=%d pip=%d upscale=%s\n",
            backend_name(sg_query_backend()), g_w, g_h,

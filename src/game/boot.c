@@ -52,6 +52,18 @@
 #include <stdint.h>
 #include <stdio.h>
 
+/* Optional per-step startup timing.  fd2_tlog stamps every line with the
+ * milliseconds elapsed since engine init, so the markers below turn into
+ * deltas without any extra bookkeeping.  Only the native host build defines
+ * FD2_TRACE_BOOT; the guest-fixed differential profile compiles the markers
+ * away, so boot.c stays byte-comparable there. */
+#ifdef FD2_TRACE_BOOT
+#include "fd2_kernel.h"     /* fd2_tlog (host-only) */
+#define BOOT_TLOG(...) fd2_tlog(__VA_ARGS__)
+#else
+#define BOOT_TLOG(...) ((void)0)
+#endif
+
 /* Host-visible liveness marker: incremented once per outer/inner state-machine
  * iteration.  The native kernel's stall watchdog samples it to tell a hung
  * game thread (screen frozen) from a healthy one that is merely waiting for a
@@ -69,8 +81,11 @@ int fd2_game_main(int argc, char **argv)
     (void)argc; (void)argv;
 
     /* ---- 1. AIL bring-up (0x25C01..0x25C5E) ------------------------ */
+    BOOT_TLOG("boot: 1. AIL bring-up begin");
     AIL_startup();                                   /* 0x25C01 */
+    BOOT_TLOG("boot: 1a. AIL_startup done");
     mdi = AIL_install_MDI_INI();                     /* 0x25C06 */
+    BOOT_TLOG("boot: 1b. AIL_install_MDI_INI done (mdi=%p)", mdi);
     dword_53ED8 = mdi;
     if (mdi != NULL) {
         byte_53EF0 = 1;
@@ -78,6 +93,7 @@ int fd2_game_main(int argc, char **argv)
             AIL_allocate_sequence_handle(mdi);       /* 0x25C1D */
     }
     dig = AIL_install_DIG_INI();                     /* 0x25C2B */
+    BOOT_TLOG("boot: 1c. AIL_install_DIG_INI done (dig=%p)", dig);
     dword_53EDC = dig;
     if (dig != NULL) {
         byte_53EF1 = 1;
@@ -90,8 +106,11 @@ int fd2_game_main(int argc, char **argv)
     /* ---- 2. resource loads (0x25C63..0x25D2E) ----------------------
      * res_load frees the old buffer and returns the new one, so each line is
      * "reload in place"; the slots are real pointers on native (de-guest C1). */
-#define RELOAD(slot, file, idx) \
-    ((slot) = res_load((file), (void *)(slot), (idx)))
+#define RELOAD(slot, file, idx)                                              \
+    do {                                                                     \
+        (slot) = res_load((file), (void *)(slot), (idx));                    \
+        BOOT_TLOG("boot: 2. res_load %s[%d] -> %p", (file), (idx), (slot));  \
+    } while (0)
     RELOAD(dword_53EEC, aFdotherDat, 31);   /* 0x25C63 sound-effect pack */
     RELOAD(dword_53A4D, aFdotherDat,  1);   /* 0x25C7D */
     RELOAD(dword_53A89, aFdotherDat,  2);   /* 0x25C97 */
@@ -106,11 +125,13 @@ int fd2_game_main(int argc, char **argv)
     dword_53AD5 = malloc(0x20);      /* 0x25D35 */
     dword_53A49 = malloc(0x25680);   /* 0x25D47: push 0x25680 */
     dword_53BF7 = malloc(0xA00);     /* 0x25D59: 80*32 records */
+    BOOT_TLOG("boot: 3. heaps allocated");
 
     /* ---- 4. VGA mode 13h (0x25D66..0x25D80) ------------------------
      * word_53A8D is the game's REGS cell for int386: AX at offset 0. */
     word_53A8D = 0x13;
     int386(0x10, &word_53A8D, &word_53A8D);
+    BOOT_TLOG("boot: 4. int386 mode 13h done");
 
     /* ---- 5. BIOS tick snapshot (0x25D83..0x25D8B) ------------------
      * `mov eax,46Ch; movsx eax,word ptr [eax]` - sign-extended low word
@@ -122,13 +143,17 @@ int fd2_game_main(int argc, char **argv)
     n = rand() % 256;                    /* idiv 100h of rand() */
     for (i = 0; i < n; i++)
         sub_4EBE3();                     /* 0x4EBE3 ROL16 table step */
+    BOOT_TLOG("boot: 6. rand scramble done (n=%d)", n);
 
     /* ---- 7. main state machine ------------------------------------- */
+    BOOT_TLOG("boot: 7. state machine begin");
     for (;;) {                                   /* outer @0x25DB1 */
         ++fd2_game_progress;
         sub_25977(0x12, 0);                      /* play BGM 18 */
+        BOOT_TLOG("boot: 7a. BGM 18 start requested");
 
         v = sub_25EBB();                         /* enter scene state */
+        BOOT_TLOG("boot: 7b. sub_25EBB returned %d", v);
         if (v == 0) {                            /* 0x25DC8 jnz -> inner */
             for (;;) {                           /* inner @0x25DCE */
                 r = sub_117E7();                 /* one event tick */
