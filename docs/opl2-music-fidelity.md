@@ -9,16 +9,24 @@
 
 ## 0. 现状速览（先看这里）
 
-| 曲目 | 包络相关 | 全曲 zcr（ours / ref） | rms 比 | 结论 |
-|---|---|---|---|---|
-| song01 | **1.000** | 1588 / 1587 | 1.00 | 对齐 |
-| song03 | **1.000** | 2508 / 2519 | 1.00 | 对齐 |
-| song05 | **1.000** | 2003 / 2000 | 1.00 | 对齐 |
+**2026-11-14 更新：声道分配 + 实时控制器修好之后，15 首全部 0.999~1.000，生产引擎
+（`host/synth.c` + `host/xmidi.c`）与对拍镜像 `render_opl2.c` 已做到逐字节一致（14/15），
+唯一例外 song08 是 1 个采样的相位差，原因见 §12.4。**
+
+| 曲目 | 包络相关 | rms 比 | 引擎 vs 镜像 |
+|---|---|---|---|
+| song01 / 03 / 04 / 05 / 06 / 07 / 09 / 13 / 14 / 15 | **1.000** | 1.00 | 逐字节相同 |
+| song02 / 10 / 11 / 12 | **0.999** | 1.00 | 逐字节相同 |
+| song08 | **0.999** | 1.00 | 1 个采样相位差（§12.4） |
 
 - 参考 = `libADLMIDI`（Nuked-OPL3 核心 + 内嵌 `fatman-2op-ail-default.woplx` 音色），
-  经 `render_wav` 的 song 路径渲染（与 `ref_s01.wav` 同一条路径）。
+  经 `render_wav` 的 song 路径渲染（`r1..r15.wav`，49716 Hz 立体声）。
 - **寄存器层硬证据**：song01 前 2482 条寄存器写入与 libADLMIDI 的 `ADL_WRITELOG` **逐条一致**
   （含双方的初始化/静音序列，差异只在日志尾部——ref 只录了前 3 秒）。
+  song14 的帧级日志（`FD2_FRAMELOG`）在 4536 事件全程与镜像逐条相同，连每条写入的生效帧号也一致。
+- **生产引擎同样验证过**：`build/oplbench/engine_check.c` 把 `host/synth.c` + `host/xmidi.c`
+  原样编进一个离线 harness，按 FDMUS 资源号导出 WAV；资源 18（开头动画）输出与
+  `render_opl2` 的 song14 逐字节相同（3,428,655 样本，0 差异）。
 - 样本级仍有残差：song01 差 rms ≈ 357（信号 2284，约 15%）、song03 ≈ 861（3443，25%）、
   song05 ≈ 262（3044，8.6%）。其中约 10 个百分点来自 **ref 是立体声**（L/R 差 rms 240），
   我们是单声道；其余是小幅相位/音高微差，包络与亮度已无系统偏差。
@@ -369,3 +377,204 @@ song05 包络相关=1.000  zcr 2003/2000  rms 1.00
   XMI 解码坑、音色表来源、算子映射事故
 - `.workbuddy/memory/2026-11-14.md` — 本轮的逐日过程记录（含已被推翻的中间结论）
 - `docs/STARTUP-LATENCY.md` — 首启黑屏（与音乐无关，但同为初始化时序问题）
+
+---
+
+## 12. 2026-11-14：开头动画 BGM 的根因与生产引擎移植
+
+### 12.1 症状与突破口
+
+"游戏开头动画的 BGM 和 libADLMIDI 不一致"。该曲 = FDMUS.DAT 资源 **track 18**
+（`xdir/song14.xmi`，4536 事件 / 2256 note-on / 68.97 s，最大并发 25），
+作为本轮验收用例。
+
+### 12.2 根因（L2 层证据）
+
+寄存器层对比发现两处**与音色直接相关**的上层差异（核 emu8950 本身无问题）：
+
+1. **声道分配器不是 ADL 的那一套**。libADLMIDI 用
+   `MIDIplay::calculateChipChannelGoodness`（默认 OffDelay）：空闲声道 `-koff_ms`、
+   非活动但仍在 Release 的声道 `-koff_ms-40000`（同音色时特判为 `-koff_ms`，优先复用）、
+   活动声道 `-4000000-kon_ms`，同音色 +300、`vibdelay<70 ms || kon>20 s` 再加 10、
+   打击乐 +50、可疏散站 +4×n，同分取最小声道号；`AdlChannel::addAge` 每调度分段推进
+   koff/kon/vibdelay。旧实现是"空位 → 同通道已结束 → 最旧"，在并发达 19~25 音的曲目里
+   会频繁偷错声道 → 音色/乐句断口不对。
+2. **实时控制器完全缺失**：CC7/CC11 变更时上游会 `noteUpdateAll(Upd_Volume)` 重写两个算子 TL；
+   CC1 颤音每个调度分段重写 A0/B0（`vibspeed=2π*5`、`vibdepth=0.5/127`）；
+   E0 弯音按 `bendsense=2` 半音写分数音高；CC64 踏板保持 note-off 不 key-off。
+   旧实现只在 note-on 时算一次音量、音高只支持整数 tone。
+
+### 12.3 修复位置
+
+- `build/oplbench/render_opl2.c`（对拍镜像）：goodness/addAge/控制器/分数音高/on_ms 表。
+- `host/synth.c`（生产引擎）：把上述全部逻辑移植过来（`voice_t` 增加 `kon_us/vibdelay_us/
+  fixed_sustain/sustained/vel/tone/patch`；`ail_fnum(double tone,…)`；`channel_goodness()`；
+  `voice_update_pitch/volume()`；`apply_event` 里的 CC1/CC7/CC11/CC64/E0）。
+- `host/xmidi.c`：事件表改为 **xmi2mid 的时间线插入**语义（`insert after all tick<=target`），
+  删掉"同 tick note-off 优先"的 `qsort`。实测 note-off 优先会让 song02 掉到 0.950、
+  (tick,channel,priority) 排序让 song02 掉到 0.858。
+- `host/opl2_patches.h` / `build/oplbench/opl2_patches.h`：新增
+  `opl2_melodic_on_ms[128]` / `opl2_percussion_on_ms[53]`（DUR_K_ON，40000 = 固定延音）。
+
+### 12.4 验证与已知残余
+
+```powershell
+# 镜像（基准）与生产引擎，同一个 49716 Hz 原生速率
+cd build\oplbench
+powershell -File build_win.ps1 ours          # render_opl2.exe
+.\engine_check.exe <FDMUS.DAT> 18 e14.wav    # 生产引擎代码（host/synth.c + host/xmidi.c）
+python cmp_song.py e14.wav v14.wav           # 期望 包络相关=1.000、逐 5 s zcr 相同
+```
+
+结果：15 首里 14 首**逐字节相同**；song08 例外，引擎输出整体比镜像早 1 个采样
+（20.1 µs，不可听）。原因是镜像把每 tick 的时间算成 `(Δticks*3.0)*step`，
+引擎算 `Δticks/tick_rate`；在 tick 30 恰好命中 `carry = 0.5` 的进位边界，二者相差 1 ulp，
+一个向上取整、一个向下取整。libADLMIDI 实际用的是整数有理数
+`(tempo_us*ticks)/ppqn`（见 `midiseq/impl/tempo_fraction.hpp`），取值与引擎一致，
+所以镜像那一侧才是近似。
+
+未改的部分：设备混音率 `audio_init(11025)`（`host/fd2_kernel.c:707`，AIL 的原生格式），
+即引擎最终输出是 49716→11025 的 4.5:1 线性插值抽取。实测 2~5 kHz 频段能量与
+44.1 kHz 渲染相差 ~1%，该频段音色未受影响；如需更亮的鼓/镲可再评估提高混音率。
+
+**循环模式的口径**：`bgm_play(track, loop_count)` 里 `0 = 循环`（BGM）、`1 = 一次性`
+（过场/战败曲），开场动画用的是 0。渲染器在循环模式下会在末尾回绕一次，因此在日志里能看到
+`notes 2267` 而解析层是 `2256 note-on`——多出的 11 个是回绕后重放的前几个音，
+只影响最后 16 ms 的 dump 尾部。用 `FD2_LOOP=1 engine_check …`（loop_count=0）复现，
+输出与游戏实际 dump 的 WAV **逐字节相同**（11 kHz、1,520,718 B、0 差异）。
+
+### 12.5 复现清单
+
+```powershell
+cd build\oplbench
+powershell -NoProfile -ExecutionPolicy Bypass -File build_win.ps1 ours
+$env:FD2_FRAMELOG="1"; .\render_opl2.exe .\songs\song14.xmi v14.wav *> framelog.txt
+.\engine_check.exe g:\FD2\port3\testdata\FDMUS.DAT 18 g14.wav
+# 逐字节：Compare-Object 或 [IO.File]::ReadAllBytes 对比 v14.wav / g14.wav
+
+# 与游戏实际播放完全一致（循环模式 + 设备速率）
+$env:FD2_RATE="11025"; $env:FD2_LOOP="1"
+.\engine_check.exe g:\FD2\port3\testdata\FDMUS.DAT 18 g14_loop.wav
+```
+
+## 13. 2026-11-14：循环播放后"节奏变慢"（调度器丢帧）
+
+### 13.1 症状
+
+实际游戏里循环曲目播放到第二遍开始，整首曲子的速度就不对了（听感"整体变慢"，
+也出现过变快）。一次性曲目正常；第一遍正常。`bgm_play(track, 0)` 的曲目全部受影响
+（开场图鉴展示 = track 4，61.72 s；ending = track 18，68.95 s；城内/菜单曲同样是循环）。
+
+### 13.2 根因
+
+`host/synth.c` 的 `stream_fill()` 在把"事件时间轴"换算成采样帧时，用
+`g_skip` 记住"本段被缓冲区边界截断、还没画出来的帧"，下次调用再补画。
+旧实现对 `g_skip` 的记账有误：
+
+```c
+if (count > call) {            /* call = min(g_call_left, n - written) */
+    g_skip = count - call;     /* ① 覆盖式赋值 */
+    count = call;
+}
+...
+if (g_call_skipped) {          /* ② 补画分支 */
+    g_skip -= count;           /* ③ 又减一次 → 欠账被抹掉或下溢 */
+}
+```
+
+两个后果：
+
+1. **丢帧**：正常分段在"缓冲区剩余不足"处被切开时 `g_skip` 被赋值；下一次循环
+   （`g_call_left != 0` 时）走正常分支，`g_skip = count - call` 直接**覆盖**掉尚未补画的欠账
+   → 事件时间轴比音频推进得多，听感变快、每遍变短。
+2. **重复补帧/下溢**：补画分支里 `count` 已被 ① 截断成 `call`，③ 再减一次，欠账小于
+   `2*call` 时 `uint32_t` 下溢成 ~4.29e9，随后大量帧被当作"补画"渲染但事件不前进
+   → 听感变慢、每遍变长。
+
+libADLMIDI 的对应实现（`adlmidi.cpp::adl_playFormat`）用的是**有符号**的
+`setup.tick_skip_samples_delay`，且欠账只按"实际画出的帧"扣减，出现同样边界时最多
+把余量丢弃为负值（`hasSkipped = tick_skip > 0` 自然关掉），不会变成天文数字，也不会
+在正常分支覆盖欠账。所以这是**本仓库移植时引入的缺陷**，不是与参考一致的既有行为。
+
+### 13.3 为什么第一遍没事、循环后才出现
+
+事件表每遍重新从 tick 0 开始，音频块固定为 4096 帧（`audio_sokol.c` 的 `MUS_FRAMES`），
+`ADL_CHUNK = 2048`。干净地从 `written=0, g_call_left=0` 起步时，两个计数同步推进，
+块边界恰好落在分块边界上，不会出现"欠账 + 正常分支"的组合；而**循环回绕发生在块中间**
+（`written != 0`），回绕后两者的对齐被永久打破，于是每一块都会踩到上面的记账错误。
+这就是"第一遍正常、第二遍开始不对"的原因，也解释了为什么 63 s 附近（track 4 的
+61.72 s 回绕点 + 音乐启动延迟）开始出问题。
+
+### 13.4 修复
+
+`host/synth.c::stream_fill()`：
+
+- 补画分支只在 `want = min(g_skip, 2048)` 之后截断 `count`，并且 `g_skip -= count`
+  **只扣一次**（`count <= want <= g_skip`，不可能下溢）；
+- 正常分支画完 `count` 帧后立刻 `g_skip = want - count` 记录欠账；
+- 补画判定改为直接看 `g_skip > 0`（不再依赖 `g_call_left == 0` 那一刻的缓存标志
+  `g_call_skipped`），使块边界任意切分都能正确续画。
+
+一次性渲染（`render()` 里 `stream_fill(pcm, g_total)`，单个大请求）走的分支与旧代码
+等价，所以**既有对拍结果不变**。
+
+### 13.5 验证（修正前 / 修正后）
+
+固定 11025 Hz（设备速率）、4096 帧切片（与 `audio_sokol.c` 一致），循环渲染 300 s：
+
+| 用例 | 修正前每遍长度 | 修正后每遍长度 |
+|---|---|---|
+| track 18（应为 68.95 s / 760,152 帧） | 760152, 722600, 760152, 722600…（第二遍快 ~5%） | 760152 ×5 |
+| track 18，2048 帧切片 | 760152, 689537, 966564, 856064, 856064…（快 9%，慢 27%，稳态慢 12.6%） | 760152 ×5 |
+| track 4（应为 61.72 s / 680,452 帧） | 680452, 633263, 632203, 638976…（快 ~6%） | 680452 ×4 |
+| track 18，49716 Hz 原生 | — | 3,427,822 ×3 |
+
+失帧/欠账计数器在修正前的 track 18（2048 切片）第二遍记录到 `lost 70615` 帧，
+与 760,152 − 689,537 = 70,615 完全对上；track 4（4096 切片）第二遍记录到
+`lost 47189`。
+
+修正前后在同一时间点的波形漂移（track 4，以修正后为基准）：
+
+```
+t = 62.00s  lag   0 frames (   0.0 ms)
+t = 64.00s  lag +2214 frames (+200.8 ms)   ← 循环点 61.72 s 之后开始累积
+t = 66.00s  lag +3664 frames (+332.3 ms)
+t = 68.00s  lag +5834 frames (+529.2 ms)
+t = 70.00s  lag +7566 frames (+686.3 ms)
+```
+
+修正后相邻两遍的残余对齐误差：track 18 @11025 = 0 帧，track 4 @11025 = 0 帧，
+track 18 @49716 = 5 帧（0.1 ms，来自重采样相位未在回绕时清零，不影响节奏）。
+逐样本不完全相同是正常的：回绕只做 `opl_panic()`（全部 key-off）+ 事件/计时状态清零，
+不重置振荡器相位与 Release 尾音。
+
+**对既有对齐结论的影响：无。** 同一构建下一次性渲染
+`engine_check <FDMUS.DAT> 18 out.wav` 在 11025 Hz 与 49716 Hz 的 MD5 与修复前完全一致
+（`08E6A5E5…` / `58514187…`），15 首逐字节/包络对拍结论不受影响。
+
+### 13.6 长时播放 / 循环的同一机制说明
+
+- 该缺陷由"**音频切片边界** vs **2048 帧分块**"的对齐决定，与曲子长度无关；但它只在
+  对齐被打破后触发，而唯一的打破点是**循环回绕**（回绕落在切片中间）。所以：
+  一次性长曲（如 track 8 = 124.9 s）第一遍不受影响；所有 `bgm_play(track, 0)` 的循环曲
+  从第二遍起每遍时长都会漂移（实测 57.4 s ~ 96.7 s，正确值 61.7/69.0 s），且方向（快/慢）
+  取决于回绕点落在切片内的位置。
+- 曲目不会越播越偏：`g_skip` 等状态每遍回绕都清零，错误是**每遍重置后重新出现**的稳定
+  模式（所以听感是"第二遍开始一直不对"，而不是"逐渐变慢"）。
+- 若将来把 `MUS_FRAMES` 改成与 `ADL_CHUNK` 不成整数倍，或从别处以不同块大小拉流，
+  不带循环的一次性曲目也会踩到；修复后对块大小没有这个隐含约束。
+
+### 13.7 复现清单
+
+```powershell
+cd build\oplbench
+# 一次性（回归：应与修复前 MD5 相同）
+$env:FD2_RATE="11025"; .\engine_check.exe g:\FD2\port3\testdata\FDMUS.DAT 18 one.wav
+# 循环 300 s，观察每遍长度（修复后应恒为 760152 / 680452）
+$env:FD2_RATE="11025"; $env:FD2_LOOP="1"; $env:FD2_STREAM="300"; $env:FD2_LOOPLOG="1"
+$env:FD2_BLOCK="4096"
+.\engine_check.exe g:\FD2\port3\testdata\FDMUS.DAT 18 loop.wav
+# 相邻两遍的残余对齐误差（应为 0 帧 lag）
+python cmp_passes.py loop.wav.stream.wav 760152 4
+```
+

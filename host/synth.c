@@ -22,7 +22,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
 #include <time.h>
 
 #define OPL_NATIVE   49716u
@@ -47,7 +46,7 @@ static const uint8_t AIL_VEL[16] = {
 };
 
 typedef struct {
-    int      used;
+    int      used;          /* key-on 中 */
     int      ever_used;
     int      ins;
     int      midi_ch;
@@ -55,7 +54,14 @@ typedef struct {
     uint32_t start_tick;
     uint32_t end_tick;
     uint8_t  b0;
-    int64_t  koff_us;
+    int64_t  koff_us;       /* note-off 后剩余的 Release 时间 */
+    int64_t  kon_us;        /* DUR_K_ON 剩余时间 */
+    int64_t  vibdelay_us;
+    int      fixed_sustain; /* DUR_K_ON == 40000：上游用固定延音，不衰减 */
+    int      sustained;     /* CC64 踏板保持中 */
+    uint8_t  vel;
+    double   tone;          /* 未加弯音/颤音的基础音高（鼓为固定音高） */
+    const opl2_patch *patch;
 } voice_t;
 
 static voice_t          g_voice[NUM_CH];
@@ -64,6 +70,15 @@ static int              g_prog[16];
 static int              g_chvol[16];
 static int              g_chexpr[16];
 static int              g_master_vol = 127;
+
+/* Per-MIDI-channel realtime controller state (libADLMIDI MIDIchannel). */
+static double g_bend[16];
+static double g_bendsense[16];
+static int    g_vibrato[16];
+static int    g_sustain[16];
+static double g_vibpos[16];
+#define VIB_SPEED (2.0 * 3.141592653589793 * 5.0)
+#define VIB_DEPTH (0.5 / 127.0)
 
 static uint64_t         g_notes;
 static uint64_t         g_peak_voices;
@@ -269,15 +284,34 @@ static int ail_scale_tl(int tl, int mv, int do_op)
     return (~val) & 0x3F;
 }
 
-static void ail_fnum(int tone, int *fnum, int *block)
+/* AIL tone->F-Number：查表 192 项（12 半音 × 16 分步），bit15 表示借一个八度。
+ * 直接照 model_ail.c 的 oplModel_ailFreq 移植；tone 允许小数（弯音/颤音）。 */
+static void ail_fnum(double tone, int *fnum, int *block)
 {
-    int pitch, idx, halftone, octave;
+    int32_t note, pitch, octave, octave_offset = 0;
+    double bend_dec;
+    int idx, halftone;
     uint16_t f;
 
-    if (tone < 0) tone = 0;
-    pitch = (tone - 12) * 16;
-    while (pitch < 12 * 16) pitch += 12 * 16;
-    while (pitch > 96 * 16 - 1) pitch -= 12 * 16;
+    if (tone < 0.0) tone = 0.0;
+    note = (int32_t)tone;
+    bend_dec = tone - (double)(int)tone;
+    if (bend_dec > 0.5) {
+        note += 1;
+        bend_dec -= 1.0;
+    }
+    pitch = (int32_t)(bend_dec * 4096.0) + 8192;
+    pitch = ((pitch - 0x2000) / 0x20) * 2;
+
+    note -= 12;
+    while (note < 0)  { --octave_offset; note += 12; }
+    while (note > 95) { ++octave_offset; note -= 12; }
+
+    pitch += ((uint8_t)note << 8) + 8;
+    pitch /= 16;
+
+    while (pitch < 12 * 16)      pitch += 12 * 16;
+    while (pitch > 96 * 16 - 1)  pitch -= 12 * 16;
 
     idx      = pitch >> 4;
     halftone = (idx % 12) * 16 + (pitch & 15);
@@ -289,8 +323,11 @@ static void ail_fnum(int tone, int *fnum, int *block)
         else f /= 2;
     }
     f &= 0x3FF;
-    if (octave > 7) octave = 7;
-    *fnum  = (int)f;
+
+    octave += octave_offset;
+    if (octave < 0) octave = 0;
+    if (octave > 7) octave = 7;   /* 超出范围时 AIL 会加 MULT，实际曲目不会触发 */
+    *fnum  = f;
     *block = octave;
 }
 
@@ -324,7 +361,7 @@ static void opl_patch(int ch, const opl2_patch *p, int mv)
     opl_write(0x40 + c, tl_c);
 }
 
-static void opl_note(int ch, int tone)
+static void opl_note(int ch, double tone)
 {
     g_opl = chip_of(ch);
     int fnum, block;
@@ -332,6 +369,48 @@ static void opl_note(int ch, int tone)
     opl_write(0xA0 + ch % 9, (uint8_t)(fnum & 0xFF));
     g_voice[ch].b0 = (uint8_t)(0x20 | ((block & 7) << 2) | ((fnum >> 8) & 3));
     opl_write(0xB0 + ch % 9, g_voice[ch].b0);
+}
+
+/* 当前应写入的 AIL tone：基础音高 + 弯音 + 颤音（同 MIDIplay::noteUpdFreq） */
+static double voice_tone(const voice_t *v)
+{
+    int mc = v->midi_ch;
+    double tone = v->tone + g_bend[mc] * g_bendsense[mc];
+    if (!v->sustained && g_vibrato[mc])
+        tone += (double)g_vibrato[mc] * VIB_DEPTH * sin(g_vibpos[mc]);
+    return tone;
+}
+
+/* 只重写 A0/B0，用于弯音/颤音；踏板保持的音不弯（见上游 noteUpdFreq） */
+static void voice_update_pitch(int ch)
+{
+    voice_t *v = &g_voice[ch];
+    if (v->sustained)
+        return;
+    g_opl = chip_of(ch);
+    int fnum, block;
+    ail_fnum(voice_tone(v), &fnum, &block);
+    opl_write(0xA0 + ch % 9, (uint8_t)(fnum & 0xFF));
+    v->b0 = (uint8_t)(0x20 | ((block & 7) << 2) | ((fnum >> 8) & 3));
+    opl_write(0xB0 + ch % 9, v->b0);
+}
+
+/* 实时 CC7/CC11：重写两个算子的 TL（上游 MIDIplay::touchNote） */
+static void voice_update_volume(int ch)
+{
+    voice_t *v = &g_voice[ch];
+    const opl2_patch *p = v->patch;
+    if (!p)
+        return;
+    int mc = v->midi_ch;
+    int mv = ail_midi_volume(v->vel, g_chvol[mc], g_chexpr[mc], g_master_vol);
+    int m = OP_OFF[ch % 9], c = OP_OFF[ch % 9] + 3;
+    int am = p->rC0 & 1;
+    g_opl = chip_of(ch);
+    opl_write(0x40 + m, (uint8_t)((p->op[1].r40 & 0xC0) |
+                                  ail_scale_tl(p->op[1].r40 & 0x3F, mv, am)));
+    opl_write(0x40 + c, (uint8_t)((p->op[0].r40 & 0xC0) |
+                                  ail_scale_tl(p->op[0].r40 & 0x3F, mv, 1)));
 }
 
 static void opl_off(int ch)
@@ -352,34 +431,75 @@ static int voice_off_ms(const voice_t *v)
     return opl2_melodic_off_ms[v->ins & 127];
 }
 
+static int voice_on_ms(int ins)
+{
+    if (ins >= 128) {
+        int k = ins - 128;
+        if (k < 0) k = 0;
+        if (k > 52) k = 52;
+        return opl2_percussion_on_ms[k];
+    }
+    return opl2_melodic_on_ms[ins & 127];
+}
+
+/* libADLMIDI MIDIplay::calculateChipChannelGoodness（默认 OffDelay 策略）。
+ * 单位与上游一致：koff/kon 都是微秒截断到毫秒，只有"没有活动音符"的
+ * 声道才走 Release 分支。 */
+static int64_t channel_goodness(int c, int ins)
+{
+    const voice_t *v = &g_voice[c];
+    int64_t koff_ms = v->used ? 0 : v->koff_us / 1000;
+    int64_t s = -koff_ms;
+
+    if (s < 0 && !v->used) {
+        int is_same = (v->ever_used && v->ins == ins);
+        s -= 40000;
+        if (is_same)
+            s = -koff_ms;          /* 同音色的 Release 声道优先复用 */
+        return s;
+    }
+
+    if (v->used) {
+        /* 活动音符：ADL 用 -4e6 - kon_ms 强烈压低，只有全忙时才会被偷 */
+        s -= 4000000 + v->kon_us / 1000;
+        if (v->ins == ins) {
+            s += 300;
+            if (v->vibdelay_us < 70000 || v->kon_us > 20000000LL)
+                s += 10;           /* 琶音候选 */
+        }
+        if (v->ins >= 128)
+            s += 50;               /* 打击乐比旋律更适合被偷 */
+    }
+
+    /* 空闲"疏散站"：别处还有同音色、可转移的音符时略微加分 */
+    if (v->used) {
+        unsigned n = 0;
+        for (int c2 = 0; c2 < NUM_CH; ++c2) {
+            if (c2 == c || !g_voice[c2].used)
+                continue;
+            if (g_voice[c2].vibdelay_us >= 200000)
+                continue;
+            if (g_voice[c2].ins != v->ins)
+                continue;
+            ++n;
+        }
+        s += (int64_t)n * 4;
+    }
+    return s;
+}
+
 static int find_voice(int ins)
 {
-    int best = -1;
+    int best = 0;
     int64_t best_score = -0x7FFFFFFFFFFFFFFFLL;
 
     for (int i = 0; i < NUM_CH; ++i) {
-        if (g_voice[i].used)
-            continue;
-        int64_t score;
-        if (!g_voice[i].ever_used) {
-            score = 0;
-        } else {
-            score = -(g_voice[i].koff_us / 1000);
-            if (score < 0 && g_voice[i].ins != ins)
-                score -= 40000;
-        }
+        int64_t score = channel_goodness(i, ins);
         if (score > best_score) {
             best_score = score;
             best = i;
         }
     }
-    if (best >= 0)
-        return best;
-
-    best = 0;
-    for (int i = 1; i < NUM_CH; ++i)
-        if (g_voice[i].start_tick < g_voice[best].start_tick)
-            best = i;
     return best;
 }
 
@@ -389,14 +509,12 @@ static void note_on(int midi_ch, int note, int vel, uint32_t tick)
     int ins = is_drum ? 128 + note - 35 : g_prog[midi_ch] & 127;
     const opl2_patch *p = is_drum ? &opl2_bank_percussion[note - 35]
                                   : &opl2_bank_melodic[ins];
-    int tone = is_drum ? (int)opl2_drum_key[note - 35] : note;
+    double tone = is_drum ? (double)opl2_drum_key[note - 35] : (double)note;
     int mv = ail_midi_volume(vel, g_chvol[midi_ch], g_chexpr[midi_ch], g_master_vol);
     int ch = find_voice(ins);
 
     if (g_voice[ch].used)
-        opl_off(ch);
-    opl_patch(ch, p, mv);
-    opl_note(ch, tone);
+        opl_off(ch);              /* 偷声前先放音，避免爆音 */
 
     g_voice[ch].used = 1;
     g_voice[ch].ever_used = 1;
@@ -406,6 +524,16 @@ static void note_on(int midi_ch, int note, int vel, uint32_t tick)
     g_voice[ch].start_tick = tick;
     g_voice[ch].end_tick = tick + 60;
     g_voice[ch].koff_us = 0;
+    g_voice[ch].kon_us = 1000LL * voice_on_ms(ins);
+    g_voice[ch].fixed_sustain = (voice_on_ms(ins) == 40000);
+    g_voice[ch].vibdelay_us = 0;
+    g_voice[ch].sustained = 0;
+    g_voice[ch].vel = (uint8_t)vel;
+    g_voice[ch].tone = tone;
+    g_voice[ch].patch = p;
+
+    opl_patch(ch, p, mv);
+    opl_note(ch, voice_tone(&g_voice[ch]));
     ++g_notes;
 }
 
@@ -413,9 +541,16 @@ static void note_off(int midi_ch, int note)
 {
     for (int v = 0; v < NUM_CH; ++v) {
         if (g_voice[v].used && g_voice[v].midi_ch == midi_ch && g_voice[v].note == note) {
-            opl_off(v);
-            g_voice[v].used = 0;
-            g_voice[v].koff_us = 1000LL * voice_off_ms(&g_voice[v]);
+            if (g_sustain[midi_ch]) {
+                /* 踏板保持：不 key-off，等 CC64<64 再统一放音 */
+                g_voice[v].sustained = 1;
+                g_voice[v].note = -1;
+                g_voice[v].koff_us = 0;
+            } else {
+                opl_off(v);
+                g_voice[v].used = 0;
+                g_voice[v].koff_us = 1000LL * voice_off_ms(&g_voice[v]);
+            }
         }
     }
 }
@@ -473,7 +608,6 @@ static int                g_loop;
 static double             g_wait, g_delay, g_carry;
 static uint32_t           g_skip;
 static uint32_t           g_call_left;
-static int                g_call_skipped;
 
 static int peak_voices_now(void)
 {
@@ -499,7 +633,6 @@ static void reset_sequence_state(void)
     g_wait = g_delay = g_carry = 0.0;
     g_skip = 0;
     g_call_left = 0;
-    g_call_skipped = 0;
 }
 
 static void stream_init(const synth_event *ev, int count, double tick_rate,
@@ -535,6 +668,11 @@ static void stream_init(const synth_event *ev, int count, double tick_rate,
         g_prog[i] = 0;
         g_chvol[i] = 100;
         g_chexpr[i] = 127;
+        g_bend[i] = 0.0;
+        g_bendsense[i] = 2.0 * 128.0 / (128.0 * 8192.0);
+        g_vibrato[i] = 0;
+        g_sustain[i] = 0;
+        g_vibpos[i] = 0.0;
     }
 
     uint32_t last_tick = ev[count - 1].tick;
@@ -552,8 +690,40 @@ static void apply_event(const synth_event *e, uint32_t t)
     if (hi == 0xC0) {
         g_prog[ch] = e->msg[1];
     } else if (hi == 0xB0) {
-        if (e->msg[1] == 7)       g_chvol[ch] = e->msg[2];
-        else if (e->msg[1] == 11) g_chexpr[ch] = e->msg[2];
+        if (e->msg[1] == 7) {
+            g_chvol[ch] = e->msg[2];
+            for (int v = 0; v < NUM_CH; ++v)
+                if (g_voice[v].used && g_voice[v].midi_ch == ch)
+                    voice_update_volume(v);
+        } else if (e->msg[1] == 11) {
+            g_chexpr[ch] = e->msg[2];
+            for (int v = 0; v < NUM_CH; ++v)
+                if (g_voice[v].used && g_voice[v].midi_ch == ch)
+                    voice_update_volume(v);
+        } else if (e->msg[1] == 1) {
+            g_vibrato[ch] = e->msg[2];
+            if (g_vibrato[ch] == 0)
+                g_vibpos[ch] = 0.0;
+        } else if (e->msg[1] == 64) {
+            if (e->msg[2] >= 64) {
+                g_sustain[ch] = 1;
+            } else {
+                g_sustain[ch] = 0;
+                for (int v = 0; v < NUM_CH; ++v)
+                    if (g_voice[v].used && g_voice[v].sustained &&
+                        g_voice[v].midi_ch == ch) {
+                        opl_off(v);
+                        g_voice[v].used = 0;
+                        g_voice[v].sustained = 0;
+                        g_voice[v].koff_us = 0;  /* 上游此路径不设 Release 时间 */
+                    }
+            }
+        }
+    } else if (hi == 0xE0) {
+        g_bend[ch] = (double)((e->msg[1] & 0x7F) | ((e->msg[2] & 0x7F) << 7)) - 8192.0;
+        for (int v = 0; v < NUM_CH; ++v)
+            if (g_voice[v].used && g_voice[v].midi_ch == ch)
+                voice_update_pitch(v);
     } else if (hi == 0x90 && e->msg[2] != 0) {
         note_on(ch, e->msg[1], e->msg[2], t);
     } else if (hi == 0x80 || (hi == 0x90 && e->msg[2] == 0)) {
@@ -574,6 +744,8 @@ static uint32_t stream_fill(int16_t *dst, uint32_t n, double gain)
              * reference render_opl2.c tail loop.  Without this the dump
              * would be zero-padded and the release tails would be lost. */
             if (g_loop) {
+                if (getenv("FD2_LOOPLOG"))
+                    fprintf(stderr, "synth: loop restart after %u frames\n", g_rendered);
                 opl_panic();
                 reset_sequence_state();
                 continue;
@@ -587,26 +759,22 @@ static uint32_t stream_fill(int16_t *dst, uint32_t n, double gain)
             return n;
         }
 
-        if (g_call_left == 0) {
+        if (g_call_left == 0)
             g_call_left = ADL_CHUNK;
-            g_call_skipped = g_skip > 0;
-        }
 
         double eat = g_delay < maxdelay ? g_delay : maxdelay;
         uint32_t call = g_call_left < (n - written) ? g_call_left : (n - written);
-        uint32_t count;
-        if (g_call_skipped) {
-            count = g_skip < 2048 ? g_skip : 2048;
+        uint32_t want;
+        if (g_skip) {
+            /* 上一段被缓冲区边界截断的帧：这段时间已经计过，只补画，不推进事件 */
+            want = g_skip < 2048 ? g_skip : 2048;
         } else {
             g_delay -= eat;
             g_carry += (double)g_rate * eat;
-            count = (uint32_t)g_carry;
-            g_carry -= count;
+            want = (uint32_t)g_carry;
+            g_carry -= want;
         }
-        if (count > call) {
-            g_skip = count - call;
-            count = call;
-        }
+        uint32_t count = want > call ? call : want;
 
         for (uint32_t i = 0; i < count; ++i) {
             int v = (int)((double)resampler_tick() * gain);
@@ -621,11 +789,13 @@ static uint32_t stream_fill(int16_t *dst, uint32_t n, double gain)
         if ((uint64_t)pv > g_peak_voices)
             g_peak_voices = (uint64_t)pv;
 
-        if (g_call_skipped) {
+        if (g_skip) {
             g_skip -= count;
-            g_call_skipped = g_skip > 0;
             continue;
         }
+        /* 本段还没画完的帧留到下一个缓冲区继续，必须精确记账：丢掉或重复
+         * 都会让事件时间轴相对音频整体前移/后移（听感就是节奏变快/变慢）。 */
+        g_skip = want - count;
 
         g_wait -= eat;
         while (g_ei < g_ev_count && g_wait <= mindelay * 0.5) {
@@ -638,13 +808,42 @@ static uint32_t stream_fill(int16_t *dst, uint32_t n, double gain)
         }
         g_delay = g_wait > 0.0 ? g_wait : 0.0;
 
+        /* libADLMIDI AdlChannel::addAge：每个调度分段推进一次 */
         int64_t age_us = (int64_t)(eat * 1000000.0);
+        int64_t neg_us = 1000LL * (-0x1FFFFFFFL);
         for (int v = 0; v < NUM_CH; ++v) {
-            if (!g_voice[v].used) {
-                g_voice[v].koff_us -= age_us;
-                if (g_voice[v].koff_us < 0)
-                    g_voice[v].koff_us = 0;
+            voice_t *vv = &g_voice[v];
+            if (vv->used) {
+                vv->koff_us = 0;
+                if (!vv->fixed_sustain) {
+                    vv->kon_us -= age_us;
+                    if (vv->kon_us < neg_us)
+                        vv->kon_us = neg_us;
+                }
+                vv->vibdelay_us += age_us;
+            } else {
+                vv->koff_us -= age_us;
+                if (vv->koff_us < neg_us)
+                    vv->koff_us = neg_us;
+                if (vv->koff_us < 0)
+                    vv->koff_us = 0;
             }
+        }
+
+        /* libADLMIDI TickIterators -> updateVibrato：先按当前相位重写音高，再推进相位 */
+        for (int mc = 0; mc < 16; ++mc) {
+            int any = 0;
+            if (g_vibrato[mc]) {
+                for (int v = 0; v < NUM_CH; ++v) {
+                    if (g_voice[v].used && g_voice[v].midi_ch == mc &&
+                        !g_voice[v].sustained) {
+                        voice_update_pitch(v);
+                        any = 1;
+                    }
+                }
+            }
+            if (any) g_vibpos[mc] += eat * VIB_SPEED;
+            else     g_vibpos[mc] = 0.0;
         }
     }
     return written;

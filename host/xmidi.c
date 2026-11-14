@@ -128,8 +128,17 @@ static int data_bytes(uint8_t status)
     }
 }
 
+/* Insert by tick, keeping file order among equal ticks: the new event goes
+ * after every event whose tick is <= its own (xmi2mid's CreateNewEvent
+ * behaviour).  The generated note-offs therefore land behind the events that
+ * follow their note-on in the file, exactly like the reference
+ * (xmi2mid -> libADLMIDI) chain.  Sorting with note-offs first changes the
+ * result audibly: a zero-length note would be cancelled before its own
+ * key-on and the channel allocator sees a different note-off order. */
 static int push_event(uint32_t tick, const uint8_t *msg, int len)
 {
+    int pos;
+
     if (g_count == g_capacity) {
         int cap = g_capacity ? g_capacity * 2 : 1024;
         xmidi_event *n = (xmidi_event *)realloc(g_events, (size_t)cap * sizeof *n);
@@ -138,9 +147,14 @@ static int push_event(uint32_t tick, const uint8_t *msg, int len)
         g_events = n;
         g_capacity = cap;
     }
-    g_events[g_count].tick = tick;
-    memcpy(g_events[g_count].msg, msg, (size_t)len);
-    g_events[g_count].len = len;
+    pos = g_count;
+    while (pos > 0 && g_events[pos - 1].tick > tick)
+        --pos;
+    memmove(&g_events[pos + 1], &g_events[pos],
+            (size_t)(g_count - pos) * sizeof g_events[0]);
+    g_events[pos].tick = tick;
+    memcpy(g_events[pos].msg, msg, (size_t)len);
+    g_events[pos].len = len;
     g_count++;
     return 1;
 }
@@ -161,25 +175,6 @@ static uint32_t read_vlq(const uint8_t *p, uint32_t len, uint32_t *i)
             break;
     }
     return v;
-}
-
-static int is_note_off(const xmidi_event *e)
-{
-    return (e->msg[0] & 0xF0) == 0x80 ||
-           ((e->msg[0] & 0xF0) == 0x90 && e->len > 2 && e->msg[2] == 0);
-}
-
-/* Note-offs generated from XMI note lengths are appended after the events that
- * follow them in the file, so the list has to be sorted before it can be
- * played. At equal ticks a note-off must come first, otherwise a note that
- * ends exactly where the next one starts would be cancelled immediately. */
-static int cmp_event(const void *a, const void *b)
-{
-    const xmidi_event *x = (const xmidi_event *)a, *y = (const xmidi_event *)b;
-
-    if (x->tick != y->tick)
-        return x->tick < y->tick ? -1 : 1;
-    return is_note_off(y) - is_note_off(x);
 }
 
 static int parse_evnt(const uint8_t *ev, uint32_t len, int *out_skips)
@@ -242,22 +237,20 @@ static int parse_evnt(const uint8_t *ev, uint32_t len, int *out_skips)
              * almost no Note-Off events - the sequencer is expected to
              * schedule one when the length expires. Without this every note
              * hung until the synthesiser aged it out, which is what made the
-             * music sound stretched and rhythmless. */
+             * music sound stretched and rhythmless.  A zero length is kept:
+             * xmi2mid emits the off at the same tick and the reference chain
+             * plays on -> off within one row. */
             uint32_t dur = read_vlq(ev, len, &i);
+            uint8_t off[3];
+            off[0] = (uint8_t)(0x80 | (status & 0x0F));
+            off[1] = msg[1];
+            off[2] = 0;
             notes++;
-            if (msg[2] != 0 && dur) {
-                uint8_t off[3];
-                off[0] = (uint8_t)(0x80 | (status & 0x0F));
-                off[1] = msg[1];
-                off[2] = 0;
-                if (!push_event(tick + dur, off, 3))
-                    return 0;
-                offs++;
-            }
+            if (!push_event(tick + dur, off, 3))
+                return 0;
+            offs++;
         }
     }
-    if (g_count > 1)
-        qsort(g_events, (size_t)g_count, sizeof g_events[0], cmp_event);
     printf("xmidi: parsed %d events (%d note-ons, %d generated note-offs,"
            " %d unmodelled bytes, last tick %u)\n",
            g_count, notes, offs, skips,
