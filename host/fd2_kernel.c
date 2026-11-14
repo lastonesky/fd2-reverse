@@ -704,7 +704,13 @@ int fd2_engine_init(int argc, char **argv)
     fd2_video_default_palette();
     fd2_video_init();
     synth_set_bank_path(NULL);           /* default timbre until a DLS is set */
-    audio_init(11025);
+    /* Device rate and the guest AIL format are deliberately different: the
+     * OPL2 renderer produces 49716 Hz and must reach the speakers with its
+     * top octave intact, while AIL (the game's own 8-bit PCM format) stays at
+     * 11025 and is resampled by the mixer.  Opening the device at 11025 used
+     * to throw away everything above 5.5 kHz and alias the rest (see
+     * docs/opl2-music-fidelity.md 12.4). */
+    audio_init(44100);
     ail_set_format(11025, 8, 0);
     {
         const char *v = host_arg("VOLUME");

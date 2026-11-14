@@ -4250,3 +4250,17 @@ winmidi、内置合成器失败回退、`--midi-test`。暖态 `state machine be
   并在 vcvars 失败时（vcvars64.bat 要调 `reg.exe`，受限 shell 里会被拦）按安装
   目录直接重建 `INCLUDE`/`LIB`/`PATH`，同时把编译命令行写成 `build\build.rsp`
   以便复现。
+
+### 7.55 修复：音乐"整体听感略有不同" —— 设备混音率 11025 → 44100
+
+用户反馈 emu8950 后端听整首曲子与 libADLMIDI 参考"整体略有不同"，指不出具体音色。
+逐层排查后确认寄存器/事件层无差异，差异在输出级：设备开在 11025 Hz，49716→11025
+的线性插值抽取使 >5.5 kHz 全部消失，并把高频折回使 3.2~5.5 kHz 偏高 +2.4/+3.3 dB
+（谱质心 407 vs 参考 440~448 Hz）。同一引擎改为 44100 后 20 Hz~16 kHz 与参考差
+≤0.3 dB。
+
+修复：`host/fd2_kernel.c` 的 `audio_init(44100)`；AIL/音效格式仍是 11025，由混音器
+重采样。代价：单曲预渲染缓冲 1.5 → 6.1 MB（临时），渲染墙钟 820 → 851 ms。
+Linux 已 `make engine` 重建；**Windows 侧仍需 `pwsh -File build.ps1`**。
+另：`build/oplbench/r11k.wav` 实为引擎 11 kHz 输出（MD5 与 e11k 相同），此前拿它当
+"11 kHz 参考"的对比无效。细节见 `docs/opl2-music-fidelity.md` §12.4。
