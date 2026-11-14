@@ -1,463 +1,657 @@
-/* synth.c - self-contained software synthesiser for FD2's music.
+/*
+ * OPL2 music synthesiser for the FD2 host port.
  *
- * Why not just use the Windows MIDI Mapper?
- * -----------------------------------------
- * The only MIDI device on a stock Windows install is "Microsoft GS Wavetable
- * Synth". It is a *system* component: its level is a system mixer setting
- * ("SW Synth"/MIDI) that can be muted independently of everything else, it
- * needs the gm.dls sound bank, and midiOutShortMsg failures are easy to miss.
- * When it is silent there is nothing the game can do about it.
- *
- * The sound effects already prove that a waveOut-free path can make noise,
- * so the music is rendered here: the parsed MIDI events drive a small
- * wavetable/FM-ish synthesiser and src/audio.h pulls one slice at a time from
- * the software mixer's callback - there is one device for music and effects
- * together (docs/AUDIO.md §11.10). No system MIDI involved.
- *
- * Sound model: one voice per MIDI channel (the game uses 11 of them), a sine
- * with two harmonics as the waveform, a linear attack/decay/sustain/release
- * envelope, and a per-voice phase accumulator. Sample-accurate note timing
- * comes from the event list's tick stamps.
+ * The DOS originals used AIL with a two-operator OPL2 tone bank.  This backend
+ * emulates that path with two emu8950 OPL2 chips (18 melodic voices) and the
+ * Fat Man / AIL two-operator bank, then resamples the 49716 Hz native OPL
+ * output to the host audio rate.  The register write order, patch caching and
+ * buffered register queue intentionally follow libADLMIDI/Nuked OPL3, which is
+ * the reference used to tune the patch and timing behaviour.
  */
 
-#include <stdio.h>
-#include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
-#include <math.h>
-#include "platform.h"
 #include "synth.h"
+#include "platform.h"
 #include "audio.h"
-#include "dls.h"
+#include "emu8950/emu8950.h"
+#include "opl2_patches.h"
+#include "opl2_drumkey.h"
+#include "ail_freq.h"
 
-#define PI              3.14159265358979
-#define VOICES          64          /* drums + melody + sustained pads          */
-#define NOTE_MAX_MS     2500.0      /* auto-release when a note never stops    */
-#define PERC_MAX_MS     250.0       /* drums are short - release them early    */
-#define TABLE_BITS      10
-#define TABLE_SIZE      (1 << TABLE_BITS)
-#define TABLE_MASK      (TABLE_SIZE - 1)
+#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/time.h>
+#include <time.h>
 
-#define ATTACK_MS       4.0
-#define DECAY_MS        90.0
-#define RELEASE_MS      150.0
-#define PERC_RELEASE_MS 60.0        /* channel 9: drum-ish, quick decay       */
-#define SUSTAIN         0.70
+#define OPL_NATIVE   49716u
+#define OPL_CLOCK    3579545u
+#define OUT_GAIN     (-2.0 * 46340.0 / 65535.0)
+#define RSM_FRAC     10
+#define NUM_CH       18
+#define ADL_CHUNK    2048u
+
+static OPL *g_chip[2];
+static OPL *g_opl;
+
+/* Two OPL2 chips share the register layout below: channels 0..8 use chip 0,
+ * channels 9..17 use chip 1.  Within a chip, modulator offsets are 0/1/2,
+ * 8/9/10, 16/17/18 and carrier offsets are +3. */
+static const uint8_t OP_OFF[9] = { 0, 1, 2, 8, 9, 10, 16, 17, 18 };
+
+/* AIL velocity curve: indexed by vel>>3, mapping velocity to 82..127. */
+static const uint8_t AIL_VEL[16] = {
+    82, 85, 88, 91, 94, 97, 100, 103,
+    106, 109, 112, 115, 118, 121, 124, 127
+};
 
 typedef struct {
-    int      active;
-    int      channel;
+    int      used;
+    int      ever_used;
+    int      ins;
+    int      midi_ch;
     int      note;
-    int      volume;
-    uint32_t start;                 /* sample index of the note-on            */
-    uint32_t release;               /* sample index of note-off (0 = none)    */
-    double   phase;                 /* 0..1 (waveform voices)                 */
-    double   step;                  /* phase advance per sample               */
-    int      percussive;
-    double   gain;                  /* channel volume (CC7) * expression (CC11) */
-    const dls_wave *w;              /* GM sample, NULL = waveform fallback    */
-    double   pos;                   /* position within the sample, in frames  */
-    double   sstep;                 /* frames per output sample               */
-} voice;
+    uint32_t start_tick;
+    uint32_t end_tick;
+    uint8_t  b0;
+    int64_t  koff_us;
+} voice_t;
 
-static voice        g_voices[VOICES];
-static int16_t      g_wave[TABLE_SIZE];
-static int          g_wave_ready;
+static voice_t          g_voice[NUM_CH];
+static const opl2_patch *g_patch_cache[NUM_CH];
+static int              g_prog[16];
+static int              g_chvol[16];
+static int              g_chexpr[16];
+static int              g_master_vol = 127;
 
-/* General MIDI bank (gm.dls) and the per-channel program/bank state that
- * decides which sample a note uses. */
-static dls_bank     g_bank;
-static int          g_bank_tried;
-static const char  *g_dls_path;              /* --gm-bank=<path> override  */
-static int          g_channel_program[16];
-static int          g_channel_bank[16];
-static int          g_channel_volume[16];    /* CC7  */
-static int          g_channel_expr[16];      /* CC11 */
-static long         g_sampled_notes;         /* note-ons that found a sample */
-static long         g_drum_notes;            /* note-ons on the percussion channel */
+static uint64_t         g_notes;
+static uint64_t         g_peak_voices;
 
-static uint32_t     g_rate = 22050;
-static int          g_loop;
-static long         g_notes;
-static int          g_peak_voices;
+/* ---------------- Nuked-style buffered register queue ---------------- */
 
-/* Host master volume 0..100 (--volume, default 100 = no attenuation).
- * Multiplied with the sequence volume when each slice is rendered - see
- * synth.h and stream_gain(). */
-static int          g_master = 100;
+#define WRITEBUF_SIZE  2048
+#define WRITEBUF_DELAY 2
 
-/* ------------------------------------------------------------- waveform -- */
+typedef struct {
+    uint64_t time;
+    uint16_t reg;
+    uint8_t  val;
+    uint8_t  used;
+} writebuf_entry;
 
-static void wave_init(void)
+static writebuf_entry g_writebuf[WRITEBUF_SIZE];
+static uint32_t       g_writebuf_cur;
+static uint32_t       g_writebuf_last;
+static uint64_t       g_writebuf_samplecnt;
+static uint64_t       g_writebuf_lasttime;
+static int            g_write_buffered;
+
+static OPL *chip_of(int ch)
 {
-    int i;
+    return g_chip[(unsigned)ch / 9 & 1];
+}
 
-    if (g_wave_ready)
+static void opl_write_now(uint16_t reg, uint8_t val)
+{
+    unsigned low = reg & 0xff;
+    if (low == 0x04 || low == 0x05)
         return;
-    for (i = 0; i < TABLE_SIZE; i++) {
-        double ph = (double)i / (double)TABLE_SIZE;
-        /* Fundamental plus two harmonics: not exactly any GM instrument, but
-         * far more musical than a bare sine. */
-        double v = 0.70 * sin(2.0 * PI * ph) +
-                   0.20 * sin(4.0 * PI * ph) +
-                   0.10 * sin(6.0 * PI * ph);
-        g_wave[i] = (int16_t)(v * 7000.0);
+    if (reg & 0x100) {
+        OPL_writeReg(g_chip[1], low, val);
+    } else if (low < 0x10 || low == 0xBD) {
+        OPL_writeReg(g_chip[0], low, val);
+        OPL_writeReg(g_chip[1], low, val);
+    } else {
+        OPL_writeReg(g_chip[0], low, val);
     }
-    g_wave_ready = 1;
 }
 
-static double note_hz(int note)
+static void opl_tick(void)
 {
-    return 440.0 * pow(2.0, ((double)note - 69.0) / 12.0);
+    if (!g_write_buffered)
+        return;
+    while (g_writebuf[g_writebuf_cur].used &&
+           g_writebuf[g_writebuf_cur].time <= g_writebuf_samplecnt) {
+        writebuf_entry *w = &g_writebuf[g_writebuf_cur];
+        opl_write_now(w->reg, w->val);
+        w->used = 0;
+        g_writebuf_cur = (g_writebuf_cur + 1) % WRITEBUF_SIZE;
+    }
+    ++g_writebuf_samplecnt;
 }
 
-/* ------------------------------------------------------------- envelope -- */
-
-static double envelope(const voice *v, uint32_t t)
+static void opl_write(uint16_t reg, uint8_t val)
 {
-    uint32_t a = (uint32_t)(ATTACK_MS * (double)g_rate / 1000.0);
-    uint32_t d = (uint32_t)(DECAY_MS * (double)g_rate / 1000.0);
-    uint32_t r = (uint32_t)((v->percussive ? PERC_RELEASE_MS : RELEASE_MS) *
-                            (double)g_rate / 1000.0);
-    uint32_t age = t - v->start;
-    double e;
+    uint16_t full_reg = (uint16_t)(reg + (g_opl == g_chip[1] ? 0x100 : 0));
+    writebuf_entry *w;
+    uint64_t time1, time2;
 
-    /* A DLS/General MIDI wave already carries the instrument's own envelope:
-     * a piano sample decays, strings sustain, drums are one-shots. Shaping it
-     * with the synthetic attack/decay/sustain curve below made every
-     * instrument sound the same and hollow - it flattened the very thing that
-     * makes a timbre recognisable. Samples are therefore played as recorded,
-     * with only a 1 ms attack (no click) and the release ramp where the note
-     * actually ends. */
-    if (v->w) {
-        uint32_t wa = (uint32_t)(1.0 * (double)g_rate / 1000.0);
-        if (wa && age < wa)
-            return (double)(age + 1) / (double)wa;
-        e = 1.0;
-        if (v->release && t >= v->release) {
-            uint32_t rt = t - v->release;
-            if (r && rt >= r)
-                return 0.0;                     /* finished */
-            if (r)
-                e *= 1.0 - (double)rt / (double)r;
+    if (!g_write_buffered) {
+        opl_write_now(full_reg, val);
+        return;
+    }
+
+    w = &g_writebuf[g_writebuf_last];
+    if (w->used) {
+        opl_write_now(w->reg, w->val);
+        g_writebuf_cur = (g_writebuf_last + 1) % WRITEBUF_SIZE;
+        g_writebuf_samplecnt = w->time;
+    }
+    w->reg = full_reg;
+    w->val = val;
+    w->used = 1;
+    time1 = g_writebuf_lasttime + WRITEBUF_DELAY;
+    time2 = g_writebuf_samplecnt;
+    if (time1 < time2)
+        time1 = time2;
+    w->time = time1;
+    g_writebuf_lasttime = time1;
+    g_writebuf_last = (g_writebuf_last + 1) % WRITEBUF_SIZE;
+}
+
+static void opl_write_full(uint16_t reg, uint8_t val)
+{
+    g_opl = g_chip[(reg >> 8) & 1];
+    opl_write(reg & (uint16_t)~0x100, val);
+}
+
+/* ---------------- libADLMIDI-equivalent reset sequence ---------------- */
+
+static void ref_update_categories(int chips)
+{
+    for (int i = 0; i < chips; ++i) {
+        opl_write_full(0x0BD, 0xC0);
+        opl_write_full(0x104, 0x00);
+    }
+}
+
+static void ref_silence_all(int chips)
+{
+    for (int i = 0; i < chips; ++i)
+        opl_write_full(0x0BD, 0xC0);
+
+    for (int card = 0; card < chips; ++card) {
+        for (int ch = 0; ch < 18; ++ch) {
+            uint16_t base = (uint16_t)((ch / 9) << 8);
+            uint16_t m = (uint16_t)(base + OP_OFF[ch % 9]);
+            opl_write_full((uint16_t)(base + 0xB0 + ch % 9), 0x00);
+            opl_write_full((uint16_t)(0x40 + m), 0x3F);
+            opl_write_full((uint16_t)(0x80 + m), 0xFF);
+            opl_write_full((uint16_t)(0x40 + m + 3), 0x3F);
+            opl_write_full((uint16_t)(0x80 + m), 0xFF);
         }
-        return e;
-    }
-
-    if (a && age < a)
-        return (double)(age + 1) / (double)a;    /* never exactly zero: a
-                                                  * voice must survive its
-                                                  * own note-on sample */
-    e = 1.0;
-    if (d && age - a < d)
-        e = 1.0 - (1.0 - SUSTAIN) * (double)(age - a) / (double)d;
-    else
-        e = SUSTAIN;
-    if (v->release) {
-        if (t >= v->release) {
-            uint32_t rt = t - v->release;
-            if (r && rt >= r)
-                return 0.0;                     /* finished */
-            if (r)
-                e *= 1.0 - (double)rt / (double)r;
+        static const uint16_t tail[][2] = {
+            {0x050, 0x090}, {0x053, 0x090}, {0x054, 0x107F},
+            {0x052, 0x092}, {0x055, 0x107F}, {0x051, 0x091}
+        };
+        for (size_t i = 0; i < sizeof(tail) / sizeof(tail[0]); ++i) {
+            opl_write_full(tail[i][0], 0x3F);
+            opl_write_full(tail[i][1], 0xFF);
         }
     }
-    return e;
 }
 
-/* --------------------------------------------------------------- events -- */
-
-/* Find (or free) the voice for a note. The game's XMIDI data contains very few
- * note-offs, so a channel may legitimately carry several notes at once: rather
- * than monophonically stealing the channel, each (channel, note) pair gets its
- * own voice and unstoppable notes are released by timeout in the mixer. */
-static voice *voice_alloc(int channel, int note, uint32_t t)
+static void ref_init_chip(void)
 {
-    int k, oldest = -1;
-
-    for (k = 0; k < VOICES; k++) {
-        voice *v = &g_voices[k];
-        if (v->active && v->channel == channel && v->note == note)
-            return v;                               /* retrigger same note  */
+    static const uint16_t init[] = {
+        0x004, 0x60, 0x004, 0x80, 0x105, 0x00, 0x105, 0x01,
+        0x105, 0x00, 0x001, 0x20, 0x105, 0x01, 0x008, 0x00
+    };
+    for (int ch = 0; ch < 18; ++ch) {
+        uint16_t base = (uint16_t)((ch / 9) << 8);
+        uint16_t m = (uint16_t)(base + OP_OFF[ch % 9]);
+        opl_write_full((uint16_t)(0x20 + m), 0x00);
+        opl_write_full((uint16_t)(0x20 + m + 3), 0x00);
+        opl_write_full((uint16_t)(base + 0xA0 + ch % 9), 0x00);
+        opl_write_full((uint16_t)(base + 0xB0 + ch % 9), 0x00);
     }
-    for (k = 0; k < VOICES; k++)
-        if (!g_voices[k].active)
-            return &g_voices[k];
-    for (k = 0; k < VOICES; k++)                    /* steal the oldest     */
-        if (oldest < 0 || g_voices[k].start < g_voices[oldest].start)
-            oldest = k;
-    return &g_voices[oldest];
+    for (size_t i = 0; i < sizeof(init) / sizeof(init[0]); i += 2)
+        opl_write_full(init[i], (uint8_t)init[i + 1]);
+}
+
+static void ref_reset(int chips)
+{
+    for (int i = 0; i < chips; ++i)
+        ref_init_chip();
+    ref_update_categories(chips);
+    ref_silence_all(chips);
+}
+
+static void opl_reference_init(void)
+{
+    ref_reset(2);
+    ref_update_categories(2);
+
+    OPL_reset(g_chip[0]);
+    OPL_reset(g_chip[1]);
+    memset(g_writebuf, 0, sizeof g_writebuf);
+    g_writebuf_cur = g_writebuf_last = 0;
+    g_writebuf_samplecnt = g_writebuf_lasttime = 0;
+    g_opl = g_chip[0];
+
+    ref_reset(1);
+    for (int i = 0; i < 4; ++i) {
+        ref_silence_all(1);
+        if (i == 0) {
+            OPL_reset(g_chip[0]);
+            OPL_reset(g_chip[1]);
+            memset(g_writebuf, 0, sizeof g_writebuf);
+            g_writebuf_cur = g_writebuf_last = 0;
+            g_writebuf_samplecnt = g_writebuf_lasttime = 0;
+            g_opl = g_chip[0];
+        }
+        ref_reset(1);
+    }
+}
+
+/* ---------------- AIL volume / pitch tables ---------------- */
+
+static int ail_midi_volume(int velocity, int volume, int expression,
+                           int master_volume)
+{
+    uint32_t mv = (uint32_t)(volume * expression) * 2u >> 8;
+    uint32_t v;
+    if (mv) ++mv;
+    v = AIL_VEL[(velocity & 0x7F) >> 3];
+    mv = mv * v * 2u >> 8;
+    if (mv) ++mv;
+    if (master_volume < 127)
+        mv = mv * (uint32_t)master_volume / 127u;
+    if (mv > 127) mv = 127;
+    return (int)mv;
+}
+
+static int ail_scale_tl(int tl, int mv, int do_op)
+{
+    int val = (~tl) & 0x3F;
+    if (do_op) val = val * mv / 127;
+    return (~val) & 0x3F;
+}
+
+static void ail_fnum(int tone, int *fnum, int *block)
+{
+    int pitch, idx, halftone, octave;
+    uint16_t f;
+
+    if (tone < 0) tone = 0;
+    pitch = (tone - 12) * 16;
+    while (pitch < 12 * 16) pitch += 12 * 16;
+    while (pitch > 96 * 16 - 1) pitch -= 12 * 16;
+
+    idx      = pitch >> 4;
+    halftone = (idx % 12) * 16 + (pitch & 15);
+    octave   = idx / 12;
+
+    f = ail_freqtable[halftone];
+    if (!(f & 0x8000)) {
+        if (octave > 0) --octave;
+        else f /= 2;
+    }
+    f &= 0x3FF;
+    if (octave > 7) octave = 7;
+    *fnum  = (int)f;
+    *block = octave;
+}
+
+/* ---------------- Patch / voice control ---------------- */
+
+static void opl_patch(int ch, const opl2_patch *p, int mv)
+{
+    g_opl = chip_of(ch);
+    int m = OP_OFF[ch % 9], c = OP_OFF[ch % 9] + 3;
+    const opl2_op *mod = &p->op[1];
+    const opl2_op *car = &p->op[0];
+    int am = p->rC0 & 1;
+    uint8_t tl_m = (uint8_t)((mod->r40 & 0xC0) | ail_scale_tl(mod->r40 & 0x3F, mv, am));
+    uint8_t tl_c = (uint8_t)((car->r40 & 0xC0) | ail_scale_tl(car->r40 & 0x3F, mv, 1));
+    uint8_t c0 = (uint8_t)(p->rC0 | 0x30);
+
+    if (g_patch_cache[ch] != p) {
+        opl_write(0x20 + m, mod->r20);
+        opl_write(0x20 + c, car->r20);
+        opl_write(0x60 + m, mod->r60);
+        opl_write(0x60 + c, car->r60);
+        opl_write(0x80 + m, mod->r80);
+        opl_write(0x80 + c, car->r80);
+        opl_write(0xE0 + m, mod->rE0);
+        opl_write(0xE0 + c, car->rE0);
+        opl_write(0xC0 + ch % 9, c0);
+        g_patch_cache[ch] = p;
+    }
+    opl_write(0xC0 + ch % 9, c0);
+    opl_write(0x40 + m, tl_m);
+    opl_write(0x40 + c, tl_c);
+}
+
+static void opl_note(int ch, int tone)
+{
+    g_opl = chip_of(ch);
+    int fnum, block;
+    ail_fnum(tone, &fnum, &block);
+    opl_write(0xA0 + ch % 9, (uint8_t)(fnum & 0xFF));
+    g_voice[ch].b0 = (uint8_t)(0x20 | ((block & 7) << 2) | ((fnum >> 8) & 3));
+    opl_write(0xB0 + ch % 9, g_voice[ch].b0);
+}
+
+static void opl_off(int ch)
+{
+    g_opl = chip_of(ch);
+    g_voice[ch].b0 = (uint8_t)(g_voice[ch].b0 & ~0x20);
+    opl_write(0xB0 + ch % 9, g_voice[ch].b0);
+}
+
+static int voice_off_ms(const voice_t *v)
+{
+    if (v->ins >= 128) {
+        int k = v->ins - 128;
+        if (k < 0) k = 0;
+        if (k > 52) k = 52;
+        return opl2_percussion_off_ms[k];
+    }
+    return opl2_melodic_off_ms[v->ins & 127];
+}
+
+static int find_voice(int ins)
+{
+    int best = -1;
+    int64_t best_score = -0x7FFFFFFFFFFFFFFFLL;
+
+    for (int i = 0; i < NUM_CH; ++i) {
+        if (g_voice[i].used)
+            continue;
+        int64_t score;
+        if (!g_voice[i].ever_used) {
+            score = 0;
+        } else {
+            score = -(g_voice[i].koff_us / 1000);
+            if (score < 0 && g_voice[i].ins != ins)
+                score -= 40000;
+        }
+        if (score > best_score) {
+            best_score = score;
+            best = i;
+        }
+    }
+    if (best >= 0)
+        return best;
+
+    best = 0;
+    for (int i = 1; i < NUM_CH; ++i)
+        if (g_voice[i].start_tick < g_voice[best].start_tick)
+            best = i;
+    return best;
+}
+
+static void note_on(int midi_ch, int note, int vel, uint32_t tick)
+{
+    int is_drum = (midi_ch == 9 && note >= 35 && note <= 87);
+    int ins = is_drum ? 128 + note - 35 : g_prog[midi_ch] & 127;
+    const opl2_patch *p = is_drum ? &opl2_bank_percussion[note - 35]
+                                  : &opl2_bank_melodic[ins];
+    int tone = is_drum ? (int)opl2_drum_key[note - 35] : note;
+    int mv = ail_midi_volume(vel, g_chvol[midi_ch], g_chexpr[midi_ch], g_master_vol);
+    int ch = find_voice(ins);
+
+    if (g_voice[ch].used)
+        opl_off(ch);
+    opl_patch(ch, p, mv);
+    opl_note(ch, tone);
+
+    g_voice[ch].used = 1;
+    g_voice[ch].ever_used = 1;
+    g_voice[ch].ins = ins;
+    g_voice[ch].midi_ch = midi_ch;
+    g_voice[ch].note = note;
+    g_voice[ch].start_tick = tick;
+    g_voice[ch].end_tick = tick + 60;
+    g_voice[ch].koff_us = 0;
+    ++g_notes;
+}
+
+static void note_off(int midi_ch, int note)
+{
+    for (int v = 0; v < NUM_CH; ++v) {
+        if (g_voice[v].used && g_voice[v].midi_ch == midi_ch && g_voice[v].note == note) {
+            opl_off(v);
+            g_voice[v].used = 0;
+            g_voice[v].koff_us = 1000LL * voice_off_ms(&g_voice[v]);
+        }
+    }
+}
+
+/* ---------------- Native OPL tick and host-rate resampler ---------------- */
+
+static int16_t opl_native_sample(void)
+{
+    int s = (int)OPL_calc(g_chip[0]) + (int)OPL_calc(g_chip[1]);
+    int v = (int)lround(s * OUT_GAIN);
+    if (v > 32767) v = 32767;
+    if (v < -32768) v = -32768;
+    opl_tick();
+    return (int16_t)v;
+}
+
+static uint64_t g_output_frames;
+static int32_t g_rsm_old, g_rsm_cur, g_rsm_cnt, g_rsm_ratio;
+
+static void resampler_setup(uint32_t outrate)
+{
+    g_rsm_ratio = (int32_t)(((uint64_t)outrate << RSM_FRAC) / OPL_NATIVE);
+    g_rsm_old = g_rsm_cur = 0;
+    g_rsm_cnt = 0;
+    g_output_frames = 0;
+}
+
+static int16_t resampler_tick(void)
+{
+    int32_t sc = g_rsm_cnt;
+    if (g_output_frames++ == 0) {
+        g_rsm_cnt = sc + (1 << RSM_FRAC);
+        return 0;
+    }
+    while (sc >= g_rsm_ratio) {
+        g_rsm_old = g_rsm_cur;
+        g_rsm_cur = opl_native_sample();
+        sc -= g_rsm_ratio;
+    }
+    int32_t out = (g_rsm_old * (g_rsm_ratio - sc) + g_rsm_cur * sc) / g_rsm_ratio;
+    g_rsm_cnt = sc + (1 << RSM_FRAC);
+    return (int16_t)out;
+}
+
+/* ---------------- Stream scheduling ---------------- */
+
+static const synth_event *g_ev;
+static int                g_ev_count;
+static double             g_tick_rate;
+static uint32_t           g_rate;
+static uint32_t           g_total;
+static uint32_t           g_rendered;
+static int                g_ei;
+static int                g_loop;
+static double             g_wait, g_delay, g_carry;
+static uint32_t           g_skip;
+static uint32_t           g_call_left;
+static int                g_call_skipped;
+
+static int peak_voices_now(void)
+{
+    int n = 0;
+    for (int i = 0; i < NUM_CH; ++i)
+        if (g_voice[i].used)
+            ++n;
+    return n;
+}
+
+static void opl_panic(void)
+{
+    for (int ch = 0; ch < NUM_CH; ++ch)
+        opl_off(ch);
+    memset(g_voice, 0, sizeof g_voice);
+    memset(g_patch_cache, 0, sizeof g_patch_cache);
+}
+
+static void reset_sequence_state(void)
+{
+    g_ei = 0;
+    g_rendered = 0;
+    g_wait = g_delay = g_carry = 0.0;
+    g_skip = 0;
+    g_call_left = 0;
+    g_call_skipped = 0;
+}
+
+static void stream_init(const synth_event *ev, int count, double tick_rate,
+                        uint32_t rate)
+{
+    g_ev = ev;
+    g_ev_count = count;
+    g_tick_rate = tick_rate;
+    g_rate = rate;
+
+    if (!g_chip[0]) {
+        g_chip[0] = OPL_new(OPL_CLOCK, OPL_NATIVE);
+        g_chip[1] = OPL_new(OPL_CLOCK, OPL_NATIVE);
+        OPL_setChipType(g_chip[0], 2);
+        OPL_setChipType(g_chip[1], 2);
+    }
+    g_write_buffered = 1;
+    OPL_reset(g_chip[0]);
+    OPL_reset(g_chip[1]);
+    memset(g_writebuf, 0, sizeof g_writebuf);
+    g_writebuf_cur = g_writebuf_last = 0;
+    g_writebuf_samplecnt = g_writebuf_lasttime = 0;
+    g_opl = g_chip[0];
+    opl_reference_init();
+    g_opl = g_chip[0];
+
+    memset(g_voice, 0, sizeof g_voice);
+    memset(g_patch_cache, 0, sizeof g_patch_cache);
+    g_notes = 0;
+    g_peak_voices = 0;
+    g_master_vol = 127;
+    for (int i = 0; i < 16; ++i) {
+        g_prog[i] = 0;
+        g_chvol[i] = 100;
+        g_chexpr[i] = 127;
+    }
+
+    uint32_t last_tick = ev[count - 1].tick;
+    g_total = (uint32_t)((double)(last_tick + 2) / tick_rate * (double)rate) + 1;
+    resampler_setup(rate);
+    reset_sequence_state();
 }
 
 static void apply_event(const synth_event *e, uint32_t t)
 {
     uint8_t st = e->msg[0];
     int ch = st & 0x0F;
+    int hi = st & 0xF0;
 
-    if ((st & 0xF0) == 0xC0) {                  /* program change        */
-        g_channel_program[ch] = e->msg[1];
-        return;
-    }
-    if ((st & 0xF0) == 0xB0) {                  /* controllers           */
-        int cc = e->msg[1], val = e->msg[2];
-        if (cc == 0)
-            g_channel_bank[ch] = val << 7;      /* bank select MSB       */
-        else if (cc == 32)
-            g_channel_bank[ch] = (g_channel_bank[ch] & 0x3F80) | val;
-        else if (cc == 7)
-            g_channel_volume[ch] = val;         /* channel volume        */
-        else if (cc == 11)
-            g_channel_expr[ch] = val;           /* expression            */
-        return;
-    }
-
-    if ((st & 0xF0) == 0x90 && e->msg[2] != 0) {
-        voice *v = voice_alloc(ch, e->msg[1], t);
-        v->active = 1;
-        v->channel = ch;
-        v->note = e->msg[1];
-        v->volume = e->msg[2];
-        v->start = t;
-        v->release = 0;
-        v->phase = 0.0;
-        v->pos = 0.0;
-        v->percussive = (ch == 9);
-        /* MIDI bank select is (CC0 << 7) | CC32, but DLS stores (msb << 8) |
-         * lsb - and percussion is not a bank number at all, it is the F_DRUMS
-         * bit in ulBank (see dls_find). */
-        {
-            uint32_t midi_bank = (uint32_t)g_channel_bank[ch];
-            uint32_t dls_bank = ((midi_bank >> 7) << 8) | (midi_bank & 0x7Fu);
-            v->w = g_bank.ninsts
-                 ? dls_find(&g_bank, dls_bank, g_channel_program[ch],
-                            v->note, ch == 9)
-                 : NULL;
-        }
-        v->gain = ((double)g_channel_volume[ch] / 127.0) *
-                  ((double)g_channel_expr[ch] / 127.0);
-        if (ch == 9)
-            g_drum_notes++;
-        if (v->w) {
-            /* Resample the GM wave: it was recorded at its own rate and unity
-             * note, so the ratio is note/unity (plus the region's fine tune). */
-            double ratio = note_hz(v->note) / note_hz(v->w->unity_note) *
-                           pow(2.0, (double)v->w->fine_tune / 1200.0);
-            v->sstep = ratio * (double)v->w->sample_rate / (double)g_rate;
-            g_sampled_notes++;
-            /* The first few notes print the whole pitch calculation, so a bad
-             * unity note / sample rate / output rate is visible in the log
-             * instead of only being audible. */
-            if (g_sampled_notes <= 6)
-                printf("synth: ch%d note %d vel %d -> wave(unity %d, %u Hz, "
-                       "fine %d, %u frames) ratio %.4f sstep %.4f "
-                       "(note %.1f Hz, sample sounds %.1f Hz)\n",
-                       ch, v->note, v->volume, (int)v->w->unity_note,
-                       (unsigned)v->w->sample_rate, (int)v->w->fine_tune,
-                       (unsigned)v->w->samples, ratio, v->sstep,
-                       note_hz(v->note),
-                       note_hz(v->w->unity_note) / pow(2.0,
-                           (double)v->w->fine_tune / 1200.0));
-        } else {
-            v->step = note_hz(v->note) / (double)g_rate;
-        }
-        g_notes++;
-    } else if ((st & 0xF0) == 0x80 ||
-               ((st & 0xF0) == 0x90 && e->msg[2] == 0)) {
-        int k;
-        for (k = 0; k < VOICES; k++) {
-            voice *v = &g_voices[k];
-            if (v->active && v->channel == ch && v->note == e->msg[1] && !v->release)
-                v->release = t ? t : 1;
-        }
+    if (hi == 0xC0) {
+        g_prog[ch] = e->msg[1];
+    } else if (hi == 0xB0) {
+        if (e->msg[1] == 7)       g_chvol[ch] = e->msg[2];
+        else if (e->msg[1] == 11) g_chexpr[ch] = e->msg[2];
+    } else if (hi == 0x90 && e->msg[2] != 0) {
+        note_on(ch, e->msg[1], e->msg[2], t);
+    } else if (hi == 0x80 || (hi == 0x90 && e->msg[2] == 0)) {
+        note_off(ch, e->msg[1]);
     }
 }
 
-/* -------------------------------------------------------------- render --- */
-
-/* ---------------------------------------------------------- streaming ----
- *
- * The original AIL MDI driver synthesises incrementally: its timer callback
- * renders the next slice and hands it to the sound device, so the music is
- * always "in flight" and a volume change takes effect on the very next slice.
- * Rendering the whole piece into one buffer and handing that to waveOut (what
- * this file used to do) turns the volume into a constant baked in at render
- * time - AIL_set_sequence_volume(seq, vol, ms) then has nothing to act on, and
- * the game's 2 s fade-ins / 4 s fade-outs are silently dropped.
- *
- * The render state below (sample clock, event cursor, voices) lives in globals
- * so any number of slices can be rendered back to back; render() at the end is
- * just "one slice as long as the whole song". */
-
-static const synth_event *g_ev;
-static int                g_ev_count;
-static double             g_tick_rate;
-static uint32_t           g_total;      /* song length in samples            */
-static uint32_t           g_t;          /* sample clock                      */
-static int                g_ei;         /* next event to apply               */
-
-static void stream_init(const synth_event *ev, int count, double tick_rate,
-                        uint32_t rate)
-{
-    int i;
-
-    g_rate = rate;
-    wave_init();
-    g_ev        = ev;
-    g_ev_count  = count;
-    g_tick_rate = tick_rate;
-    /* End at the last event.  A one-shot gets one extra second so the final
-     * release can ring out, but a looping track must NOT: that +1 s was added
-     * on *every* cycle, inserting ~0.85 s of silence at each loop point, which
-     * made long background themes (map/place/shop) feel slightly slower than
-     * the original.  g_loop is already set by the caller before this call. */
-    g_total = (uint32_t)((double)ev[count - 1].tick / tick_rate * (double)rate);
-    if (!g_loop)
-        g_total += rate;
-    if (g_total < rate)
-        g_total = rate;
-    g_t  = 0;
-    g_ei = 0;
-
-    memset(g_voices, 0, sizeof g_voices);
-    g_notes = 0;
-    g_peak_voices = 0;
-    g_sampled_notes = 0;
-    g_drum_notes = 0;
-    memset(g_channel_program, 0, sizeof g_channel_program);
-    memset(g_channel_bank, 0, sizeof g_channel_bank);
-    for (i = 0; i < 16; i++) {
-        g_channel_volume[i] = 127;      /* GM default: full volume            */
-        g_channel_expr[i] = 127;
-    }
-}
-
-/* Render up to `n` samples into `dst`, advancing the clock. `gain` (0..1) is
- * applied per sample, which is what lets the volume change while playing. */
 static uint32_t stream_fill(int16_t *dst, uint32_t n, double gain)
 {
     uint32_t written = 0;
-    uint32_t max_age  = (uint32_t)(NOTE_MAX_MS * (double)g_rate / 1000.0);
-    uint32_t perc_age = (uint32_t)(PERC_MAX_MS * (double)g_rate / 1000.0);
+    const double maxdelay = 512.0 / (double)g_rate;
+    const double mindelay = 1.0 / (double)g_rate;
 
     while (written < n) {
-        uint32_t next_t;
-        int32_t acc = 0;
-        int k, nactive = 0;
-
-        if (g_t >= g_total) {
+        if (g_ei >= g_ev_count) {
+            /* All events consumed.  Keep rendering the OPL tail (release
+             * decay / noise) until the requested frame count, matching the
+             * reference render_opl2.c tail loop.  Without this the dump
+             * would be zero-padded and the release tails would be lost. */
             if (g_loop) {
-                /* Rewind the sequence. The ringing voices are dropped rather
-                 * than carried over: their start stamps belong to the old
-                 * timeline and would produce negative envelope ages. */
-                memset(g_voices, 0, sizeof g_voices);
-                g_t  = 0;
-                g_ei = 0;
-            } else {
-                memset(&dst[written], 0, (size_t)(n - written) * sizeof(int16_t));
-                return n;
+                opl_panic();
+                reset_sequence_state();
+                continue;
             }
+            while (written < n) {
+                int v = (int)((double)resampler_tick() * gain);
+                if (v > 32767) v = 32767;
+                if (v < -32768) v = -32768;
+                dst[written++] = (int16_t)v;
+            }
+            return n;
         }
 
-        /* Apply every event that is due at or before this sample. */
-        while (g_ei < g_ev_count) {
-            next_t = (uint32_t)((double)g_ev[g_ei].tick / g_tick_rate * (double)g_rate);
-            if (next_t > g_t)
-                break;
-            apply_event(&g_ev[g_ei], g_t);
-            g_ei++;
+        if (g_call_left == 0) {
+            g_call_left = ADL_CHUNK;
+            g_call_skipped = g_skip > 0;
         }
 
-        for (k = 0; k < VOICES; k++)
-            if (g_voices[k].active)
-                nactive++;
-        if (nactive > g_peak_voices)
-            g_peak_voices = nactive;
+        double eat = g_delay < maxdelay ? g_delay : maxdelay;
+        uint32_t call = g_call_left < (n - written) ? g_call_left : (n - written);
+        uint32_t count;
+        if (g_call_skipped) {
+            count = g_skip < 2048 ? g_skip : 2048;
+        } else {
+            g_delay -= eat;
+            g_carry += (double)g_rate * eat;
+            count = (uint32_t)g_carry;
+            g_carry -= count;
+        }
+        if (count > call) {
+            g_skip = count - call;
+            count = call;
+        }
 
-        if (nactive == 0) {
-            /* Silence: skip straight to the next event instead of walking
-             * sample by sample (the sequence is ~5 minutes long). */
-            next_t = (g_ei < g_ev_count)
-                   ? (uint32_t)((double)g_ev[g_ei].tick / g_tick_rate * (double)g_rate)
-                   : g_total;
-            if (next_t <= g_t)
-                next_t = g_t + 1;
-            if (next_t > g_total)
-                next_t = g_total;
-            if (next_t - g_t > n - written)      /* never overrun the slice */
-                next_t = g_t + (n - written);
-            memset(&dst[written], 0, (size_t)(next_t - g_t) * sizeof(int16_t));
-            written += next_t - g_t;
-            g_t = next_t;
+        for (uint32_t i = 0; i < count; ++i) {
+            int v = (int)((double)resampler_tick() * gain);
+            if (v > 32767) v = 32767;
+            if (v < -32768) v = -32768;
+            dst[written++] = (int16_t)v;
+            ++g_rendered;
+        }
+        g_call_left -= count;
+
+        int pv = peak_voices_now();
+        if ((uint64_t)pv > g_peak_voices)
+            g_peak_voices = (uint64_t)pv;
+
+        if (g_call_skipped) {
+            g_skip -= count;
+            g_call_skipped = g_skip > 0;
             continue;
         }
 
-        for (k = 0; k < VOICES; k++) {
-            voice *v = &g_voices[k];
-            double e;
-            int idx;
+        g_wait -= eat;
+        while (g_ei < g_ev_count && g_wait <= mindelay * 0.5) {
+            uint32_t t = g_ev[g_ei].tick;
+            do {
+                apply_event(&g_ev[g_ei++], t);
+            } while (g_ei < g_ev_count && g_ev[g_ei].tick == t);
+            if (g_ei < g_ev_count)
+                g_wait += (double)(g_ev[g_ei].tick - t) / g_tick_rate;
+        }
+        g_delay = g_wait > 0.0 ? g_wait : 0.0;
 
-            if (!v->active)
-                continue;
-            /* XMI note-ons carry their own length and the parser expands them
-             * into note-offs, so a voice normally ends on time. This age-out
-             * stays as a safety net for the (few) notes that never get one:
-             * without it such a note would sound for the rest of the piece and
-             * pile up with every later note. Percussion uses a much shorter
-             * age - drums are one-shot sounds, and holding them for seconds
-             * used to fill the voice pool and silence the melodic tracks. */
-            if (!v->release &&
-                (g_t - v->start) > (v->percussive ? perc_age : max_age))
-                v->release = g_t;
-            e = envelope(v, g_t);
-            if (e <= 0.0) {
-                if (v->release)         /* the release has finished */
-                    v->active = 0;
-                continue;
-            }
-            if (v->w) {
-                /* General MIDI sample: linear interpolation + loop points. */
-                const int16_t *smp = (const int16_t *)v->w->data;
-                uint32_t nsamples = v->w->samples;
-                uint32_t i0;
-                double frac, sample;
-
-                if (v->w->loop_len) {
-                    while (v->pos >= (double)(v->w->loop_start + v->w->loop_len))
-                        v->pos -= (double)v->w->loop_len;
-                } else if (v->pos >= (double)nsamples - 1.0) {
-                    v->active = 0;
-                    continue;
-                }
-                i0 = (uint32_t)v->pos;
-                if (i0 >= nsamples)
-                    i0 = nsamples - 1;
-                frac = v->pos - (double)i0;
-                sample = (double)smp[i0];
-                if (i0 + 1 < nsamples)
-                    sample += ((double)smp[i0 + 1] - sample) * frac;
-                acc += (int32_t)(sample * e * ((double)v->volume / 127.0) *
-                                 v->gain / 6.0);
-                v->pos += v->sstep;
-            } else {
-                idx = (int)(v->phase * (double)TABLE_SIZE) & TABLE_MASK;
-                acc += (int32_t)((double)g_wave[idx] * e *
-                                 ((double)v->volume / 127.0) * v->gain / 2.0);
-                v->phase += v->step;
-                if (v->phase >= 1.0)
-                    v->phase -= floor(v->phase);
+        int64_t age_us = (int64_t)(eat * 1000000.0);
+        for (int v = 0; v < NUM_CH; ++v) {
+            if (!g_voice[v].used) {
+                g_voice[v].koff_us -= age_us;
+                if (g_voice[v].koff_us < 0)
+                    g_voice[v].koff_us = 0;
             }
         }
-        if (acc > 32767) acc = 32767;
-        if (acc < -32768) acc = -32768;
-        dst[written++] = (int16_t)((double)acc * gain);
-        g_t++;
     }
     return written;
 }
 
-/* Whole-song render, used for the --midi-dump WAV and the render statistics:
- * both are evidence of what the synthesiser produced and must stay at full
- * scale regardless of the output volume. */
+/* ---------------- Whole-song dump / statistics ---------------- */
+
 static int render(const synth_event *ev, int count, double tick_rate,
                   uint32_t rate, int16_t **out_pcm, uint32_t *out_samples)
 {
@@ -477,31 +671,12 @@ static int render(const synth_event *ev, int count, double tick_rate,
     return 1;
 }
 
-/* ------------------------------------------------------------- mixer ----- */
+/* ---------------- Mixer / volume ---------------- */
 
-/* The music half of src/audio.h: the device callback pulls one slice at a
- * time through synth_music_fill() and plays it straight away, so the level
- * in force *now* is what reaches the device - which is what makes
- * AIL_set_sequence_volume(seq, vol, ms) audible at all (docs/AUDIO.md §11.8).
- * There is no queue of pre-rendered slices any more, so a volume change can
- * never be baked into audio that is already waiting to be played, and there
- * is no stream thread to keep in step with it. */
-
-/* Sequence volume ramp - AIL_set_sequence_volume's `ms` argument. Stored in
- * the AIL 0..127 domain and interpolated in wall-clock time. */
 static double   g_seq_from = 127.0;
 static double   g_seq_to   = 127.0;
 static uint64_t g_ramp_t0;
 static int      g_ramp_ms;
-
-/* Start-of-stream gate (docs/PITFALLS.md §8-52): the game states the level
- * *after* AIL_start_sequence returns - play_bgm (0x25977) does set(seq,0,0)
- * then set(seq,127,2000) within microseconds. Anything rendered before that
- * would carry the *previous* track's level for its whole lifetime (a
- * full-volume burst, then a drop, then the game's own fade-in - round 35).
- * synth_play arms the gate through audio_hold_music(); the first
- * synth_set_sequence_volume opens it. The stamp only exists so the log can
- * say how long the silence lasted. */
 static uint64_t g_arm_t0;
 
 static double seq_volume_now(void)
@@ -518,44 +693,21 @@ static double seq_volume_now(void)
 
 static double stream_gain(void);
 
-/* Called from the audio device callback whenever it wants more music: render
- * one slice at the level the game asks for *now*, which is exactly what
- * gets heard. The running fade is logged from here because it is otherwise
- * only audible - "did the ramp actually happen" is the whole point. */
 static unsigned synth_music_fill(int16_t *dst, unsigned nframes)
 {
-    uint64_t now;
-    static uint64_t last_fade_log;
-
     stream_fill(dst, (uint32_t)nframes, stream_gain());
-
-    now = plat_now_ms();
-    if (g_ramp_ms > 0 && now - g_ramp_t0 < (uint64_t)g_ramp_ms &&
-        now - last_fade_log >= 500) {
-        last_fade_log = now;
-        printf("synth: fading %.0f -> %.0f over %d ms: now %.1f/127 "
-               "(%lu ms in)\n",
-               g_seq_from, g_seq_to, g_ramp_ms, seq_volume_now(),
-               (unsigned long)(now - g_ramp_t0));
-    }
     return nframes;
 }
 
 void synth_set_sequence_volume(int volume, int ms)
 {
-    if (volume < 0)
-        volume = 0;
-    if (volume > 127)
-        volume = 127;
-    /* Start from wherever the current ramp has got to, so a new request in the
-     * middle of a fade continues smoothly instead of jumping back. */
+    if (volume < 0)   volume = 0;
+    if (volume > 127) volume = 127;
     g_seq_from = seq_volume_now();
     g_seq_to   = (double)volume;
     g_ramp_ms  = ms > 0 ? ms : 0;
     g_ramp_t0  = plat_now_ms();
 
-    /* First request for a freshly started stream: open the gate so the mixer
-     * starts pulling - at this level, not at the stale one it armed with. */
     if (audio_music_held()) {
         audio_release_music();
         printf("synth: stream released after %lu ms -> sequence volume %.0f/127, "
@@ -565,10 +717,21 @@ void synth_set_sequence_volume(int volume, int ms)
     }
 }
 
+static int g_master_pct = 100;
+
 static double stream_gain(void)
 {
-    return seq_volume_now() / 127.0 * (double)g_master / 100.0;
+    return ((double)g_master_pct / 100.0) * (seq_volume_now() / 127.0);
 }
+
+void synth_set_master_volume(int percent)
+{
+    if (percent < 0)   percent = 0;
+    if (percent > 100) percent = 100;
+    g_master_pct = percent;
+}
+
+/* ---------------- Public play/stop API ---------------- */
 
 static const char *g_dump_wav_path;
 
@@ -577,52 +740,19 @@ void synth_set_dump_path(const char *path)
     g_dump_wav_path = path;
 }
 
-void synth_set_master_volume(int percent)
+int synth_is_playing(void)
 {
-    if (percent < 0)
-        percent = 0;
-    if (percent > 100)
-        percent = 100;
-    g_master = percent;
+    return audio_music_src() != NULL;
 }
 
-/* Write the rendered mix as a plain 16-bit mono PCM WAV. Playing the file
- * outside the game separates "is the sequence parsed and synthesised
- * correctly" from "does waveOut work", and makes tempo problems obvious
- * without needing a stopwatch. */
-static void dump_wav(const char *path, const int16_t *pcm, uint32_t samples,
-                     uint32_t rate)
+void synth_stop(void)
 {
-    uint8_t h[44];
-    FILE *f = fopen(path, "wb");
-    uint32_t data = samples * 2;
+    audio_set_music(NULL);
+}
 
-    if (!f) {
-        printf("synth: cannot write %s\n", path);
-        return;
-    }
-    memset(h, 0, sizeof h);
-    memcpy(h + 0, "RIFF", 4);
-    h[4]  = (uint8_t)(36 + data);       h[5]  = (uint8_t)((36 + data) >> 8);
-    h[6]  = (uint8_t)((36 + data) >> 16); h[7] = (uint8_t)((36 + data) >> 24);
-    memcpy(h + 8, "WAVEfmt ", 8);
-    h[16] = 16;                         /* fmt chunk size                */
-    h[20] = 1;                          /* PCM                           */
-    h[22] = 1;                          /* mono                          */
-    h[24] = (uint8_t)rate;              h[25] = (uint8_t)(rate >> 8);
-    h[26] = (uint8_t)(rate >> 16);      h[27] = (uint8_t)(rate >> 24);
-    h[28] = (uint8_t)(rate * 2);        h[29] = (uint8_t)((rate * 2) >> 8);
-    h[30] = (uint8_t)((rate * 2) >> 16); h[31] = (uint8_t)((rate * 2) >> 24);
-    h[32] = 2;                          /* block align                   */
-    h[34] = 16;                         /* bits per sample               */
-    memcpy(h + 36, "data", 4);
-    h[40] = (uint8_t)data;              h[41] = (uint8_t)(data >> 8);
-    h[42] = (uint8_t)(data >> 16);      h[43] = (uint8_t)(data >> 24);
-    fwrite(h, 1, sizeof h, f);
-    fwrite(pcm, 2, samples, f);
-    fclose(f);
-    printf("synth: dumped %.1f s of PCM to %s\n",
-           (double)samples / (double)rate, path);
+long synth_rendered_notes(void)
+{
+    return (long)g_notes;
 }
 
 int synth_play(const synth_event *ev, int count, double tick_rate,
@@ -630,94 +760,57 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
 {
     int16_t *pcm = NULL;
     uint32_t samples = 0;
-    uint64_t t0;
+    uint32_t rate = sample_rate;
+    uint64_t t0, t1;
+    double sec;
 
-    synth_stop();
-    if (!ev || count <= 0 || tick_rate <= 0.0)
+    if (!ev || count <= 0)
         return 0;
-    if (sample_rate < 8000 || sample_rate > 48000)
-        sample_rate = 22050;
-    if (!g_bank_tried) {
-        g_bank_tried = 1;
-        if (dls_load(&g_bank, g_dls_path))
-            printf("synth: using General MIDI samples from %s\n", g_bank.path);
-        else
-            printf("synth: no GM sound bank available - waveform synthesis only\n");
-    }
+
+    g_loop = loop ? 1 : 0;
     t0 = plat_now_ms();
-
-    /* Offline full render, exactly as before streaming existed: the --midi-dump
-     * WAV and the render statistics document what the synthesiser produced, so
-     * they stay at full scale and are not affected by the output volume. */
-    g_loop = 0;
-    if (!render(ev, count, tick_rate, sample_rate, &pcm, &samples))
+    if (!render(ev, count, tick_rate, rate, &pcm, &samples))
         return 0;
+    t1 = plat_now_ms();
+    sec = (double)samples / (double)rate;
+    uint64_t rendered_notes = g_notes, peak_voices = g_peak_voices;
+    printf("synth: %d events, %.3f s, %u samples, peak voices %llu, "
+           "notes %llu, rendered in %llu ms (%.1f x real-time)\n",
+           count, sec, (unsigned)samples,
+           (unsigned long long)peak_voices,
+           (unsigned long long)rendered_notes,
+           (unsigned long long)(t1 - t0),
+           (t1 > t0) ? sec / ((double)(t1 - t0) / 1000.0) : 0.0);
 
-    if (g_dump_wav_path && g_dump_wav_path[0])
-        dump_wav(g_dump_wav_path, pcm, samples, sample_rate);
-
-    {
-        uint32_t k, nonzero = 0;
-        int16_t peak = 0;
-        for (k = 0; k < samples; k++) {
-            if (pcm[k])
-                nonzero++;
-            if (pcm[k] > peak)
-                peak = pcm[k];
-            else if ((int16_t)-pcm[k] > peak)
-                peak = (int16_t)-pcm[k];
+    if (g_dump_wav_path) {
+        FILE *f = fopen(g_dump_wav_path, "wb");
+        if (f) {
+            uint8_t h[44] = {'R','I','F','F',0,0,0,0,'W','A','V','E',
+                             'f','m','t',' ',16,0,0,0,1,0,1,0,0,0,0,0,
+                             0,0,0,0,2,0,16,0,'d','a','t','a',0,0,0,0};
+            uint32_t data_bytes = samples * 2, riff = 36 + data_bytes;
+            memcpy(h + 4, &riff, 4);
+            memcpy(h + 24, &rate, 4);
+            uint32_t br = rate * 2;
+            memcpy(h + 28, &br, 4);
+            memcpy(h + 40, &data_bytes, 4);
+            fwrite(h, 1, 44, f);
+            fwrite(pcm, 2, samples, f);
+            fclose(f);
+            printf("synth: wrote MIDI dump %s (%u samples)\n",
+                   g_dump_wav_path, (unsigned)samples);
         }
-        printf("synth: rendered %ld notes (%ld GM samples, %ld drums) -> %.1f s of "
-               "16-bit PCM @ %u Hz (%.1f MB), loop=%d, non-silent %.1f%%, peak %d/32767, "
-               "polyphony %d, took %u ms\n",
-               g_notes, g_sampled_notes, g_drum_notes,
-               (double)samples / (double)sample_rate,
-               (unsigned)sample_rate,
-               (double)(samples * 2) / (1024.0 * 1024.0), loop,
-               100.0 * (double)nonzero / (double)samples, (int)peak,
-               g_peak_voices, (unsigned)(plat_now_ms() - t0));
     }
     free(pcm);
-    pcm = NULL;
 
-    /* Hand the music to the one mixer in src/audio.h. Detach first (a source
-     * can still be installed from a track nobody stopped), build the fresh
-     * stream, then hold the gate *before* publishing the source - the mixer
-     * must not pull a slice before the game has stated this track's level
-     * (docs/PITFALLS.md §8-52). */
-    audio_set_music(NULL);
-    g_loop = loop;
-    stream_init(ev, count, tick_rate, sample_rate);
+    stream_init(ev, count, tick_rate, rate);
     g_arm_t0 = plat_now_ms();
     audio_hold_music();
     audio_set_music(synth_music_fill);
-    printf("synth: music source installed (%u Hz, loop=%d), gate held until "
-           "the game states the level (sequence volume %.0f/127)\n",
-           sample_rate, loop, seq_volume_now());
     return 1;
 }
 
 void synth_set_bank_path(const char *path)
 {
-    g_dls_path = path;
-}
-
-void synth_stop(void)
-{
-    /* Detach first: once the pointer is gone the mixer pulls nothing, and
-     * audio_set_music() takes the same lock the callback mixes under, so no
-     * slice is ever rendered from state that is about to be rebuilt. There
-     * is no device buffer to drain any more - the hard cut is now "the next
-     * mix contains no music", which is what AIL_stop_sequence asked for. */
-    audio_set_music(NULL);
-}
-
-int synth_is_playing(void)
-{
-    return audio_music_src() != NULL;
-}
-
-long synth_rendered_notes(void)
-{
-    return g_notes;
+    (void)path;
 }

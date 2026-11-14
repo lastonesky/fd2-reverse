@@ -84,14 +84,27 @@ static uint32_t      g_tempo_us = XMIDI_DEFAULT_TEMPO;
 static int           g_tick_rate;       /* 0 = derive from tempo          */
 static int           g_backend = 1;     /* 0 = MIDI Mapper, 1 = built-in synth */
 
-/* Original AIL playback rate. g_tempo_us is parsed only so the log can show
- * what the file claims; it must not change the wall-clock rate.
- * A command-line override (xmidi_set_tick_rate) is still honoured for tests. */
+/* Playback tick rate.  The original AIL sequencer ran at a fixed 120 ticks/s
+ * (see the block comment above XMIDI_FIXED_TICKS_PER_SEC), but the reference
+ * render chain (xmi2mid -> libADLMIDI) derives the rate from the file's tempo
+ * meta: ppqn = tempo * 9 / 25000 (integer), tick_rate = ppqn * 1e6 / (3 * tempo).
+ * For the default tempo (500000 us/beat) this is exactly 120; for other tempos
+ * it lands within ~1% of 120 because the ppqn scaling normalises the BPM away.
+ * Using the tempo *directly* (BPM = 6e7 / tempo) would be wrong -- that made
+ * 塞拉村 play 1.58x too fast -- but the ppqn-normalised formula does not.
+ * We follow the reference formula so the OPL output stays sample-identical to
+ * the libADLMIDI render used to tune the patch bank.  A command-line override
+ * (xmidi_set_tick_rate) is still honoured for tests. */
 static double effective_tick_rate(void)
 {
+    int32_t ppqn;
+
     if (g_tick_rate > 0)
         return (double)g_tick_rate;
-    return XMIDI_FIXED_TICKS_PER_SEC;
+    ppqn = (int32_t)((int64_t)g_tempo_us * 9 / 25000);
+    if (ppqn <= 0)
+        return XMIDI_FIXED_TICKS_PER_SEC;
+    return (double)ppqn * 1000000.0 / (3.0 * (double)g_tempo_us);
 }
 
 /* ------------------------------------------------------------ parsing --- */

@@ -35,7 +35,8 @@ else
 endif
 
 # Backend (reused from port/) + adapter layer + entry.
-HOST_SRCS := host_args.c dls.c synth.c audio_sokol.c xmidi.c keys.c \
+HOST_SRCS := host_args.c synth.c audio_sokol.c xmidi.c keys.c \
+             emu8950/emu8950.c emu8950/emuadpcm.c \
              platform_posix.c render_sokol.c sokol_impl.c \
              fd2_audio.c fd2_video.c fd2_platform.c fd2_kernel.c main_sokol.c
 
