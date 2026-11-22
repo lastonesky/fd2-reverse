@@ -28,6 +28,10 @@
 #include "audio.h"
 #include "synth.h"
 #include "../src/game/fd2_game.h"   /* boot.h: fd2_game_main, globals */
+#include "xmidi.h"
+#ifdef FD2_WITH_ADLMIDI
+#include "adl_backend.h"
+#endif
 
 extern void fd2_data_init(void);
 void fd2_install_crash_handler(void);
@@ -704,6 +708,32 @@ int fd2_engine_init(int argc, char **argv)
     fd2_video_default_palette();
     fd2_video_init();
     synth_set_bank_path(NULL);           /* default timbre until a DLS is set */
+    {
+        /* Music backend: the built-in OPL2 renderer (default), libADLMIDI
+         * (`--midi-backend=adlmidi`, ADLMIDI=1 builds) or the Windows MIDI
+         * Mapper.  MIDI_BACKEND is also the CLI spelling --midi-backend=... */
+        const char *mb = host_arg("MIDI_BACKEND");
+
+#ifdef FD2_WITH_ADLMIDI
+        if (!mb || !*mb)
+            mb = "adlmidi";              /* this build exists to hear it     */
+#endif
+        if (mb && *mb)
+            xmidi_set_backend_name(mb);
+        printf("fd2: midi backend = %s\n",
+               xmidi_backend() == 2 ? "adlmidi" :
+               xmidi_backend() == 1 ? "opl2 (built-in)" : "winmidi");
+#ifdef FD2_WITH_ADLMIDI
+        {
+            const char *ac = host_arg("ADL_CHIPS");
+
+            if (ac && *ac)
+                adl_backend_set_chips(atoi(ac));
+            printf("fd2: adlmidi chips = %d (%d melodic voices)\n",
+                   adl_backend_chips(), adl_backend_chips() * 18);
+        }
+#endif
+    }
     {
         /* Voice count: 9 = one OPL2 = the DOS original (ADLIB.MDI), 18 = two
          * chips = libADLMIDI's single-chip layout (the mode the reference

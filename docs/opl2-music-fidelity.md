@@ -653,3 +653,51 @@ FD2_OPL_CHANNELS=18 ./engine_check <FDMUS.DAT> 18 r18.wav
 FD2_OPL_CHANNELS=9  ./engine_check <FDMUS.DAT> 18 r9.wav
 python3 cmp_song.py r9.wav r18.wav
 ```
+
+---
+
+## 15. 分支 `feature/libadlmidi-backend`：直接接 libADLMIDI
+
+目的：让"参考音色"能直接在游戏里听，而不是只能听 `build/oplbench/r*.wav`。
+
+### 15.1 接线方式
+
+复用了 `host/xmidi.c` 已有的后端开关（原先 0 = Windows MIDI Mapper、1 = 内置 OPL2），
+新增 **2 = libADLMIDI**：
+
+```
+FDMUS.DAT ──res_load──> XDIR/XMI blob
+                          ├── g_backend==1 : xmidi.c 自己解析 EVNT -> synth.c(emu8950)
+                          └── g_backend==2 : 原样交给 adl_openData() -> libADLMIDI
+```
+
+- `host/adl_backend.c/.h`：`adl_init(audio_rate())` → `adl_setNumChips` →
+  `adl_setLoopEnabled` → `adl_switchEmulator(NUKED)` → `adl_setBank(0)`
+  （bank 0 = `AIL (The Fat Man 2op set, default AIL)`，与 `opl2_patches.h` 同源）→
+  `adl_openData(blob)`。
+- 混音：ADLMIDI 输出交错立体声 int16，`adl_play()` **恰好渲染被请求的帧数**并按采样推进
+  序列器，所以在音频回调里按 2048 帧分块拉流就是实时播放；每块折成单声道
+  `(L+R)/2`、乘上 AIL 序列音量 × `--volume`（含 AIL 的 `ms` 渐变）后交给
+  `host/audio.h` 的混音器。开始闸门（`audio_hold_music`）与 `synth.c` 同一套语义。
+- 构建：`make engine ADLMIDI=1 [ADLMIDI_DIR=...]`；`--midi-backend=opl2` 在同一份二进制里
+  切回 emu8950（对比用），`--adl-chips=N` 改仿真芯片数（默认 1）。
+
+### 15.2 验证（离线，`FD2_RATE=49716`）
+
+用同一份 FDMUS 资源（18 号 = 开头动画 = song14）走 `adl_backend` 导出，与
+`build/oplbench/r14.wav`（`render_wav.cpp` 现渲染）对比：
+
+- 直接调 `adl_openData`+`adl_play` 的对照程序（`/tmp/adlraw.c`）输出与 `r14.wav`
+  **MD5 完全相同**（`9b79e60d…`）→ 说明库配置（bank/chips/emulator/块大小）与参考一致；
+- 走 `xmidi_play()` 的端到端输出 → 包络相关 0.988 / rms 0.99（残差来自"参考是立体声、
+  游戏是单声道"的 `(L+R)/2` 下混，与 1 LSB 取整），无时序偏移。
+
+**调用的顺序有讲究**：先 `setBank` 后 `setNumChips` 时与参考只有 56% 采样相同；
+改成 render_wav 的顺序（chips → loop → emulator → bank → open）后升到 75%（其余为下混），
+raw 对照则完全一致。
+
+### 15.3 许可与分发
+
+libADLMIDI 是 **LGPL-2.1**，本仓库**不 vendor** 它的源码（`ADLMIDI_DIR` 指向本地 checkout
+的 .o）。本分支只调用它的公开 C API，不改它的源码（它自己的 `AGENTS.md` 禁止 AI 生成的贡献）。
+要正式发布这个后端，需要决定：动态链接 `.so`，或随包提供可重链接的 `.o`。

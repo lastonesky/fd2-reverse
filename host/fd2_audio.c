@@ -41,6 +41,9 @@
 #include "platform.h"
 #include "xmidi.h"
 #include "synth.h"
+#ifdef FD2_WITH_ADLMIDI
+#include "adl_backend.h"
+#endif
 #include "audio.h"
 
 #define AIL_OBJ0_BASE    0x00010000u
@@ -188,6 +191,9 @@ void ail_set_master_volume(int percent)
         percent = 100;
     g_master_volume = percent;
     synth_set_master_volume(percent);
+#ifdef FD2_WITH_ADLMIDI
+    adl_backend_set_master_volume(percent);
+#endif
     printf("ail: master output volume = %d%% (music + SFX scaled in the mixer)\n",
            percent);
 }

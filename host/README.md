@@ -16,6 +16,7 @@ port 里与“运行原始机器码”强耦合的部分（LE 加载、repl 热�
 | `synth.h/.c` | 软件 MIDI 合成器（OPL2 + Fat Man/AIL 音色库，序列渲染成 PCM；声道数 `--opl-channels=9|18`，9=单 OPL2 原味/需偷声，18=对拍参考） | audio/emu8950/opl2_patches |
 | `xmidi.h/.c` | XMIDI 解析（AIL 的曲目格式；≠标准 SMF） | synth/audio |
 | `emu8950/` | emu8950 OPL2 芯片仿真（`emu8950.c/.h` + `emuadpcm.c/.h`） | — |
+| `adl_backend.h/.c` | **可选** libADLMIDI 音乐后端（`make engine ADLMIDI=1`）：XMI 交给 `adl_openData`，`adl_play` 按帧拉流、折单声道后进混音器；`--midi-backend=adlmidi` | libADLMIDI（LGPL-2.1，不 vendor） |
 | `opl2_patches.h` `opl2_drumkey.h` `ail_freq.h` | Fat Man/AIL OPL2 音色库、打击乐键映射、AIL 频率表 | — |
 | `keys.h`、`keys.c`、`keys_win32.c` | 便携键词汇 `fr_key` ↔ BIOS 扫描码 | 平台 |
 | `platform_posix.c`、`platform_win32.c` | `src/platform.h` 的 OS 实现（内存/文件/线程/时钟） | 平台系统头 |

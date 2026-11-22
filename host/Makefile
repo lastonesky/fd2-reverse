@@ -48,6 +48,29 @@ GAME_SRCS := $(wildcard ../src/game/*.c) \
 # Windows-only files (render_gdi.c / keys_win32.c / platform_win32.c) excluded.
 CHECK_SRCS := $(filter-out main_sokol.c,$(HOST_SRCS))
 
+# ---------------------------------------------------------------------------
+# OPTIONAL: libADLMIDI music backend (experiment branch).
+#
+#   make engine ADLMIDI=1 [ADLMIDI_DIR=/path/to/libADLMIDI]
+#
+# The library is NOT vendored in this repository (LGPL-2.1, and its tree is a
+# checkout of its own); point ADLMIDI_DIR at a built libADLMIDI checkout, whose
+# object files live next to its sources.  The ADLMIDI build defaults to
+# --midi-backend=adlmidi; `--midi-backend=opl2` still selects host/synth.c,
+# which stays compiled in either way.
+# ---------------------------------------------------------------------------
+ifeq ($(ADLMIDI),1)
+ADLMIDI_DIR ?= ../build/oplbench/libADLMIDI
+ADL_INC     := $(ADLMIDI_DIR)/include
+ADL_OBJS    := $(wildcard $(ADLMIDI_DIR)/*.o)
+ifeq ($(strip $(ADL_OBJS)),)
+$(error ADLMIDI=1 but no object files in $(ADLMIDI_DIR) - build libADLMIDI first)
+endif
+CPPFLAGS += -DFD2_WITH_ADLMIDI -I$(ADL_INC)
+HOST_SRCS += adl_backend.c
+HOST_LIBS += $(ADL_OBJS) -lstdc++
+endif
+
 .PHONY: all check objs engine image clean
 all: check
 

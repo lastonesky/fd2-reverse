@@ -4320,3 +4320,24 @@ Linux 已 `make engine` 重建；**Windows 侧仍需 `pwsh -File build.ps1`**。
 比对（§8.3-3），或先用 `--opl-channels=18` 退回可对拍的 18 声道。
 
 Linux 已 `make engine` 重建；**Windows 侧仍需 `pwsh -File build.ps1`**。
+
+### 7.58 分支 `feature/libadlmidi-backend`：libADLMIDI 后端（实验）
+
+用户要"听一下 libADLMIDI 的声音"。复用 `host/xmidi.c` 的后端开关，新增
+**2 = libADLMIDI**：XDIR/XMI 原样交给 `adl_openData()`，混音回调里按 2048 帧拉
+`adl_play()`（它恰好渲染请求的帧数并按采样推进序列器），折成单声道 `(L+R)/2`，
+再乘 AIL 序列音量 × `--volume`（含 `ms` 渐变）；开始闸门与 `synth.c` 同一套语义。
+
+- 新文件 `host/adl_backend.c/.h`；`host/Makefile` 加 `ADLMIDI=1`（`ADLMIDI_DIR` 指向
+  本地 libADLMIDI checkout 的 .o，**不 vendor**，LGPL-2.1）；
+- `--midi-backend=winmidi|opl2|adlmidi` 首次真正接上（`xmidi_set_backend()` 此前全仓无调用点，
+  见 §7.53）；`--adl-chips=N`；ADLMIDI 构建默认走 adlmidi，`--midi-backend=opl2` 可原地切回；
+- 库配置与 `render_wav.cpp` 完全对齐（bank 0 = AIL Fat Man 2-op、1 chip、Nuked OPL3、
+  chips→loop→emulator→bank→open 的调用顺序；顺序错了只有 56% 采样一致）；
+- 验证：同一份 FDMUS[18] 经 `adl_openData`+`adl_play` 直出 WAV 与
+  `build/oplbench/r14.wav` **MD5 相同**；走 `xmidi_play()` 的端到端输出包络相关 0.988、
+  rms 0.99（残差全是立体声→单声道下混）。
+
+Linux 已构建并把二进制复制到游戏目录（`FD2/fd2engine` = adlmidi 版，
+`FD2/fd2engine-opl2` = 默认 emu8950 版，旧版备份为 `fd2engine.old-<时间>`）。
+Windows 侧未构建。

@@ -47,6 +47,9 @@ typedef void *HMIDIOUT;
 #include "xmidi.h"
 #include "synth.h"
 #include "audio.h"
+#ifdef FD2_WITH_ADLMIDI
+#include "adl_backend.h"
+#endif
 
 #define XMIDI_TICKS_PER_BEAT 60          /* XMI's nominal resolution      */
 #define XMIDI_DEFAULT_TEMPO  500000u     /* microseconds per beat (120 BPM) */
@@ -82,7 +85,9 @@ static int           g_volume = 127;
 static int           g_loop_count = 1;
 static uint32_t      g_tempo_us = XMIDI_DEFAULT_TEMPO;
 static int           g_tick_rate;       /* 0 = derive from tempo          */
-static int           g_backend = 1;     /* 0 = MIDI Mapper, 1 = built-in synth */
+/* 0 = Windows MIDI Mapper, 1 = built-in synth (host/synth.c), 2 = libADLMIDI
+ * (host/adl_backend.c, only in `make engine ADLMIDI=1` builds). */
+static int           g_backend = 1;
 
 /* Playback tick rate.  The original AIL sequencer ran at a fixed 120 ticks/s
  * (see the block comment above XMIDI_FIXED_TICKS_PER_SEC), but the reference
@@ -439,6 +444,14 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
         printf("xmidi: no EVNT chunk in %u bytes\n", (unsigned)len);
         return 0;
     }
+#ifdef FD2_WITH_ADLMIDI
+    /* libADLMIDI parses the IFF/XMIDI container itself; hand it the same blob
+     * the game gave AIL (no need to run our own EVNT parser first). */
+    if (g_backend == 2) {
+        g_loop_count = loop_count;
+        return adl_backend_play(blob, len, loop_count);
+    }
+#endif
     if (!parse_evnt(evnt, evnt_len, &skips)) {
         printf("xmidi: failed to parse EVNT (%u bytes)\n", (unsigned)evnt_len);
         return 0;
@@ -556,6 +569,9 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
 
 void xmidi_stop(void)
 {
+#ifdef FD2_WITH_ADLMIDI
+    adl_backend_stop();
+#endif
     synth_stop();
     if (plat_atomic_read(&g_playing)) {
         int waited = 0;
@@ -572,6 +588,10 @@ void xmidi_set_volume(int volume)
 {
     g_volume = volume < 0 ? 0 : (volume > 127 ? 127 : volume);
     midi_set_volume(g_volume);
+#ifdef FD2_WITH_ADLMIDI
+    if (g_backend == 2)
+        adl_backend_set_volume(g_volume, 0);
+#endif
 }
 
 void xmidi_set_tick_rate(int ticks_per_second)
@@ -587,10 +607,41 @@ void xmidi_set_test(int on)
     g_midi_test = on ? 1 : 0;
 }
 
-/* 0 = Windows MIDI Mapper, 1 = built-in software synthesiser (default). */
-void xmidi_set_backend(int backend)
+/* 0 = Windows MIDI Mapper, 1 = built-in software synthesiser (default),
+ * 2 = libADLMIDI (returns 0 only when this build has no ADLMIDI backend). */
+int xmidi_set_backend(int backend)
 {
-    g_backend = backend ? 1 : 0;
+    if (backend == 2) {
+#ifndef FD2_WITH_ADLMIDI
+        printf("xmidi: this build has no libADLMIDI backend "
+               "(rebuild with `make engine ADLMIDI=1`)\n");
+        return 0;
+#endif
+    }
+    g_backend = backend;
+    return 1;
+}
+
+/* --midi-backend=winmidi|opl2|adlmidi (0/-1 = leave as is). */
+int xmidi_set_backend_name(const char *name)
+{
+    if (!name || !*name)
+        return 1;
+    if (!plat_stricmp(name, "winmidi") || !plat_stricmp(name, "system"))
+        return xmidi_set_backend(0);
+    if (!plat_stricmp(name, "opl2") || !plat_stricmp(name, "synth") ||
+        !plat_stricmp(name, "builtin"))
+        return xmidi_set_backend(1);
+    if (!plat_stricmp(name, "adlmidi") || !plat_stricmp(name, "adl"))
+        return xmidi_set_backend(2);
+    printf("xmidi: unknown --midi-backend='%s' "
+           "(winmidi|opl2|adlmidi)\n", name);
+    return 0;
+}
+
+int xmidi_backend(void)
+{
+    return g_backend;
 }
 
 int xmidi_is_playing(void)

@@ -23,8 +23,14 @@ void xmidi_set_test(int on);
 
 /* 0 = play through the Windows MIDI Mapper, 1 (default) = render with the
  * built-in software synthesiser in synth.c and stream it into the software
- * mixer (src/audio.h). */
-void xmidi_set_backend(int backend);
+ * mixer (src/audio.h), 2 = hand the XMI to libADLMIDI (host/adl_backend.c;
+ * only present in `make engine ADLMIDI=1` builds - returns 0 otherwise, in
+ * which case the backend is left unchanged). */
+int  xmidi_set_backend(int backend);
+
+/* --midi-backend=winmidi|opl2|adlmidi. Returns 0 for an unknown/absent name. */
+int  xmidi_set_backend_name(const char *name);
+int  xmidi_backend(void);
 int  xmidi_is_playing(void);
 
 #endif /* FD2_XMIDI_H */
