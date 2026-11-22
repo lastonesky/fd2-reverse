@@ -449,7 +449,9 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
      * the game gave AIL (no need to run our own EVNT parser first). */
     if (g_backend == 2) {
         g_loop_count = loop_count;
-        return adl_backend_play(blob, len, loop_count);
+        /* AIL: loop_count 0 = repeat forever, non-zero = one-shot (the same
+         * mapping synth_play() gets below). */
+        return adl_backend_play(blob, len, loop_count == 0);
     }
 #endif
     if (!parse_evnt(evnt, evnt_len, &skips)) {
@@ -566,6 +568,19 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
            effective_tick_rate(), skips, loop_count);
     return 1;
 }
+
+#ifdef FD2_WITH_ADLMIDI
+/* Play an enclosing XMI file (FORM ... XDIRINFO with a nested FORM XMID) -
+ * what the game hands AIL. libADLMIDI's own loader only understands this
+ * whole-file view, not the bare inner FORM XMID that locate_xmid() digs out
+ * for our EVNT parser, so the ADLMIDI backend gets it from here. */
+int xmidi_play_raw(const uint8_t *file, uint32_t len, int loop_count)
+{
+    xmidi_stop();
+    g_loop_count = loop_count;
+    return adl_backend_play(file, len, loop_count == 0);   /* 0 = loop forever */
+}
+#endif
 
 void xmidi_stop(void)
 {

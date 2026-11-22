@@ -73,6 +73,10 @@ typedef struct {
     int             used;
     const uint8_t  *data;     /* XMIDI blob inside FDMUS.DAT               */
     uint32_t        len;      /* derived from the IFF FORM header          */
+    const uint8_t  *raw;      /* whole XMI file (FORM ... XDIRINFO ...) the
+                               * game handed AIL: libADLMIDI only accepts the
+                               * outer file, not the inner "FORM XMID"     */
+    uint32_t        raw_len;
     int32_t         seq_num;
     int32_t         volume;
     int32_t         loop_count;
@@ -531,6 +535,19 @@ static void host_AIL_init_sequence(void *h, void *start, int32_t sequence_num)
     }
     q->data = blob;
     q->len = len;
+    /* The XMID sits inside an enclosing "FORM ... XDIRINFO" XMI file whose own
+     * length field covers only its 8-byte header + id, so the total length is
+     * (offset of the XMID) + 8 + the XMID's own big-endian FORM length. That
+     * whole-file view is what libADLMIDI's loader understands. */
+    q->raw = (const uint8_t *)start;
+    q->raw_len = 0;
+    {
+        uint32_t off = (uint32_t)(blob - (const uint8_t *)start);
+        uint32_t size = ((uint32_t)blob[4] << 24) | ((uint32_t)blob[5] << 16) |
+                        ((uint32_t)blob[6] << 8)  | (uint32_t)blob[7];
+
+        q->raw_len = off + 8 + size;
+    }
     printf("ail: init_sequence(seq=%d) base=%p song=%p len=%u head=%c%c%c%c\n",
            (int)sequence_num, start, (const void *)blob, (unsigned)len,
            blob[0], blob[1], blob[2], blob[3]);
@@ -543,6 +560,18 @@ static void host_AIL_start_sequence(void *h)
     if (!q || !q->data)
         return;
     q->playing = 1;
+#ifdef FD2_WITH_ADLMIDI
+    if (xmidi_backend() == 2 && q->raw && q->raw_len >= q->len) {
+        /* libADLMIDI wants the enclosing XMI file; see q->raw above. */
+        printf("ail: start_sequence(seq=%d) - adlmidi gets the %u-byte XMI file "
+               "(XDIR %u -> XMID %u)\n", (int)q->seq_num,
+               (unsigned)q->raw_len, (unsigned)q->raw_len, (unsigned)q->len);
+        if (!xmidi_play_raw(q->raw, q->raw_len, q->loop_count))
+            printf("ail: start_sequence(seq=%d) - playback unavailable\n",
+                   (int)q->seq_num);
+        return;
+    }
+#endif
     if (!xmidi_play(q->data, q->len, q->loop_count))
         printf("ail: start_sequence(seq=%d) - playback unavailable\n", (int)q->seq_num);
 }

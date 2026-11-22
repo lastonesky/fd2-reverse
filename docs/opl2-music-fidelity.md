@@ -701,3 +701,31 @@ raw 对照则完全一致。
 libADLMIDI 是 **LGPL-2.1**，本仓库**不 vendor** 它的源码（`ADLMIDI_DIR` 指向本地 checkout
 的 .o）。本分支只调用它的公开 C API，不改它的源码（它自己的 `AGENTS.md` 禁止 AI 生成的贡献）。
 要正式发布这个后端，需要决定：动态链接 `.so`，或随包提供可重链接的 `.o`。
+
+### 15.4 坑：libADLMIDI 只认外层 XMI 文件，不认裸的 `FORM XMID`
+
+第一版接上后进游戏**没有 BGM**，日志是：
+
+```
+ail: init_sequence(seq=0) base=...4e0 song=...502 len=9850 head=FORM
+adlmidi: openData(9850 bytes) failed: Unknown or unsupported file format
+```
+
+因为游戏侧的 `locate_xmid()`（FDMUS 的 IFF 树遍历）交给播放器的是最内层的
+`FORM XMID`（`TIMB`/`EVNT` 容器），而 libADLMIDI 的加载器要的是**整份 XMI 文件**：
+
+```
+FORM 0000000e XDIRINFO 00000002 0100 CAT ...      <- ADL 认这个
+  └─ FORM 002672 XMID TIMB ...                    <- ADL 不认识（= locate_xmid 的产物）
+```
+
+而且外层 `FORM XDIRINFO` 的长度字段只有 14（只覆盖它自己的 8+6 字节头），**不能**用它算
+整份文件长度。可行算法：`total = (XMID 相对 start 的偏移) + 8 + XMID 自己的 big-endian 长度`，
+对 FDMUS 全部 15 首验证过，结果恰好等于资源表里的 `end - start`（都是 XMID@0x22）。
+
+实现：`host/fd2_audio.c` 的 `ail_seq` 新增 `raw`/`raw_len`，`AIL_start_sequence` 在
+backend==2 时走新增的 `xmidi_play_raw()`。
+
+另一处：AIL 的 `loop_count` 语义是 **0 = 无限循环**（`bgm_play(track, 0)` 全是循环曲，
+`bgm_play(16/17, 1)` 是过场小曲），`synth_play()` 已经按 `count == 0` 映射；
+ADLMIDI 分支第一版写反了（0 当成不循环），一曲播完就静音，已改为 `loop_count == 0`。

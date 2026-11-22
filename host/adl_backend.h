@@ -19,8 +19,9 @@
 
 #include <stdint.h>
 
-/* Start playing `blob` (the XMI the game handed AIL). loop != 0 makes the
- * song repeat. Returns 1 on success, 0 if libADLMIDI could not open it. */
+/* Start playing `blob`. `loop` != 0 makes the song repeat (callers pass
+ * AIL's "loop_count == 0" as 1 - see xmidi_play). Returns 1 on success, 0 if
+ * libADLMIDI could not open it. */
 int  adl_backend_play(const uint8_t *blob, uint32_t len, int loop);
 
 /* Stop and release the music stream (the device stays initialised). */

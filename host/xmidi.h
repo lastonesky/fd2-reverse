@@ -13,6 +13,11 @@
  * encoding notes. */
 
 int  xmidi_play(const uint8_t *blob, uint32_t len, int loop_count);
+
+/* libADLMIDI only: play the enclosing XMI file (FORM ... XDIRINFO ...), which
+ * is the form the game hands AIL - the bare inner "FORM XMID" that xmidi_play
+ * gets is rejected by its loader. Only present in ADLMIDI=1 builds. */
+int  xmidi_play_raw(const uint8_t *file, uint32_t len, int loop_count);
 void xmidi_stop(void);
 void xmidi_set_volume(int volume);      /* 0..127, applied as channel volume */
 void xmidi_set_tick_rate(int ticks_per_second);

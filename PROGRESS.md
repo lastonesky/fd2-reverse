@@ -4341,3 +4341,21 @@ Linux 已 `make engine` 重建；**Windows 侧仍需 `pwsh -File build.ps1`**。
 Linux 已构建并把二进制复制到游戏目录（`FD2/fd2engine` = adlmidi 版，
 `FD2/fd2engine-opl2` = 默认 emu8950 版，旧版备份为 `fd2engine.old-<时间>`）。
 Windows 侧未构建。
+
+### 7.59 修：ADLMIDI 后端进游戏后没有 BGM
+
+@7.58 接上后进游戏静音，日志为 `adlmidi: openData(9850 bytes) failed: Unknown or
+unsupported file format`。根因：游戏侧 `locate_xmid()` 交给播放器的是最内层
+`FORM XMID`，而 libADLMIDI 只认**整份 XMI 文件**（`FORM ... XDIRINFO ... CAT ...`）；
+且外层 `XDIRINFO` 的长度字段只有 14 字节（只覆盖自己的头），不能拿来当文件长度。
+
+- `host/fd2_audio.c`：`ail_seq` 增加 `raw`/`raw_len`，
+  `raw_len = XMID偏移 + 8 + XMID的BE长度`（15 首验证均等于资源表 `end-start`），
+  `AIL_start_sequence` 在 backend==2 时用新增的 `xmidi_play_raw()`；
+- 同处修正 `loop_count` 语义：AIL 的 **0 = 无限循环**（`bgm_play(track,0)` 是循环 BGM，
+  16/17 号过场曲是 1），ADLMIDI 分支第一版把 0 当成不循环 → 一曲播完就静音；
+- 日志新增 `ail: start_sequence(...) - adlmidi gets the N-byte XMI file (XDIR A -> XMID B)`。
+
+验证：用 `host/fd2_audio.c` 的真实 AIL 路径（`AIL_init_sequence/start_sequence/
+set_sequence_volume` + 混音拉流）跑 18 号曲 → `RESULT 3.07s blocks=33 silent=0 peak=10990`；
+15 首全部有输出；短曲 one-shot 播完即止。
