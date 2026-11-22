@@ -4291,3 +4291,32 @@ make）后面紧接 `sokol: window unfocused`，此后整场再没有 `B8`（Alt
 临时解药是把那个键再按一下松开（break 到达即解除）。
 
 Linux 已 `make engine` 重建；**Windows 侧仍需 `pwsh -File build.ps1`**。
+
+### 7.57 音乐：9 声道（单 OPL2）+ 偷声统计，声道数改为运行时选项
+
+用户要求"先做 9 声道 + AIL 偷声"，并反馈弦乐"过于响和直、响声过长"（与 18 声道下
+没有任何偷声、音符叠加过多一致）。
+
+先纠正 §8.1 的一个前提：`libADLMIDI` 的 `adl_setNumChips(dev,1)` 不是 9 声道，而是
+`m_numChannels = m_numChips * NUM_OF_CHANNELS`，`NUM_OF_CHANNELS=23`（18×2-op + 5 节奏），
+所以 `build/oplbench/r*.wav` 那批"参考"实际是 **18 声道**——这正是 `NUM_CH` 当初取 18
+才能对上参考的原因。也就是说参考基线不等于 DOS 原味，9 声道这一档**没有自动判据**。
+
+实现（`host/synth.c`、`host/synth.h`、`host/fd2_kernel.c`、`host/host_args.c`）：
+- `synth_set_channels(9|18)`；命令行 `--opl-channels=9|18`（`FD2_OPL_CHANNELS`），默认 **9**；
+  启动日志多一行 `fd2: opl voices = N`。
+- 两颗 emu8950 仍都实例化：18ch 的寄存器流与改动前**逐字节相同**（`FD2_WRITELOG` 16951 条
+  写入 0 差异，PCM `cmp` 相同）；9ch 时 chip1 只被初始化序列静音、永不 key-on。
+  `ref_init_chip()` 改为按 `g_num_ch` 循环（与 ADL 1-chip 日志前 72 行一致），
+  `ref_silence_all()` 的 18 通道扫描**保持不变**（改它会让 18ch 不再逐字节一致）。
+- 偷声：`find_voice()`/`channel_goodness()` 本来就是 ADL `calculateChipChannelGoodness` 的
+  转写，18ch 下几乎不触发；9ch 下补上 ADL 对踏板音的权重（`-5e5 - kon/2` vs `-4e6 - kon`）。
+  统计行新增 `stolen N`。
+- 新增 `FD2_WRITELOG=1`（生产 `synth.c` 也能像 `render_opl2` 一样导寄存器流）。
+
+实测 15 首：偷声最多的是 song05 638/2846、song14 567/2256、song02 282/1422；song01/09/10/12/13
+零偷声。9ch vs 18ch 包络相关 0.68~0.99、rms 0.85~1.03（明细见
+`docs/opl2-music-fidelity.md` §14）。**主观听感未验证**：9ch 无参考基线，需与 DOSBox 录音
+比对（§8.3-3），或先用 `--opl-channels=18` 退回可对拍的 18 声道。
+
+Linux 已 `make engine` 重建；**Windows 侧仍需 `pwsh -File build.ps1`**。

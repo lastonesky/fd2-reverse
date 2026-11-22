@@ -35,6 +35,13 @@ void synth_set_sequence_volume(int volume, int ms);
 int  synth_is_playing(void);
 long synth_rendered_notes(void);
 
+/* Number of OPL voices: 9 (one OPL2 chip - the DOS original, ADLIB.MDI, where
+ * the allocator must steal) or 18 (two chips - libADLMIDI's single-chip layout,
+ * which is what build/oplbench's reference renders were made with).
+ * Default 9.  Must be set before the first synth_play(). */
+void synth_set_channels(int n);
+int  synth_channels(void);
+
 /* Override the General MIDI sound bank path (default: the Windows gm.dls). */
 void synth_set_bank_path(const char *path);
 

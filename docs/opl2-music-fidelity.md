@@ -585,3 +585,71 @@ $env:FD2_BLOCK="4096"
 python cmp_passes.py loop.wav.stream.wav 760152 4
 ```
 
+
+---
+
+## 14. 2026-11-22：9 声道（单 OPL2）与 AIL 偷声
+
+### 14.1 先纠正一个容易搞混的事实
+
+`libADLMIDI` 的 `adl_setNumChips(dev, 1)` **不是 9 声道**：`NUM_OF_CHANNELS = 23`
+（18 个 2-op 通道 + 5 个节奏通道），`m_numChannels = m_numChips * 23`
+（`src/adlmidi_opl3.cpp:1111`）。所以 `render_wav.cpp` 里的 `setNumChips(1)` 实际渲染出
+**18 个 2-op 声道**，这就是 `r1..r15.wav` 的真实配置，也是为什么早期把 `NUM_CH` 定成 18
+才对得上参考（`adl_setNumChips(1)` 且 `NUM_OF_CHANNELS=23`）。
+
+结论：**参考基线本身不是 DOS 原味**。原版 `ADLIB.MDI`（AIL 3.02）是 **9 声道 + 偷声**。
+要"原味"就必须离开参考基线，因此这一档**没有自动判据**，只能靠听感 + DOSBox 录音（§8.3-3）。
+
+### 14.2 实现
+
+`host/synth.c` 的声道数改成运行时：`synth_set_channels(9|18)`，命令行
+`--opl-channels=9|18`（或 `FD2_OPL_CHANNELS`），默认 **9**。
+
+- 两个 emu8950 仍然都实例化：18ch 的寄存器流与改动前逐字节相同（`FD2_WRITELOG` 对比
+  16951 条写入、0 差异；PCM 与改动前 `cmp` 相同），9ch 时 chip1 只被初始化序列静音、永不 key-on。
+- 初始化流按 `g_num_chips` 走：`ref_init_chip()` 只初始化 `g_num_ch` 个通道（与 ADL 的
+  1-chip `ADL_WRITELOG` 前 72 行一致）；`ref_silence_all()` 的 18 通道扫描**保持原样**
+  （ADL 自己的静音遍历也跨两个寄存器库，改它会破坏 18ch 的字节一致性）。
+- 偷声：`find_voice()`/`channel_goodness()` 本来就是 ADL `calculateChipChannelGoodness`
+  的转写，只是一直没被触发（18ch 基本不偷）。9ch 下补上 ADL 对**踏板保持音**的权重
+  （`-5e5 - kon/2`，普通音是 `-4e6 - kon`），即"先拿踏板音开刀"。
+  日志行新增 `stolen N` 统计，`synth: ... 9 voices, peak voices 9, notes 2256, stolen 567`。
+
+### 14.3 实测（`build/oplbench/engine_check`，FD2_OPL_CHANNELS=9）
+
+| 曲 | 最大同时发声 | 被偷音符 | 9ch vs 18ch 包络 | rms 比 |
+|---|---|---|---|---|
+| song01 | 7 | 0 | 0.892 | 1.03 |
+| song02 | 9 | 282 | 0.809 | 1.03 |
+| song03 | 9 | 34 | 0.970 | 0.99 |
+| song04 | 9 | 18 | 0.944 | 0.99 |
+| song05 | 9 | 638 | 0.830 | 0.96 |
+| song06 | 9 | 81 | 0.916 | 0.97 |
+| song07 | 9 | 150 | 0.946 | 0.98 |
+| song08 | 9 | 112 | 0.854 | 0.99 |
+| song09 | 9 | 0 | 0.972 | 1.01 |
+| song10 | 8 | 0 | 0.981 | 0.99 |
+| song11 | 9 | 12 | 0.830 | 1.01 |
+| song12 | 8 | 0 | 0.954 | 0.94 |
+| song13 | 9 | 0 | 0.986 | 1.00 |
+| song14 | 9 | 567 | 0.838 | 0.85 |
+| song15 | 9 | 45 | 0.683 | 0.85 |
+
+- 即使 `stolen 0` 的曲子（song01/09/10/12/13）9ch 与 18ch 也不相同：18ch 会把音符分到两个
+  芯片上，两颗 emu8950 的相位/直流各自独立，单/双芯片本来就听得出差别。
+- 偷声最多的 song05(638/2846)、song14(567/2256)、song02(282/1422)：这三首在 9ch 下会明显
+  掉音，是"原味"与"好听"冲突最直观的地方，A/B 时优先听它们。
+
+### 14.4 复现
+
+```bash
+cd build/oplbench
+cc -O2 -I../../host -I../../src -o engine_check engine_check.c ../../host/synth.c \
+   ../../host/xmidi.c ../../host/emu8950/emu8950.c ../../host/emu8950/emuadpcm.c -lm
+# 18ch 必须与改动前逐字节一致（回归）
+FD2_OPL_CHANNELS=18 ./engine_check <FDMUS.DAT> 18 r18.wav
+# 9ch 统计
+FD2_OPL_CHANNELS=9  ./engine_check <FDMUS.DAT> 18 r9.wav
+python3 cmp_song.py r9.wav r18.wav
+```

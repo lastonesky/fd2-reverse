@@ -13,7 +13,7 @@ port 里与“运行原始机器码”强耦合的部分（LE 加载、repl 热�
 | `render_gdi.c` | Win32 参考实现/回退（对拍基准） | windows.h |
 | `audio.h` | **音频抽象接口**：单设备 + 单软件混音器（music + Σsfx） | — |
 | `audio_sokol.c` | **现代跨平台音频实现**：sokol_audio（WASAPI/CoreAudio/ALSA） | sokol_audio |
-| `synth.h/.c` | 软件 MIDI 合成器（OPL2 + Fat Man/AIL 音色库，序列渲染成 PCM） | audio/emu8950/opl2_patches |
+| `synth.h/.c` | 软件 MIDI 合成器（OPL2 + Fat Man/AIL 音色库，序列渲染成 PCM；声道数 `--opl-channels=9|18`，9=单 OPL2 原味/需偷声，18=对拍参考） | audio/emu8950/opl2_patches |
 | `xmidi.h/.c` | XMIDI 解析（AIL 的曲目格式；≠标准 SMF） | synth/audio |
 | `emu8950/` | emu8950 OPL2 芯片仿真（`emu8950.c/.h` + `emuadpcm.c/.h`） | — |
 | `opl2_patches.h` `opl2_drumkey.h` `ail_freq.h` | Fat Man/AIL OPL2 音色库、打击乐键映射、AIL 频率表 | — |

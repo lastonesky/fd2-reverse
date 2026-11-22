@@ -704,6 +704,15 @@ int fd2_engine_init(int argc, char **argv)
     fd2_video_default_palette();
     fd2_video_init();
     synth_set_bank_path(NULL);           /* default timbre until a DLS is set */
+    {
+        /* Voice count: 9 = one OPL2 = the DOS original (ADLIB.MDI), 18 = two
+         * chips = libADLMIDI's single-chip layout (the mode the reference
+         * renders were made with).  See host/synth.c. */
+        const char *oc = host_arg("OPL_CHANNELS");
+
+        synth_set_channels(oc && *oc ? atoi(oc) : 9);
+        printf("fd2: opl voices = %d\n", synth_channels());
+    }
     /* Device rate and the guest AIL format are deliberately different: the
      * OPL2 renderer produces 49716 Hz and must reach the speakers with its
      * top octave intact, while AIL (the game's own 8-bit PCM format) stays at

@@ -2,11 +2,19 @@
  * OPL2 music synthesiser for the FD2 host port.
  *
  * The DOS originals used AIL with a two-operator OPL2 tone bank.  This backend
- * emulates that path with two emu8950 OPL2 chips (18 melodic voices) and the
- * Fat Man / AIL two-operator bank, then resamples the 49716 Hz native OPL
- * output to the host audio rate.  The register write order, patch caching and
- * buffered register queue intentionally follow libADLMIDI/Nuked OPL3, which is
- * the reference used to tune the patch and timing behaviour.
+ * emulates that path with emu8950 OPL2 chips and the Fat Man / AIL
+ * two-operator bank, then resamples the 49716 Hz native OPL output to the host
+ * audio rate.  The register write order, patch caching and buffered register
+ * queue intentionally follow libADLMIDI/Nuked OPL3, which is the reference
+ * used to tune the patch and timing behaviour.
+ *
+ * Channel count is a runtime choice (synth_set_channels):
+ *   9  - one OPL2 = the DOS original (ADLIB.MDI): 9 voices, so the allocator
+ *        has to steal.  Default: the authentic path.
+ *   18 - two OPL2 chips = libADLMIDI's "1 chip" configuration (NUM_OF_CHANNELS
+ *        is 23 = 18 two-op + 5 rhythm, so ADL's 1-chip render still has 18
+ *        melodic voices).  That is what build/oplbench's r*.wav references
+ *        were rendered with, so 18 is the byte-comparable mode.
  */
 
 #include "synth.h"
@@ -28,8 +36,16 @@
 #define OPL_CLOCK    3579545u
 #define OUT_GAIN     (-2.0 * 46340.0 / 65535.0)
 #define RSM_FRAC     10
-#define NUM_CH       18
+#define MAX_CH       18
 #define ADL_CHUNK    2048u
+
+/* 9 (DOS original) or 18 (libADLMIDI's single-chip 18-voice layout).  Both
+ * chips are always instantiated so the 18ch register stream - which is the
+ * one the reference WAVs were validated against - stays byte-identical; in 9ch
+ * mode chip 1 is keyed off by the init sequence and never used.
+ * g_num_chips is what the ADL-equivalent init/silence loops walk. */
+static int g_num_ch    = 9;
+static int g_num_chips = 1;
 
 static OPL *g_chip[2];
 static OPL *g_opl;
@@ -64,8 +80,8 @@ typedef struct {
     const opl2_patch *patch;
 } voice_t;
 
-static voice_t          g_voice[NUM_CH];
-static const opl2_patch *g_patch_cache[NUM_CH];
+static voice_t          g_voice[MAX_CH];
+static const opl2_patch *g_patch_cache[MAX_CH];
 static int              g_prog[16];
 static int              g_chvol[16];
 static int              g_chexpr[16];
@@ -82,6 +98,7 @@ static double g_vibpos[16];
 
 static uint64_t         g_notes;
 static uint64_t         g_peak_voices;
+static uint64_t         g_steals;        /* notes cut while still sounding */
 
 /* ---------------- Nuked-style buffered register queue ---------------- */
 
@@ -107,11 +124,15 @@ static OPL *chip_of(int ch)
     return g_chip[(unsigned)ch / 9 & 1];
 }
 
+static int g_writelog;          /* FD2_WRITELOG=1: dump every chip write */
+
 static void opl_write_now(uint16_t reg, uint8_t val)
 {
     unsigned low = reg & 0xff;
     if (low == 0x04 || low == 0x05)
         return;
+    if (g_writelog)
+        fprintf(stderr, "W %03X %02X\n", (unsigned)reg, (unsigned)val);
     if (reg & 0x100) {
         OPL_writeReg(g_chip[1], low, val);
     } else if (low < 0x10 || low == 0xBD) {
@@ -187,6 +208,9 @@ static void ref_silence_all(int chips)
         opl_write_full(0x0BD, 0xC0);
 
     for (int card = 0; card < chips; ++card) {
+        /* The 18-channel sweep is deliberate: ADLMIDI's own silence pass for a
+         * given `chips` walks both register banks, and the 18ch output is
+         * byte-validated against the reference renders. */
         for (int ch = 0; ch < 18; ++ch) {
             uint16_t base = (uint16_t)((ch / 9) << 8);
             uint16_t m = (uint16_t)(base + OP_OFF[ch % 9]);
@@ -213,7 +237,7 @@ static void ref_init_chip(void)
         0x004, 0x60, 0x004, 0x80, 0x105, 0x00, 0x105, 0x01,
         0x105, 0x00, 0x001, 0x20, 0x105, 0x01, 0x008, 0x00
     };
-    for (int ch = 0; ch < 18; ++ch) {
+    for (int ch = 0; ch < g_num_ch; ++ch) {
         uint16_t base = (uint16_t)((ch / 9) << 8);
         uint16_t m = (uint16_t)(base + OP_OFF[ch % 9]);
         opl_write_full((uint16_t)(0x20 + m), 0x00);
@@ -235,8 +259,8 @@ static void ref_reset(int chips)
 
 static void opl_reference_init(void)
 {
-    ref_reset(2);
-    ref_update_categories(2);
+    ref_reset(g_num_chips);
+    ref_update_categories(g_num_chips);
 
     OPL_reset(g_chip[0]);
     OPL_reset(g_chip[1]);
@@ -258,6 +282,27 @@ static void opl_reference_init(void)
         }
         ref_reset(1);
     }
+}
+
+/* Voice count: 9 (one OPL2, DOS original) or 18 (two chips, libADLMIDI's
+ * single-chip layout and therefore the mode the reference WAVs match).  Any
+ * other value is rounded up to the next whole chip; must be called before
+ * synth_play() - the allocator and the ADL-equivalent init stream size are
+ * fixed per sequence. */
+void synth_set_channels(int n)
+{
+    if (n < 9)
+        n = 9;
+    if (n > MAX_CH)
+        n = MAX_CH;
+    n = ((n + 8) / 9) * 9;
+    g_num_ch    = n;
+    g_num_chips = n / 9;
+}
+
+int synth_channels(void)
+{
+    return g_num_ch;
 }
 
 /* ---------------- AIL volume / pitch tables ---------------- */
@@ -460,8 +505,11 @@ static int64_t channel_goodness(int c, int ins)
     }
 
     if (v->used) {
-        /* 活动音符：ADL 用 -4e6 - kon_ms 强烈压低，只有全忙时才会被偷 */
-        s -= 4000000 + v->kon_us / 1000;
+        /* 活动音符：ADL 用 -4e6 - kon_ms 强烈压低，只有全忙时才会被偷。
+         * 踏板保持中的音符权重小得多（-5e5 - kon/2）：上游 AdlChannel 对
+         * sustained 的处理就是"先拿踏板音开刀"（9 声道时这一步很常见）。*/
+        s -= v->sustained ? (500000 + v->kon_us / 2000)
+                          : (4000000 + v->kon_us / 1000);
         if (v->ins == ins) {
             s += 300;
             if (v->vibdelay_us < 70000 || v->kon_us > 20000000LL)
@@ -474,7 +522,7 @@ static int64_t channel_goodness(int c, int ins)
     /* 空闲"疏散站"：别处还有同音色、可转移的音符时略微加分 */
     if (v->used) {
         unsigned n = 0;
-        for (int c2 = 0; c2 < NUM_CH; ++c2) {
+        for (int c2 = 0; c2 < g_num_ch; ++c2) {
             if (c2 == c || !g_voice[c2].used)
                 continue;
             if (g_voice[c2].vibdelay_us >= 200000)
@@ -493,7 +541,7 @@ static int find_voice(int ins)
     int best = 0;
     int64_t best_score = -0x7FFFFFFFFFFFFFFFLL;
 
-    for (int i = 0; i < NUM_CH; ++i) {
+    for (int i = 0; i < g_num_ch; ++i) {
         int64_t score = channel_goodness(i, ins);
         if (score > best_score) {
             best_score = score;
@@ -513,8 +561,10 @@ static void note_on(int midi_ch, int note, int vel, uint32_t tick)
     int mv = ail_midi_volume(vel, g_chvol[midi_ch], g_chexpr[midi_ch], g_master_vol);
     int ch = find_voice(ins);
 
-    if (g_voice[ch].used)
+    if (g_voice[ch].used) {
         opl_off(ch);              /* 偷声前先放音，避免爆音 */
+        ++g_steals;
+    }
 
     g_voice[ch].used = 1;
     g_voice[ch].ever_used = 1;
@@ -539,7 +589,7 @@ static void note_on(int midi_ch, int note, int vel, uint32_t tick)
 
 static void note_off(int midi_ch, int note)
 {
-    for (int v = 0; v < NUM_CH; ++v) {
+    for (int v = 0; v < g_num_ch; ++v) {
         if (g_voice[v].used && g_voice[v].midi_ch == midi_ch && g_voice[v].note == note) {
             if (g_sustain[midi_ch]) {
                 /* 踏板保持：不 key-off，等 CC64<64 再统一放音 */
@@ -612,7 +662,7 @@ static uint32_t           g_call_left;
 static int peak_voices_now(void)
 {
     int n = 0;
-    for (int i = 0; i < NUM_CH; ++i)
+    for (int i = 0; i < g_num_ch; ++i)
         if (g_voice[i].used)
             ++n;
     return n;
@@ -620,7 +670,7 @@ static int peak_voices_now(void)
 
 static void opl_panic(void)
 {
-    for (int ch = 0; ch < NUM_CH; ++ch)
+    for (int ch = 0; ch < g_num_ch; ++ch)
         opl_off(ch);
     memset(g_voice, 0, sizeof g_voice);
     memset(g_patch_cache, 0, sizeof g_patch_cache);
@@ -650,6 +700,7 @@ static void stream_init(const synth_event *ev, int count, double tick_rate,
         OPL_setChipType(g_chip[1], 2);
     }
     g_write_buffered = 1;
+    g_writelog = getenv("FD2_WRITELOG") != NULL;
     OPL_reset(g_chip[0]);
     OPL_reset(g_chip[1]);
     memset(g_writebuf, 0, sizeof g_writebuf);
@@ -663,6 +714,7 @@ static void stream_init(const synth_event *ev, int count, double tick_rate,
     memset(g_patch_cache, 0, sizeof g_patch_cache);
     g_notes = 0;
     g_peak_voices = 0;
+    g_steals = 0;
     g_master_vol = 127;
     for (int i = 0; i < 16; ++i) {
         g_prog[i] = 0;
@@ -692,12 +744,12 @@ static void apply_event(const synth_event *e, uint32_t t)
     } else if (hi == 0xB0) {
         if (e->msg[1] == 7) {
             g_chvol[ch] = e->msg[2];
-            for (int v = 0; v < NUM_CH; ++v)
+            for (int v = 0; v < g_num_ch; ++v)
                 if (g_voice[v].used && g_voice[v].midi_ch == ch)
                     voice_update_volume(v);
         } else if (e->msg[1] == 11) {
             g_chexpr[ch] = e->msg[2];
-            for (int v = 0; v < NUM_CH; ++v)
+            for (int v = 0; v < g_num_ch; ++v)
                 if (g_voice[v].used && g_voice[v].midi_ch == ch)
                     voice_update_volume(v);
         } else if (e->msg[1] == 1) {
@@ -709,7 +761,7 @@ static void apply_event(const synth_event *e, uint32_t t)
                 g_sustain[ch] = 1;
             } else {
                 g_sustain[ch] = 0;
-                for (int v = 0; v < NUM_CH; ++v)
+                for (int v = 0; v < g_num_ch; ++v)
                     if (g_voice[v].used && g_voice[v].sustained &&
                         g_voice[v].midi_ch == ch) {
                         opl_off(v);
@@ -721,7 +773,7 @@ static void apply_event(const synth_event *e, uint32_t t)
         }
     } else if (hi == 0xE0) {
         g_bend[ch] = (double)((e->msg[1] & 0x7F) | ((e->msg[2] & 0x7F) << 7)) - 8192.0;
-        for (int v = 0; v < NUM_CH; ++v)
+        for (int v = 0; v < g_num_ch; ++v)
             if (g_voice[v].used && g_voice[v].midi_ch == ch)
                 voice_update_pitch(v);
     } else if (hi == 0x90 && e->msg[2] != 0) {
@@ -811,7 +863,7 @@ static uint32_t stream_fill(int16_t *dst, uint32_t n, double gain)
         /* libADLMIDI AdlChannel::addAge：每个调度分段推进一次 */
         int64_t age_us = (int64_t)(eat * 1000000.0);
         int64_t neg_us = 1000LL * (-0x1FFFFFFFL);
-        for (int v = 0; v < NUM_CH; ++v) {
+        for (int v = 0; v < g_num_ch; ++v) {
             voice_t *vv = &g_voice[v];
             if (vv->used) {
                 vv->koff_us = 0;
@@ -834,7 +886,7 @@ static uint32_t stream_fill(int16_t *dst, uint32_t n, double gain)
         for (int mc = 0; mc < 16; ++mc) {
             int any = 0;
             if (g_vibrato[mc]) {
-                for (int v = 0; v < NUM_CH; ++v) {
+                for (int v = 0; v < g_num_ch; ++v) {
                     if (g_voice[v].used && g_voice[v].midi_ch == mc &&
                         !g_voice[v].sustained) {
                         voice_update_pitch(v);
@@ -973,11 +1025,13 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
     t1 = plat_now_ms();
     sec = (double)samples / (double)rate;
     uint64_t rendered_notes = g_notes, peak_voices = g_peak_voices;
-    printf("synth: %d events, %.3f s, %u samples, peak voices %llu, "
-           "notes %llu, rendered in %llu ms (%.1f x real-time)\n",
-           count, sec, (unsigned)samples,
+    uint64_t steals = g_steals;
+    printf("synth: %d events, %.3f s, %u samples, %d voices, peak voices %llu, "
+           "notes %llu, stolen %llu, rendered in %llu ms (%.1f x real-time)\n",
+           count, sec, (unsigned)samples, g_num_ch,
            (unsigned long long)peak_voices,
            (unsigned long long)rendered_notes,
+           (unsigned long long)steals,
            (unsigned long long)(t1 - t0),
            (t1 > t0) ? sec / ((double)(t1 - t0) / 1000.0) : 0.0);
 

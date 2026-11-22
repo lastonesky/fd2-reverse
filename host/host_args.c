@@ -90,6 +90,7 @@ void host_args_dump(void)
         "VOLUME", "KEYS", "KEY_DELAY", "KEYPLAY", "KEYLOG",
         "STALL_MS", "HANG_EXIT",
         "TYPEMATIC", "TYPEMATIC_DELAY", "TYPEMATIC_RATE", "TYPEMATIC_DEBUG",
+        "OPL_CHANNELS",
         "GL_READBACK", "TESTPATTERN",
     };
     int i;
