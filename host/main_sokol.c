@@ -195,6 +195,17 @@ static void push_vk(int vk, int down)
     fd2_engine_key((uint8_t)(down ? sc : (sc | 0x80)), ascii_for_vk(vk));
 }
 
+/* Focus lost: no WM_KEYUP arrives for keys that are down (the release goes to
+ * the window that gains focus), so forget the held set.  Otherwise a stuck
+ * make would keep the typematic slot armed and the game would see a phantom
+ * key every 33 ms for the rest of the session. */
+static void input_release_all(void)
+{
+    memset(g_down, 0, sizeof g_down);
+    memset(g_down_scan, 0, sizeof g_down_scan);
+    fd2_engine_release_all();
+}
+
 /* --autokey/--keyplay runs on its own thread and injects by portable key.
  * fr_key -> VK (src/keys_win32.c) -> push_vk(), i.e. exactly the path a real
  * keystroke takes, so a replayed key and a pressed key are the same event. */
@@ -331,6 +342,17 @@ static void push_fr_key(fr_key key, int down, unsigned mods)
     ascii = fr_key_extended(key) ? 0xE0 : fr_key_ascii(key);
     fd2_engine_key((uint8_t)(down ? scan : (scan | 0x80)), ascii);
     g_char_pending = down && !fr_key_extended(key);
+}
+
+/* Focus lost: X11 delivers FocusOut without the KeyRelease of whatever is
+ * held (the release goes to the window that gains focus), so forget the held
+ * set - see input_release_all() in the Win32 path. */
+static void input_release_all(void)
+{
+    memset(g_down, 0, sizeof g_down);
+    memset(g_down_scan, 0, sizeof g_down_scan);
+    g_char_pending = 0;
+    fd2_engine_release_all();
 }
 
 /* fr_key -> BIOS directly: no window is needed, so --autokey/--keyplay work
@@ -487,6 +509,7 @@ static void event_cb(const sapp_event *e)
     case SAPP_EVENTTYPE_ICONIFIED:
         printf("sokol: window unfocused\n");
         g_quit_mod_down = 0;         /* no key-up while unfocused */
+        input_release_all();         /* held keys will never report a break */
         fd2_set_focus(0);
         return;
     default:
@@ -496,8 +519,9 @@ static void event_cb(const sapp_event *e)
     switch (e->type) {
     case SAPP_EVENTTYPE_KEY_DOWN: {
         int vk;
-        if (e->key_repeat)
-            break;
+        /* A repeat is just a second make: push_vk() drops it through g_down[].
+         * Do not filter on key_repeat here - a lost release leaves sokol's
+         * repeat flag stuck, which used to make the next real press vanish. */
         vk = sapp_to_vk((int)e->key_code);
         /* same escape hatch as main_win32.c: Ctrl+Esc quits */
         if (vk == VK_ESCAPE && (e->modifiers & SAPP_MODIFIER_CTRL)) {
@@ -521,8 +545,8 @@ static void event_cb(const sapp_event *e)
     switch (e->type) {
     case SAPP_EVENTTYPE_KEY_DOWN: {
         fr_key key;
-        if (e->key_repeat)
-            break;
+        /* key_repeat is not filtered: push_fr_key() dedups through g_down[],
+         * and a stuck repeat flag would otherwise swallow a real press. */
         key = sapp_to_fr_key((int)e->key_code);
         if (key == FRK_ESCAPE && (e->modifiers & SAPP_MODIFIER_CTRL)) {
             sapp_quit();

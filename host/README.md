@@ -51,6 +51,10 @@ port 里与“运行原始机器码”强耦合的部分（LE 加载、repl 热�
   `xmidi`，`AIL_set_sample_address`/`_start_sample` 交给 `audio_sfx_play`。
 - **输入/计时**：port3 游戏读低内存镜像 `fd2_lowmem`（BDA tick `0x46C`、键缓冲 `0x41A/41C`）。
   适配层把宿主键盘/定时器写进这个数组，等价于 port `dos.c` 对 guest 做的事。
+- **失焦必须清"按住"状态**：窗口失去焦点时，按住键的 KeyRelease / WM_KEYUP 会送到新窗口，
+  游戏收不到 break，typematic 线程（`fd2_kernel.c` 每 33 ms 推一次同一个键）就会永久重复；
+  而游戏所有对话等待都只要求"环里有任意键"。因此 entry 层在 `UNFOCUSED`/`ICONIFIED` 时调
+  `input_release_all()` → `fd2_engine_release_all()`（清 typematic 槽 + flush 键环）。
 
 ## 4. 构建
 

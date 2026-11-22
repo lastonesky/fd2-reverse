@@ -41,6 +41,13 @@ void fd2_engine_key(uint8_t scan, uint8_t ascii);
  * the character in a CHAR event after KEY_DOWN). */
 void fd2_engine_key_set_ascii(uint8_t ascii);
 
+/* Forget every key the typematic state still thinks is held and drop whatever
+ * is pending in the ring.  The entry layer calls this when the window loses
+ * focus: the break codes of keys held at that moment go to whichever window
+ * gains focus, so without this the typematic thread would synthesise that key
+ * forever (a single stuck Alt made every dialog advance by itself). */
+void fd2_engine_release_all(void);
+
 /* Stop everything (game usually already returned). */
 void fd2_engine_shutdown(void);
 

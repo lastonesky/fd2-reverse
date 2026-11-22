@@ -832,6 +832,20 @@ void fd2_engine_key_set_ascii(uint8_t ascii)
     plat_mutex_unlock(&g_kbd_lock);
 }
 
+/* Focus was lost: the key-ups for whatever is held right now go to the window
+ * that gains focus, not to us - so the typematic slot would stay armed and
+ * repeat_thread() would keep pushing that key every g_rep_period ms for the
+ * rest of the session.  Every game wait is "any key pending" (dlg_wait_key,
+ * kbd_pending in the VM), so one stuck modifier makes the whole game skip its
+ * dialogs by itself.  Disarm the slot and drop the stale ring contents. */
+void fd2_engine_release_all(void)
+{
+    plat_mutex_lock(&g_rep_lock);
+    g_rep_held = 0;
+    plat_mutex_unlock(&g_rep_lock);
+    fd2_kbd_flush();
+}
+
 void fd2_engine_shutdown(void)
 {
     g_quit = 1;

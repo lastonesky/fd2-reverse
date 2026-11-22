@@ -4264,3 +4264,30 @@ winmidi、内置合成器失败回退、`--midi-test`。暖态 `state machine be
 Linux 已 `make engine` 重建；**Windows 侧仍需 `pwsh -File build.ps1`**。
 另：`build/oplbench/r11k.wav` 实为引擎 11 kHz 输出（MD5 与 e11k 相同），此前拿它当
 "11 kHz 参考"的对比无效。细节见 `docs/opl2-music-fidelity.md` §12.4。
+
+### 7.56 修复：敌人回合对话"瞬闪" —— 失焦丢抬键使 typematic 永久重复
+
+用户反馈：敌人行动回合里弹出的对话（升级/获得经验之类）几乎瞬间消失，"像有人在不停按键"。
+
+根因（用户自己的 `FD2/fd2engine.log` 即为证据）：`fd2: key @114782 ms scan=38`（左 Alt 的
+make）后面紧接 `sokol: window unfocused`，此后整场再没有 `B8`（Alt 的 break）；236 s 回到
+窗口继续玩到 246 s 退出。窗口失焦时，按住键的 KeyRelease 会送到**新获得焦点的窗口**，
+游戏永远收不到 break → `host/fd2_kernel.c` 的 typematic 线程（`repeat_note`/`repeat_thread`）
+认为该键一直按住，每 33 ms 往 BDA 键环推一次。而游戏侧所有对话等待都是"环里有**任意**键"
+（`dlg_wait_key` 0x16C57、`kbd_pending` 0x10620，vm.c 也用它跳过打字机），于是一个卡住的
+修饰键就能让整串对话自动跳过。默认 `--unfocus=mute` 只静音、游戏线程照跑，失焦的 120 s
+里缓冲区早已灌满。
+
+修复：
+- 新增 `fd2_engine_release_all()`（host/fd2_kernel.c）：清 typematic 槽（`g_rep_held = 0`）
+  并 flush 键环；
+- entry 层 `input_release_all()`（host/main_sokol.c，Win32/POSIX 各一份）：清 `g_down[]` /
+  `g_down_scan[]`（POSIX 另清 `g_char_pending`），在 `UNFOCUSED` / `ICONIFIED` 时调用；
+- 顺手去掉 `KEY_DOWN` 上的 `if (e->key_repeat) break;`：重复按下本来就是第二次 make，
+  `push_vk()`/`push_fr_key()` 已用 `g_down` 去重；而 sokol 的 repeat 标志在"抬键丢失"后会
+  卡在 true，旧写法会让**下一次真实按键**被吞掉。
+
+复现/验证：`FD2_TYPEMATIC_DEBUG=1` 时若日志每 33 ms 刷 `fd2: repeat scan=38`，即为该故障；
+临时解药是把那个键再按一下松开（break 到达即解除）。
+
+Linux 已 `make engine` 重建；**Windows 侧仍需 `pwsh -File build.ps1`**。
