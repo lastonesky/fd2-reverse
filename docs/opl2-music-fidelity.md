@@ -1,9 +1,13 @@
-# FD2 音乐后端（AdLib / OPL2）保真度调试手册
+# FD2 音乐后端调试手册（现行：SB Pro 2 / OPL3）
 
-> 最后更新：2026-11-14 · 分支 `modern-platform` · 所有实验代码在 `build/oplbench/`（未入库，gitignore）
+> 最后更新：2026-11-25 · 所有实验代码在 `build/oplbench/`（未入库，gitignore）
 >
-> 本文档记录"自研 OPL2 渲染器 vs libADLMIDI 参考"这条调试链路的**方法、判据、工具、踩过的坑**，
-> 目的是让下一次会话（或另一个人）不用从零重推。
+> **阅读顺序**：现行后端见 **§16**（Nuked OPL3 / YMF262，源码在 `host/opl3/`）。
+> §0~§15 是历史上"自研 OPL2 渲染器 vs libADLMIDI 参考"的调试链路，其中的 `emu8950/`、
+> `adl_backend.c`、`ADLMIDI=1`、`make engine OPL3=0`、`--adl-chips` 等**均已从仓库移除**，
+> 相关命令与判据仅作方法学存档，不可再照抄执行。
+>
+> 本文档记录那条调试链路的**方法、判据、工具、踩过的坑**，目的是让下一次会话不必从零重推。
 
 ---
 
@@ -31,20 +35,20 @@
   song05 ≈ 262（3044，8.6%）。其中约 10 个百分点来自 **ref 是立体声**（L/R 差 rms 240），
   我们是单声道；其余是小幅相位/音高微差，包络与亮度已无系统偏差。
 
-> ⚠️ 一个重要的"当前设计决策"仍未定：`NUM_CH = 18`（双 emu8950），
-> 对齐的是 **libADLMIDI**；原版 DOS `ADLIB.MDI` 是 **9 声道 + 偷声**。
-> 要还原 DOS 原味应改回 9（见 §8）。
+> 📌 本节的结论属于**已移除的 OPL2 后端**。现行 OPL3 后端固定 18 声部
+> （`SBPRO2.MDI`），增益 `-1.0`，见 §16；下表仅作为历史对拍记录保留。
 
 ---
 
 ## 1. 目标与约束
 
-- 用 **AdLib / OPL2 (YM3812)** 替换系统默认 MIDI，保证 macOS / Windows / Linux 听感一致。
-- 贴近 DOS 原版：`FD2/` 只有 AdLib 系 MDI 驱动（`ADLIB.MDI` 14386 B，AIL 3.02），
-  无 GUS / MPU-401 → 原版音乐 = **YM3812 9 声道 FM**。
-- 许可宽松：核心选 **emu8950（MIT，单文件 1413 行，text 13.9 KB）**；
-  音色用 **The Fat Man 2op AIL（MIT）** 转成 `opl2_patches.h`（128 旋律 + 53 鼓 ≈ 1.5 KB）。
-- 体积：相对 `fd2engine` 的 673 KB text 段 **+15.6 KB（+2.3%）**，无 C++、无新动态库。
+- 用软件 FM 合成替换系统默认 MIDI，保证 macOS / Windows / Linux 听感一致。
+- 贴近 DOS 原版：`FD2/MDI.INI` 选中的是 **`SBPRO2.MDI`**（AIL 3.02 的 OPL3 驱动），
+  DOSBox-X 配置是 `sbtype=sb16` + `oplmode=auto`。所以现行核心是 **Nuked OPL3**
+  （18 个两段式声部），见 §16。
+- 许可：核心为 **Nuked OPL3 v1.8（LGPL-2.1）**，源码与许可证在 `host/opl3/`；
+  音色仍是 **The Fat Man 2op AIL（MIT）** 的 `opl2_patches.h`（128 旋律 + 53 鼓）。
+- 本节的"emu8950 / OPL2 / +15.6 KB / 无动态库"是**旧后端的历史约束**，已不再适用。
 
 ---
 
@@ -61,21 +65,22 @@ note_on / prog / CC7 / CC11
 opl_patch() / opl_note() / opl_off()
    │  opl_write()  → 写缓冲（WRITEBUF_SIZE 2048 / WRITEBUF_DELAY 2，模拟 Nuked 的 OPL3_WriteRegBuffered）
    ▼
-emu8950 × 2（chip0 = ch0..8，chip1 = ch9..17）
+Nuked OPL3 × 1（bank0 = ch0..8，bank1 = ch9..17，newmode=1）
    ▼
-× OUT_GAIN(-2.0 × 46340/65535 ≈ -1.4142) → int16 WAV @ 49716 Hz 单声道
+× OUT_GAIN(-1.0) → int16 WAV @ 49716 Hz 单声道
 ```
 
-关键文件（`build/oplbench/`）：
+> 上面这一段是**现行 OPL3** 的口径；原有"emu8950 × 2 / OUT_GAIN -1.4142"的图已被替换。
+
+关键文件（`build/oplbench/` 为历史实验目录；现行源码在 `host/`）：
 
 | 文件 | 作用 |
 |---|---|
-| `render_opl2.c` | 主渲染器（歌曲模式 + 单音调试模式 `-n`） |
-| `emu8950/emu8950.c` | FM 核心；**所有 FD2 注记改动都在这里**（`grep -n "FD2 注记"`） |
-| `emu8950.c.bak-gain` | 改动前快照，`diff` 它可一眼看到核心被改了哪 4 处 |
-| `opl2_patches.h` / `opl2_drumkey.h` | `gen_patches.py` 从 `.woplx` 生成的寄存器镜像 |
-| `ail_freq.h` | AIL 的 192 项 F-number 表（12 半音 × 16 分步） |
-| `render_opl2_dbg.c` | 旧调试副本（`FD2_ONLYDRUM` / `FD2_NODRUM` 分离鼓/旋律） |
+| `host/opl3/nukedopl3.c/.h` | 现行 FM 核心（Nuked OPL3 v1.8） |
+| `host/opl3/opl3_emu.c/.h` | 双 bank 句柄适配器（OPL_new/writeReg/calc） |
+| `host/opl2_patches.h` / `opl2_drumkey.h` | Fat Man/AIL 两段式寄存器镜像（现行仍用） |
+| `host/ail_freq.h` | AIL 的 192 项 F-number 表（12 半音 × 16 分步） |
+| `render_opl2.c`（历史） | 旧 OPL2 对拍镜像，含歌曲模式与单音模式 `-n` |
 
 ---
 
@@ -305,15 +310,15 @@ python3 cmp_song.py song01_emu8950.wav ref_s01.wav
 
 ### 8.3 待决 / 未解
 
-1. **9 声道 vs 18 声道**：`NUM_CH = 18` 是对齐 libADLMIDI 的选择；原版 DOS 是 9 声道 + 偷声。
-   要"原味"需改回 9 **并实现 AIL 的偷声策略**（谁先被掐），否则会明显掉音。
-   改回只需改 `#define NUM_CH 9`，但 18 声道对 song01 的包络相关是 1.000 vs 0.897，掉得很明显。
+1. **9 声道 vs 18 声道（历史待决，现已关闭）**：旧 OPL2 后端曾纠结 9（ADLIB.MDI）还是
+   18（对齐 libADLMIDI）。查清 `MDI.INI` 选中 `SBPRO2.MDI` 后结论明确：**18 声部**才是
+   原版路径；现行 OPL3 后端固定 18，`--opl-channels` 只用于诊断。见 §16。
 2. **样本级 15~25% 残差**：包络/zcr/电平已对齐，剩余是小幅相位与音高微差（单声道 vs 立体声之外）。
    目前的度量手段已分不出主观差异，需要真实听感反馈。
 3. **DOS 原版录音基准缺失**：`FD2/` 下有 `dosbox-fd2.conf`，但还没有抓过 DOSBox 的真实录音。
-   如果要以"原版"而非"libADLMIDI"为基准，最可靠的一步是**先录一份 DOSBox 的 song01**，
-   再按 §4 的四层逐层对（L2 目标从 ADL 日志换成录音无法直接对寄存器，
-   需要用"已知单音 + 录音"反推寄存器，成本会高很多）。
+   现行 OPL3 后端的电平与偷声统计已验证（§16.3），**听感 A/B 仍待用户确认**。
+   若要继续做逐样本对拍，最可靠的一步是先录一份 DOSBox 的 song01，
+   再按 §4 的方法逐层对（从录音反推寄存器成本很高）。
 4. **AIL 精确偷声策略**未实现（见 8.1）。
 5. **`rhythm_*()` 死代码**：`render_opl2.c` 里还留着硬件节奏模式的实现（`rhythm_setup/patch/hit`），
    已无调用点，但 `grep 0xBD` 时会看到 `0xBD=0xE0` 的两行，别被误导。
@@ -653,3 +658,152 @@ FD2_OPL_CHANNELS=18 ./engine_check <FDMUS.DAT> 18 r18.wav
 FD2_OPL_CHANNELS=9  ./engine_check <FDMUS.DAT> 18 r9.wav
 python3 cmp_song.py r9.wav r18.wav
 ```
+
+---
+
+## 15. 分支 `feature/libadlmidi-backend`：直接接 libADLMIDI（历史，已移除）
+
+> ⚠️ 该后端及其 `host/adl_backend.c/.h`、`ADLMIDI=1` 构建开关、`--adl-chips` 参数
+> 已从仓库删除。本节只记录当时的方法与坑（尤其是外层 XMI 长度的计算），
+> 不要按本节内容再接一次。现行后端见 §16。
+
+目的（当时）：让"参考音色"能直接在游戏里听，而不是只能听 `build/oplbench/r*.wav`。
+
+### 15.1 接线方式
+
+复用了 `host/xmidi.c` 已有的后端开关（原先 0 = Windows MIDI Mapper、1 = 内置 OPL2），
+新增 **2 = libADLMIDI**：
+
+```
+FDMUS.DAT ──res_load──> XDIR/XMI blob
+                          ├── g_backend==1 : xmidi.c 自己解析 EVNT -> synth.c(emu8950)
+                          └── g_backend==2 : 原样交给 adl_openData() -> libADLMIDI
+```
+
+- `host/adl_backend.c/.h`：`adl_init(audio_rate())` → `adl_setNumChips` →
+  `adl_setLoopEnabled` → `adl_switchEmulator(NUKED)` → `adl_setBank(0)`
+  （bank 0 = `AIL (The Fat Man 2op set, default AIL)`，与 `opl2_patches.h` 同源）→
+  `adl_openData(blob)`。
+- 混音：ADLMIDI 输出交错立体声 int16，`adl_play()` **恰好渲染被请求的帧数**并按采样推进
+  序列器，所以在音频回调里按 2048 帧分块拉流就是实时播放；每块折成单声道
+  `(L+R)/2`、乘上 AIL 序列音量 × `--volume`（含 AIL 的 `ms` 渐变）后交给
+  `host/audio.h` 的混音器。开始闸门（`audio_hold_music`）与 `synth.c` 同一套语义。
+- 构建：`make engine ADLMIDI=1 [ADLMIDI_DIR=...]`；`--midi-backend=opl2` 在同一份二进制里
+  切回 emu8950（对比用），`--adl-chips=N` 改仿真芯片数（默认 1）。
+
+### 15.2 验证（离线，`FD2_RATE=49716`）
+
+用同一份 FDMUS 资源（18 号 = 开头动画 = song14）走 `adl_backend` 导出，与
+`build/oplbench/r14.wav`（`render_wav.cpp` 现渲染）对比：
+
+- 直接调 `adl_openData`+`adl_play` 的对照程序（`/tmp/adlraw.c`）输出与 `r14.wav`
+  **MD5 完全相同**（`9b79e60d…`）→ 说明库配置（bank/chips/emulator/块大小）与参考一致；
+- 走 `xmidi_play()` 的端到端输出 → 包络相关 0.988 / rms 0.99（残差来自"参考是立体声、
+  游戏是单声道"的 `(L+R)/2` 下混，与 1 LSB 取整），无时序偏移。
+
+**调用的顺序有讲究**：先 `setBank` 后 `setNumChips` 时与参考只有 56% 采样相同；
+改成 render_wav 的顺序（chips → loop → emulator → bank → open）后升到 75%（其余为下混），
+raw 对照则完全一致。
+
+### 15.3 许可与分发
+
+libADLMIDI 是 **LGPL-2.1**，本仓库**不 vendor** 它的源码（`ADLMIDI_DIR` 指向本地 checkout
+的 .o）。本分支只调用它的公开 C API，不改它的源码（它自己的 `AGENTS.md` 禁止 AI 生成的贡献）。
+要正式发布这个后端，需要决定：动态链接 `.so`，或随包提供可重链接的 `.o`。
+
+### 15.4 坑：libADLMIDI 只认外层 XMI 文件，不认裸的 `FORM XMID`
+
+第一版接上后进游戏**没有 BGM**，日志是：
+
+```
+ail: init_sequence(seq=0) base=...4e0 song=...502 len=9850 head=FORM
+adlmidi: openData(9850 bytes) failed: Unknown or unsupported file format
+```
+
+因为游戏侧的 `locate_xmid()`（FDMUS 的 IFF 树遍历）交给播放器的是最内层的
+`FORM XMID`（`TIMB`/`EVNT` 容器），而 libADLMIDI 的加载器要的是**整份 XMI 文件**：
+
+```
+FORM 0000000e XDIRINFO 00000002 0100 CAT ...      <- ADL 认这个
+  └─ FORM 002672 XMID TIMB ...                    <- ADL 不认识（= locate_xmid 的产物）
+```
+
+而且外层 `FORM XDIRINFO` 的长度字段只有 14（只覆盖它自己的 8+6 字节头），**不能**用它算
+整份文件长度。可行算法：`total = (XMID 相对 start 的偏移) + 8 + XMID 自己的 big-endian 长度`，
+对 FDMUS 全部 15 首验证过，结果恰好等于资源表里的 `end - start`（都是 XMID@0x22）。
+
+实现：`host/fd2_audio.c` 的 `ail_seq` 新增 `raw`/`raw_len`，`AIL_start_sequence` 在
+backend==2 时走新增的 `xmidi_play_raw()`。
+
+另一处：AIL 的 `loop_count` 语义是 **0 = 无限循环**（`bgm_play(track, 0)` 全是循环曲，
+`bgm_play(16/17, 1)` 是过场小曲），`synth_play()` 已经按 `count == 0` 映射；
+ADLMIDI 分支第一版写反了（0 当成不循环），一曲播完就静音，已改为 `loop_count == 0`。
+
+---
+
+## 16. 2026-11-25：改用 SB Pro 2 的 OPL3（YMF262）核心
+
+### 16.1 起因：原版选的是 SBPRO2.MDI，不是 ADLIB.MDI
+
+`FD2/MDI.INI`（游戏数据，不在仓库里）写的是：
+
+```
+DEVICE      Creative Labs Sound Blaster(TM) 16
+DRIVER      SBPRO2.MDI
+IO_ADDR     220h
+```
+
+`AILDRVR.LST` 对 `[sbpro2.mdi]` 的说明："If your Sound Blaster Pro is a 'current'
+model equipped with the Yamaha OPL-3 synthesizer ... you should select this option"。
+`dosbox-fd2.conf` 又是 `sbtype=sb16` / `oplmode=auto` / `oplemu=default`。
+所以用户记忆中的"真机味"来自 AIL 的 **OPL3 驱动**（18 个两段式声道 + newmode），
+而此前两条路径（emu8950 ×2、libADLMIDI bank 0）都在不同程度上按 OPL2 建模。
+
+ScummVM `audio/miles_adlib.cpp` 给出了该驱动的寄存器口径：
+
+- `resetAdLib()`：`0x105=1`（newmode）、`0x104=0`（18×2op）、`0x01=0`、`0x08=0`、
+  `0xBD=0xC0`；
+- `setRegister()`：`reg & 0x100` 选 bank 1，其余写 bank 0；
+- OPL3 声像在 `0xC0` 的 bit4/5，默认 pan `0x40`(center) → `0x30`（左右都开）。
+
+FDMUS 的 EVNT 里统计到 CC7/CC1/CC64，但**没有 CC10**，所以所有声道居中，
+`(L+R)/2` 折单声道不丢信息（这也是本轮没有改混音器为立体声的原因）。
+
+### 16.2 实现
+
+- 新增 `host/opl3/`：`nukedopl3.c/.h`（Nuked OPL3 v1.8，LGPL-2.1，连同
+  `LICENSE.LGPL-2.1.txt` 入库）和 `opl3_emu.c/.h` 适配器。
+- 适配器把**一颗** YMF262 伪装成 synth.c 期待的两颗"芯片"：`OPL_new()` 两次分别
+  拿到 bank 0 / bank 1 句柄，`OPL_writeReg()` 把高位映射成 `0x100`，
+  `OPL_calc()` 只在 bank 0 上生成一帧、把 L/R 折成 mono，bank 1 返回 0。
+- synth.c 自己的 `0x04/0x05` 过滤使 `0x104/0x105` 永远写不进去（旧 OPL2 下这两条
+  本来就是死写），所以适配器的 `OPL_reset()` 显式写 `0x105=1, 0x104=0, 0x008=0,
+  0x0BD=0xC0`，把 OPL3 newmode 固定下来。
+- 增益：直接用 Nuked 的原始输出，`OUT_GAIN = -1.0`（旧的 `-1.4142` 是给 emu8950
+  补偿幅度用的；沿用会高 √2，实测 RMS 3418 vs 参考 2417）。
+- 声部数固定 18（SBPRO2.MDI）；`--opl-channels` 仅用于诊断降声道。
+  `--midi-backend=sbpro2|opl3` 是内置后端的别名。
+- 构建：POSIX `make engine`、Windows `pwsh -File build.ps1`，两者都固定编入
+  `opl3/nukedopl3.c` + `opl3/opl3_emu.c`；无 `OPL3=0` / `-NoOPL3` / `ADLMIDI=1`。
+
+### 16.3 验证（离线，`FD2_RATE=49716`）
+
+| 后端 | 声部 | 峰值复音 | 被偷 | RMS | 说明 |
+|---|---:|---:|---:|---:|---|
+| emu8950 | 9 | 9 | 567 | 2436 | 旧默认 |
+| Nuked OPL3 | 9 | 9 | 567 | 2417 | 同一音序，仅核心不同 |
+| Nuked OPL3 | 18 | 18 | 66 | 2417 | **新默认** |
+| libADLMIDI `r14.wav` | 18 | — | — | 2417 | 参考（立体声折 mono） |
+
+资源 18（开头动画）全程 3,428,655 样本，非静音、无跑飞；启动日志确认核心名。
+OPL3/OPL2 逐样本不同（平均绝对差 6214/32768），说明切换确实生效。
+**听感仍需在 DOSBox-X / 真机上 A/B**；本轮只做了电平、流程和偷声统计验证。
+
+### 16.4 已知边界
+
+- 仍是 2-op bank（Fat Man AIL），没有 4-op 乐器；SBPRO2.MDI 本身也以 2-op 为主。
+- 仍是单声道混音器；FDMUS 无 CC10，居中声像下折 mono 无损。
+- §0 / §14 的"emu8950 与 libADLMIDI 逐字节一致"是**旧后端**的历史结论，
+  现行单一 OPL3 后端不再满足该口径；它仍可作为方法学参考。
+- Windows 侧只改了 `build.ps1`，本机没有 MSVC，**未做实机构建验证**。
+- emu8950、libADLMIDI 两个后端及其构建开关/参数/接线均已从仓库移除。

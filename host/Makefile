@@ -34,9 +34,10 @@ else
   HOST_LIBS := -lX11 -lXi -lXcursor -lGL -lasound -ldl -lm -lpthread
 endif
 
-# Backend (reused from port/) + adapter layer + entry.
+# FM core: Nuked OPL3 (YMF262), matching the SBPRO2.MDI driver selected by
+# MDI.INI.  Sources are vendored under opl3/ (LGPL-2.1, see its LICENSE).
 HOST_SRCS := host_args.c synth.c audio_sokol.c xmidi.c keys.c \
-             emu8950/emu8950.c emu8950/emuadpcm.c \
+             opl3/nukedopl3.c opl3/opl3_emu.c \
              platform_posix.c render_sokol.c sokol_impl.c \
              fd2_audio.c fd2_video.c fd2_platform.c fd2_kernel.c main_sokol.c
 

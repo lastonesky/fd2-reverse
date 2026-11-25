@@ -131,6 +131,8 @@ src/
 | `--close=both` | | 两种都关 |
 | `--close=none` | | 两种都拦（仍可用 Ctrl+Esc 退出） |
 | `--volume=N` | `FD2_VOLUME` | 主音量 0..100（默认 100） |
+| `--midi-backend=sbpro2` | `FD2_MIDI_BACKEND` | 内置 OPL3 合成器（默认；也接受 `opl3`/`synth`）。`winmidi` 仅 Win32 |
+| `--opl-channels=N` | `FD2_OPL_CHANNELS` | FM 声部数，默认 18（SBPRO2.MDI） |
 | `--upscale=nearest\|linear\|sharp\|bicubic` | `FD2_UPSCALE` | 呈现层放大算法（默认 nearest） |
 | `--aspect=off` | `FD2_ASPECT` | 关掉 4:3 保持，铺满窗口 |
 | `--log=FILE` | `FD2_LOG` | 日志文件（默认 `fd2engine.log`） |

@@ -28,6 +28,7 @@
 #include "audio.h"
 #include "synth.h"
 #include "../src/game/fd2_game.h"   /* boot.h: fd2_game_main, globals */
+#include "xmidi.h"
 
 extern void fd2_data_init(void);
 void fd2_install_crash_handler(void);
@@ -705,16 +706,25 @@ int fd2_engine_init(int argc, char **argv)
     fd2_video_init();
     synth_set_bank_path(NULL);           /* default timbre until a DLS is set */
     {
-        /* Voice count: 9 = one OPL2 = the DOS original (ADLIB.MDI), 18 = two
-         * chips = libADLMIDI's single-chip layout (the mode the reference
-         * renders were made with).  See host/synth.c. */
+        /* Music backend: the built-in OPL3 renderer (default) or the Windows
+         * MIDI Mapper.  MIDI_BACKEND is the CLI spelling --midi-backend=... */
+        const char *mb = host_arg("MIDI_BACKEND");
+
+        if (mb && *mb)
+            xmidi_set_backend_name(mb);
+        printf("fd2: midi backend = %s\n",
+               xmidi_backend() == 1 ? "sbpro2 (OPL3, built-in)" : "winmidi");
+    }
+    {
+        /* SBPRO2.MDI (OPL3) has 18 two-op voices; --opl-channels can lower it
+         * for diagnostics.  See host/synth.c. */
         const char *oc = host_arg("OPL_CHANNELS");
 
-        synth_set_channels(oc && *oc ? atoi(oc) : 9);
+        synth_set_channels(oc && *oc ? atoi(oc) : 18);
         printf("fd2: opl voices = %d\n", synth_channels());
     }
     /* Device rate and the guest AIL format are deliberately different: the
-     * OPL2 renderer produces 49716 Hz and must reach the speakers with its
+     * OPL3 renderer produces 49716 Hz and must reach the speakers with its
      * top octave intact, while AIL (the game's own 8-bit PCM format) stays at
      * 11025 and is resampled by the mixer.  Opening the device at 11025 used
      * to throw away everything above 5.5 kHz and alias the rest (see

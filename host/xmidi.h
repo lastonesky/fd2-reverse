@@ -13,6 +13,7 @@
  * encoding notes. */
 
 int  xmidi_play(const uint8_t *blob, uint32_t len, int loop_count);
+
 void xmidi_stop(void);
 void xmidi_set_volume(int volume);      /* 0..127, applied as channel volume */
 void xmidi_set_tick_rate(int ticks_per_second);
@@ -22,9 +23,13 @@ void xmidi_set_tick_rate(int ticks_per_second);
 void xmidi_set_test(int on);
 
 /* 0 = play through the Windows MIDI Mapper, 1 (default) = render with the
- * built-in software synthesiser in synth.c and stream it into the software
- * mixer (src/audio.h). */
-void xmidi_set_backend(int backend);
+ * built-in OPL3 synthesiser in synth.c and stream it into the software mixer
+ * (src/audio.h). */
+int  xmidi_set_backend(int backend);
+
+/* --midi-backend=winmidi|sbpro2. Returns 0 for an unknown/absent name. */
+int  xmidi_set_backend_name(const char *name);
+int  xmidi_backend(void);
 int  xmidi_is_playing(void);
 
 #endif /* FD2_XMIDI_H */

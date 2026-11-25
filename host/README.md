@@ -13,10 +13,10 @@ port 里与“运行原始机器码”强耦合的部分（LE 加载、repl 热�
 | `render_gdi.c` | Win32 参考实现/回退（对拍基准） | windows.h |
 | `audio.h` | **音频抽象接口**：单设备 + 单软件混音器（music + Σsfx） | — |
 | `audio_sokol.c` | **现代跨平台音频实现**：sokol_audio（WASAPI/CoreAudio/ALSA） | sokol_audio |
-| `synth.h/.c` | 软件 MIDI 合成器（OPL2 + Fat Man/AIL 音色库，序列渲染成 PCM；声道数 `--opl-channels=9|18`，9=单 OPL2 原味/需偷声，18=对拍参考） | audio/emu8950/opl2_patches |
+| `synth.h/.c` | 软件 MIDI 合成器（Fat Man/AIL 音色库 + AIL 音量/偷声模型，序列渲染成 PCM；18 声部，可用 `--opl-channels` 覆盖） | audio/opl3/opl2_patches |
 | `xmidi.h/.c` | XMIDI 解析（AIL 的曲目格式；≠标准 SMF） | synth/audio |
-| `emu8950/` | emu8950 OPL2 芯片仿真（`emu8950.c/.h` + `emuadpcm.c/.h`） | — |
-| `opl2_patches.h` `opl2_drumkey.h` `ail_freq.h` | Fat Man/AIL OPL2 音色库、打击乐键映射、AIL 频率表 | — |
+| `opl3/` | **FM 核心**：Nuked OPL3 v1.8（LGPL-2.1）+ `opl3_emu.c/.h` 适配器；一颗 YMF262 双寄存器 bank、newmode 开，对应 `MDI.INI` 选中的 `SBPRO2.MDI` | 无外部依赖 |
+| `opl2_patches.h` `opl2_drumkey.h` `ail_freq.h` | Fat Man/AIL 两段式音色库、打击乐键映射、AIL 频率表（OPL3 的 2-op 模式同样使用） | — |
 | `keys.h`、`keys.c`、`keys_win32.c` | 便携键词汇 `fr_key` ↔ BIOS 扫描码 | 平台 |
 | `platform_posix.c`、`platform_win32.c` | `src/platform.h` 的 OS 实现（内存/文件/线程/时钟） | 平台系统头 |
 | `sokol_impl.c` + `vendor/sokol/` | sokol 单编译单元实现 + 头（47k 行，随仓库） | 系统 GL/ALSA 等 |
@@ -69,6 +69,8 @@ make clean
 `host/Makefile` 按 `uname -s` 选后端：macOS 用 Metal (`-framework Cocoa/Metal/…`)，
 Linux 用 OpenGL core + X11/ALSA；`sokol_impl.c` 也会自动选（D3D11/Metal/GLCORE）。
 `platform_posix.c` 对非 Linux 有可移植回退。Windows 用仓库根的 `build.ps1`（MSVC）。
+音乐核心固定为 Nuked OPL3（SB Pro 2 / SB16 的 YMF262），源码随仓库携带；不再有
+OPL2 或 libADLMIDI 后端。
 
 构建前 `tools/prepare_image.py` 会从本地的 `FD2.EXE`（仓库根目录，gitignored）生成
 数据段镜像 `src/fd2_image.c`；没有 `FD2.EXE` 会报错停止。

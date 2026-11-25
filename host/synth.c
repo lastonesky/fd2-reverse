@@ -1,26 +1,22 @@
 /*
- * OPL2 music synthesiser for the FD2 host port.
+ * OPL3 music synthesiser for the FD2 host port.
  *
- * The DOS originals used AIL with a two-operator OPL2 tone bank.  This backend
- * emulates that path with emu8950 OPL2 chips and the Fat Man / AIL
- * two-operator bank, then resamples the 49716 Hz native OPL output to the host
- * audio rate.  The register write order, patch caching and buffered register
- * queue intentionally follow libADLMIDI/Nuked OPL3, which is the reference
- * used to tune the patch and timing behaviour.
+ * MDI.INI in the original game data selects SBPRO2.MDI ("Creative Labs Sound
+ * Blaster 16"), i.e. AIL's OPL3 driver, not ADLIB.MDI.  The note/volume/voice
+ * logic below drives one Nuked YMF262 with OPL3 newmode on (18 two-op voices,
+ * two register banks), matching the SB Pro 2 / SB16 path DOSBox-X emulates.
  *
- * Channel count is a runtime choice (synth_set_channels):
- *   9  - one OPL2 = the DOS original (ADLIB.MDI): 9 voices, so the allocator
- *        has to steal.  Default: the authentic path.
- *   18 - two OPL2 chips = libADLMIDI's "1 chip" configuration (NUM_OF_CHANNELS
- *        is 23 = 18 two-op + 5 rhythm, so ADL's 1-chip render still has 18
- *        melodic voices).  That is what build/oplbench's r*.wav references
- *        were rendered with, so 18 is the byte-comparable mode.
+ * The Fat Man / AIL two-operator bank is used.  The native 49716 Hz OPL output
+ * is resampled to the host audio rate.  The buffered register queue and patch
+ * caching intentionally follow the reference renders used to tune timing.
+ *
+ * Channel count is a runtime choice (synth_set_channels), default 18.
  */
 
 #include "synth.h"
 #include "platform.h"
 #include "audio.h"
-#include "emu8950/emu8950.h"
+#include "opl3/opl3_emu.h"      /* one YMF262, two register banks (SB Pro 2) */
 #include "opl2_patches.h"
 #include "opl2_drumkey.h"
 #include "ail_freq.h"
@@ -34,18 +30,15 @@
 
 #define OPL_NATIVE   49716u
 #define OPL_CLOCK    3579545u
-#define OUT_GAIN     (-2.0 * 46340.0 / 65535.0)
+#define OUT_GAIN     (-1.0)
 #define RSM_FRAC     10
 #define MAX_CH       18
 #define ADL_CHUNK    2048u
 
-/* 9 (DOS original) or 18 (libADLMIDI's single-chip 18-voice layout).  Both
- * chips are always instantiated so the 18ch register stream - which is the
- * one the reference WAVs were validated against - stays byte-identical; in 9ch
- * mode chip 1 is keyed off by the init sequence and never used.
- * g_num_chips is what the ADL-equivalent init/silence loops walk. */
-static int g_num_ch    = 9;
-static int g_num_chips = 1;
+/* SBPRO2.MDI (OPL3) exposes 18 two-op voices across two register banks on one
+ * YMF262.  g_num_chips is what the init/silence loops walk. */
+static int g_num_ch    = 18;
+static int g_num_chips = 2;
 
 static OPL *g_chip[2];
 static OPL *g_opl;
@@ -1006,6 +999,11 @@ long synth_rendered_notes(void)
     return (long)g_notes;
 }
 
+static const char *synth_core_name(void)
+{
+    return "Nuked OPL3 (SB Pro 2 / YMF262, newmode)";
+}
+
 int synth_play(const synth_event *ev, int count, double tick_rate,
                uint32_t sample_rate, int loop)
 {
@@ -1026,9 +1024,9 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
     sec = (double)samples / (double)rate;
     uint64_t rendered_notes = g_notes, peak_voices = g_peak_voices;
     uint64_t steals = g_steals;
-    printf("synth: %d events, %.3f s, %u samples, %d voices, peak voices %llu, "
+    printf("synth: [%s] %d events, %.3f s, %u samples, %d voices, peak voices %llu, "
            "notes %llu, stolen %llu, rendered in %llu ms (%.1f x real-time)\n",
-           count, sec, (unsigned)samples, g_num_ch,
+           synth_core_name(), count, sec, (unsigned)samples, g_num_ch,
            (unsigned long long)peak_voices,
            (unsigned long long)rendered_notes,
            (unsigned long long)steals,

@@ -60,7 +60,7 @@ $hostSrcs = @(
     "host_args.c", "platform_win32.c", "keys.c", "keys_win32.c",
     "render_sokol.c", "sokol_impl.c",
     "audio_sokol.c", "synth.c", "xmidi.c",
-    "emu8950/emu8950.c", "emu8950/emuadpcm.c",
+    "opl3/nukedopl3.c", "opl3/opl3_emu.c",
     "fd2_audio.c", "fd2_video.c", "fd2_platform.c", "fd2_kernel.c",
     "main_sokol.c"
 ) | ForEach-Object { Join-Path $hostd $_ }

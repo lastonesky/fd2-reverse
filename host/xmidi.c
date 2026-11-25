@@ -82,7 +82,8 @@ static int           g_volume = 127;
 static int           g_loop_count = 1;
 static uint32_t      g_tempo_us = XMIDI_DEFAULT_TEMPO;
 static int           g_tick_rate;       /* 0 = derive from tempo          */
-static int           g_backend = 1;     /* 0 = MIDI Mapper, 1 = built-in synth */
+/* 0 = Windows MIDI Mapper, 1 = built-in OPL3 synth (host/synth.c). */
+static int           g_backend = 1;
 
 /* Playback tick rate.  The original AIL sequencer ran at a fixed 120 ticks/s
  * (see the block comment above XMIDI_FIXED_TICKS_PER_SEC), but the reference
@@ -587,10 +588,30 @@ void xmidi_set_test(int on)
     g_midi_test = on ? 1 : 0;
 }
 
-/* 0 = Windows MIDI Mapper, 1 = built-in software synthesiser (default). */
-void xmidi_set_backend(int backend)
+/* 0 = Windows MIDI Mapper, 1 = built-in OPL3 synthesiser (default). */
+int xmidi_set_backend(int backend)
 {
-    g_backend = backend ? 1 : 0;
+    g_backend = backend;
+    return 1;
+}
+
+/* --midi-backend=winmidi|sbpro2 (0/-1 = leave as is). */
+int xmidi_set_backend_name(const char *name)
+{
+    if (!name || !*name)
+        return 1;
+    if (!plat_stricmp(name, "winmidi") || !plat_stricmp(name, "system"))
+        return xmidi_set_backend(0);
+    if (!plat_stricmp(name, "sbpro2") || !plat_stricmp(name, "opl3") ||
+        !plat_stricmp(name, "synth") || !plat_stricmp(name, "builtin"))
+        return xmidi_set_backend(1);
+    printf("xmidi: unknown --midi-backend='%s' (winmidi|sbpro2)\n", name);
+    return 0;
+}
+
+int xmidi_backend(void)
+{
+    return g_backend;
 }
 
 int xmidi_is_playing(void)
