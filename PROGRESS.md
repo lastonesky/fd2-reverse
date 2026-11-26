@@ -4487,4 +4487,24 @@ src 相对 scratch = 52200，末行 63144（scratch 0x25680 内）。重建通�
 既有 C4090）；隔离 `testdata/` 跑 15 s 正常 auto-quit、无崩溃。
 真实 `FD2.SAV` 校验 OK、场景 28/地点 15（用户 11:19 重玩后保存），mtime 未变
 ——**存档未损坏，无需回退回合**。待用户实机重走空魔神传送剧情做最终确认。
-Linux 侧需 `make engine`。
+Linux 侧已于 2026-11-26 重建 `make engine`（`host/build/fd2engine`，md5
+`b874d2c2a71953fcf607e0c4c16b9be4`）。
+
+### 7.66 发布 v1.0-playable（2026-11-26）
+
+相对 v0.9（a9abd9e）累计 34 个提交，主线：
+
+- **场景 28 空魔神传送崩溃**（7.65，用户在 0.9 实测反馈）与**回合切换卡顿**（7.64）修复；
+- **音乐链路重做**：emu8950/libADLMIDI 试验后定稿 Nuked OPL3 + `SAMPLE.OPL` AIL 音色库
+  + TIMB/Miles 声部分配（7.57~7.63），11025→44100（7.55），整曲预渲染移除（7.64）；
+- **Windows 首启黑屏 1.2–9 s**：`midiOutOpen` 无条件打开系统 MIDI（7.53）；
+- **typematic 对齐 DOSBox-X**（33 ms）与失焦清按住状态（7.56）；
+- 场景 22 崩溃（`dword_53A45`）、隐藏商店 F 键扫描码、世界地图面板/道具交换回归、
+  `-17/-18` 头像 opcode 加固（v0.9 当日后续）等；
+- **字形** 饒/癮 修正并重生成对白文档；**README 重写**为已通关现状（§7.65 同轮）。
+
+发布核对（AGENTS §3）：git 干净、无用户存档/日志入库；字形与 `docs/dialogue.md`
+同 commit（`5652dad`）无需重生成；Linux `make engine` 12:36 重建、Windows
+`build/fd2engine.exe` 11:22（晚于 `map_units.c` 11:21 最终修复，PROGRESS 7.65
+记有重建通过）；tag `v1.0-playable` + `fd2engine-1.0-linux-x86_64.tar.gz`
+（sha256 `90ca6fb99a14835db748f9a3a1fe7bcf6bc563a9e89f66b2f970ca0001b35b74`）。
