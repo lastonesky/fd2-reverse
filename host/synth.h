@@ -33,7 +33,6 @@ void synth_stop(void);
  * level (docs/AUDIO.md §11.8/§11.10). */
 void synth_set_sequence_volume(int volume, int ms);
 int  synth_is_playing(void);
-long synth_rendered_notes(void);
 
 /* Number of OPL voices: 18 two-op voices across two register banks on one
  * YMF262 (SBPRO2.MDI).  Must be set before the first synth_play();
@@ -55,11 +54,7 @@ void synth_set_timb(const uint8_t *pairs, int count);
 
 /* Host master volume 0..100 percent (host CLI --volume, default 100 = the
  * game's own level). Multiplied with synth_set_sequence_volume() when each
- * slice is rendered; the --midi-dump WAV and the render stats stay at full
- * scale so the offline evidence does not depend on it. */
+ * slice is rendered. */
 void synth_set_master_volume(int percent);
-
-/* Dump the rendered mix to a WAV file (diagnostics, no sound card involved). */
-void synth_set_dump_path(const char *path);
 
 #endif /* FD2_SYNTH_H */

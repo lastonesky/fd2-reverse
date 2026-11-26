@@ -1000,27 +1000,6 @@ static uint32_t stream_fill(int16_t *dst, uint32_t n, double gain)
     return written;
 }
 
-/* ---------------- Whole-song dump / statistics ---------------- */
-
-static int render(const synth_event *ev, int count, double tick_rate,
-                  uint32_t rate, int16_t **out_pcm, uint32_t *out_samples)
-{
-    uint32_t total;
-    int16_t *pcm;
-
-    stream_init(ev, count, tick_rate, rate);
-    total = g_total;
-    pcm = (int16_t *)malloc((size_t)total * sizeof(int16_t));
-    if (!pcm) {
-        printf("synth: cannot allocate %u samples\n", (unsigned)total);
-        return 0;
-    }
-    stream_fill(pcm, total, 1.0);
-    *out_pcm = pcm;
-    *out_samples = total;
-    return 1;
-}
-
 /* ---------------- Mixer / volume ---------------- */
 
 static double   g_seq_from = 127.0;
@@ -1083,13 +1062,6 @@ void synth_set_master_volume(int percent)
 
 /* ---------------- Public play/stop API ---------------- */
 
-static const char *g_dump_wav_path;
-
-void synth_set_dump_path(const char *path)
-{
-    g_dump_wav_path = path;
-}
-
 int synth_is_playing(void)
 {
     return audio_music_src() != NULL;
@@ -1100,24 +1072,10 @@ void synth_stop(void)
     audio_set_music(NULL);
 }
 
-long synth_rendered_notes(void)
-{
-    return (long)g_notes;
-}
-
-static const char *synth_core_name(void)
-{
-    return "Nuked OPL3 (SB Pro 2 / YMF262, newmode)";
-}
-
 int synth_play(const synth_event *ev, int count, double tick_rate,
                uint32_t sample_rate, int loop)
 {
-    int16_t *pcm = NULL;
-    uint32_t samples = 0;
     uint32_t rate = sample_rate;
-    uint64_t t0, t1;
-    double sec;
 
     if (!ev || count <= 0)
         return 0;
@@ -1131,44 +1089,10 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
             ail_timbres_load("SAMPLE.AD");
     }
 
+    /* The original AIL sequencer rendered one slice at a time from a timer
+     * callback.  Do the same: initialise the stream and let the mixer pull
+     * slices via synth_music_fill().  No whole-song pre-render, ever. */
     g_loop = loop ? 1 : 0;
-    t0 = plat_now_ms();
-    if (!render(ev, count, tick_rate, rate, &pcm, &samples))
-        return 0;
-    t1 = plat_now_ms();
-    sec = (double)samples / (double)rate;
-    uint64_t rendered_notes = g_notes, peak_voices = g_peak_voices;
-    uint64_t steals = g_steals;
-    printf("synth: [%s] %d events, %.3f s, %u samples, %d voices, peak voices %llu, "
-           "notes %llu, stolen %llu, rendered in %llu ms (%.1f x real-time)\n",
-           synth_core_name(), count, sec, (unsigned)samples, g_num_ch,
-           (unsigned long long)peak_voices,
-           (unsigned long long)rendered_notes,
-           (unsigned long long)steals,
-           (unsigned long long)(t1 - t0),
-           (t1 > t0) ? sec / ((double)(t1 - t0) / 1000.0) : 0.0);
-
-    if (g_dump_wav_path) {
-        FILE *f = fopen(g_dump_wav_path, "wb");
-        if (f) {
-            uint8_t h[44] = {'R','I','F','F',0,0,0,0,'W','A','V','E',
-                             'f','m','t',' ',16,0,0,0,1,0,1,0,0,0,0,0,
-                             0,0,0,0,2,0,16,0,'d','a','t','a',0,0,0,0};
-            uint32_t data_bytes = samples * 2, riff = 36 + data_bytes;
-            memcpy(h + 4, &riff, 4);
-            memcpy(h + 24, &rate, 4);
-            uint32_t br = rate * 2;
-            memcpy(h + 28, &br, 4);
-            memcpy(h + 40, &data_bytes, 4);
-            fwrite(h, 1, 44, f);
-            fwrite(pcm, 2, samples, f);
-            fclose(f);
-            printf("synth: wrote MIDI dump %s (%u samples)\n",
-                   g_dump_wav_path, (unsigned)samples);
-        }
-    }
-    free(pcm);
-
     stream_init(ev, count, tick_rate, rate);
     g_arm_t0 = plat_now_ms();
     audio_hold_music();

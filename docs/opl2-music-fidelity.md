@@ -887,3 +887,19 @@ FD2 曲库里 CC112 未出现、CC10 实际上不改变默认居中声像，因�
   合理范围。当前固定 ~120 ticks/s 的音序时钟已经过事件数/时长验证。
 - **立体声输出**：合成器层面已支持 CC10 → OPL3 pan 位；FD2 现有曲库没有有效声像事件，
   且宿主混音器仍折 mono，因此再改输出总线没有可听收益。
+
+## 18. 换轨不走整曲预渲染（回合切换卡顿）
+
+`host/synth.c::synth_play()` 旧实现在启动流式播放前，先用 `render()` 把整首曲子
+同步渲染成 PCM（`malloc(g_total*2)` + `stream_fill(pcm, g_total)`），只为打印
+`notes/voices/stolen` 统计，然后立刻 `free(pcm)`、`stream_init()` 重新开始流式播放。
+这不是原版行为——AIL 用中断回调一次只合成一小块音频。它造成的阻塞在换轨时最明显：
+`bgm_play()` 切曲 → `AIL_start_sequence()` → `xmidi_play()` → `synth_play()`，而
+`party_change_map_seq()` 在每回合切敌方曲/切回我方曲各调一次。Logs 实测：
+45 s 曲 `rendered in 859 ms`、17 s 曲 `312 ms`，两次成对出现，正是回合切换时的顿挫。
+
+修复：彻底移除预渲染方案。`render()`（整曲 PCM 渲染）、`g_dump_wav_path`/
+`synth_set_dump_path()`、`synth_rendered_notes()`、渲染统计与 WAV dump 代码全部删除；
+`synth_play()` 只保留 `stream_init()` + `audio_set_music(synth_music_fill)`。不再存在
+任何一次性渲染整首曲子的代码路径，与 AIL 中断回调逐片合成的行为一致。音色、音量
+斜坡、循环、事件时间轴完全不变。验证见 `PROGRESS.md` §7.64。

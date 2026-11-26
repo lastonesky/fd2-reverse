@@ -273,13 +273,21 @@ void map_units_move_play(int rec, int rec_x, int rec_y, int at_x, int at_y)
         uint8_t *base = dword_53A49 + 24 * (at_x - ox) + 0x8088u;
 
         src  = base + 10944 * (at_y - oy) - 2736;
-        dst  = (uint8_t *)(uintptr_t)dword_53A49
-               + 24 * (at_x - ox) + 654724 + 7680 * (at_y - oy);
+        /* The original destination is the VGA frame buffer: the constant
+         * 654724 == 0xA0504 - 6*320, i.e. six rows above the map window.
+         * Restored code used to add it to dword_53A49 (the 0x25680 scratch
+         * heap), which put dst ~0xA3A14 bytes past that heap and faulted on
+         * the first row (scene 28 teleport, 2026-11-26).  The first fix fed
+         * 0x9FD84 to VGA_P(), whose (addr-0xA0000) uint32 wrap made a +4 GiB
+         * wild pointer - keep the map window inside VGA_P() and apply the
+         * six-row (6*320) preview as plain pointer arithmetic instead. */
+        dst  = VGA_P(0xA0504u) - 6u * 320u
+               + 24 * (at_x - ox) + 7680 * (at_y - oy);
         rows = 24;
         if (at_y == oy) {
             rows = 18;
             src  = base + 10944 * (at_y - oy);
-            dst += 1920;
+            dst += 6u * 320u;
         }
     }
     for (i = 0; i < rows; ++i) {

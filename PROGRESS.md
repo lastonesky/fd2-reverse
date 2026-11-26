@@ -4444,3 +4444,47 @@ CC10 路径改为单次写入后，资源 1/18 的 WAV 与未加 CC10 时逐字�
 `dd621958…` / `0b1a72a5…`），确认无回归。4-op（SAMPLE.OPL 只有 2-op）、精确 AIL
 定时器/DMA（属 DOSBox 方案）、宿主立体声输出（曲库无有效 CC10）均明确不改，理由见
 `docs/opl2-music-fidelity.md` §17.5。Linux 侧仍需在 Linux 环境跑 `make engine`。
+
+### 7.64 修复回合切换卡顿：BGM 换轨不再同步整曲渲染
+用户反馈"我方回合结束→敌方行动"会卡一下，原版丝滑。定位：`party_change_map_seq()`
+在切敌方曲（`:167`）与切回我方曲（`:187`）各调一次 `bgm_play()`；默认后端
+`g_backend=1`（内置 OPL3）下→`xmidi_play()`→`synth_play()` 在播放前用 `render()`
+同步把**整首曲子**渲染成 PCM 只为打印统计，随后 `free()` 再 `stream_init()` 重新
+流式播放。`E:\FD2\fd2engine.log` 实测：45 s 曲 `rendered in 859 ms`、17 s 曲
+`rendered in 312 ms`，且换轨成对出现——正是切换瞬间的顿挫。原版 AIL 是中断回调流式
+播放，不存在这一步。
+修复：彻底移除预渲染方案——`host/synth.c` 删除 `render()`（整曲 PCM + malloc +
+`stream_fill`）、`g_dump_wav_path`/`synth_set_dump_path()`、`synth_rendered_notes()`、
+整曲渲染统计与 WAV dump 代码；`synth_play()` 只保留 `stream_init()` + 挂
+`synth_music_fill()` 流式回调，每次换轨零预渲染。头文件同步删除相应声明。
+这跟原版 AIL 中断回调逐片合成的行为一致；音色/音量斜坡/循环均不变。
+验证：Windows x64 `build.ps1` 重建通过（仅既有 2 条 C4090）；隔离 `testdata/` 跑
+`--autoquit-ms`，日志有 `init_sequence`、无 `rendered in`，`--unfocus=none`
+下 `audio: mixed … music=on peak 1461/32767`（确认音乐仍正常输出）。真实 `FD2.SAV`
+未改动（mtime/md5 不变），测试前已备份。Linux 侧仍需在 Linux 环境跑 `make engine`。
+
+### 7.65 修复场景 28 空魔神传送崩溃：`map_units_move_play` 越界写 VGA
+用户反馈：场景 28 空魔神传送剧情后游戏崩溃，疑似要退回很多回合。崩溃日志
+`E:\fd2_crash.log`（10:45）给出 VEH `C0000005`、`fault=0x4E8BD874`，栈 `#06
+map_units_move_play+0x2C1` ← `#07 scene_state_28+0xF7`（`scene_states.c:818`
+`sub_22253(rec,15,10,15,10)`）。map 文件把 `0x14003CF11` 精确落到该函数尾部
+`for(rows) memmove(dst,src,0x18)`（`:286`）。
+根因（代数 100% 验证）：`map_units.c:276` 的 `dst = dword_53A49 + 654724 +
+24*(at_x-ox) + 7680*(at_y-oy)` 中，`dword_53A49` 是 `malloc(0x25680)` 的 scratch
+堆，而 `654724 = 0x9FD84 = 0xA0504 - 6*320` 本是 DOS 实模式下的 **VGA 帧缓冲线性
+地址**（往前 6 行预览，dst 行距 320/src 行距 456 = 6×320/6×456 完全对仗）。
+native 下把绝对 VGA 地址加到独立 malloc 指针上 → dst 落在 scratch 外 ~0xA3A14
+（670 KB），首行 memmove 即触发访问违规。用崩溃寄存器反算：`fault-src=0x96E2C`
+与公式预测逐位一致，`dword_53A49=0x4E819E60`、`src` 预测值 == 实测 `rdx`。
+首次修复（错误）：`dst` 写成 `VGA_P(0xA0504u - 6u*320u)`。用户实机重试仍崩
+（11:20 第二条崩溃记录，`map_units_move_play+0x2C3`、`fault=0x24015DF94`）。
+根因：`VGA_P(addr) = fd2_vga + (uint32_t)(addr - 0xA0000)`，传入 `0x9FD84`
+（< 0xA0000）使 uint32 下溢成 `0xFFFFFD84` ≈ +4 GiB → 野指针。
+最终修复：`dst = VGA_P(0xA0504u) - 6u*320u + ...`，把 6 行偏移放在 `VGA_P()`
+**外面**做普通指针运算，避免宏内 uint32 下溢。代数复核（崩溃参数 at=15,10 /
+ox=9 / oy=8）：dst 相对帧缓冲起点 = 14868，末行 22548（帧缓冲 64000 内）；
+src 相对 scratch = 52200，末行 63144（scratch 0x25680 内）。重建通过（仅 2 条
+既有 C4090）；隔离 `testdata/` 跑 15 s 正常 auto-quit、无崩溃。
+真实 `FD2.SAV` 校验 OK、场景 28/地点 15（用户 11:19 重玩后保存），mtime 未变
+——**存档未损坏，无需回退回合**。待用户实机重走空魔神传送剧情做最终确认。
+Linux 侧需 `make engine`。
