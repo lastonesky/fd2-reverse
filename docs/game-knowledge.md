@@ -842,3 +842,4 @@ for (i = 0xD1; i < 0xD7; i++)      // 209..214
 - 转职映射：`0x523D5`（旧类型→道具）、`0x615FE`（转职后职业）
 - 隐藏事件扫描：`python3 tools/fd2secrets.py --all --items`
 - 全关卡隐藏格清单：见 [hidden-events.md](hidden-events.md)
+- 结局演示（名单按键跳过 / THE END 后无法退出）：见 [ending-behavior.md](ending-behavior.md)
