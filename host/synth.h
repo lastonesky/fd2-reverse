@@ -44,6 +44,15 @@ int  synth_channels(void);
 /* Override the General MIDI sound bank path (default: the Windows gm.dls). */
 void synth_set_bank_path(const char *path);
 
+/* Load an AIL Global Timbre Library (SAMPLE.OPL / SAMPLE.AD).  Returns the
+ * instrument count, 0 on failure.  synth_play() also tries SAMPLE.OPL and
+ * SAMPLE.AD automatically from the process CWD if this was never called. */
+int  synth_load_ail_timbres(const char *path);
+
+/* AIL XMIDI TIMB entries: pairs of (patchId, bankId).  Used to select the
+ * correct timbre bank for program changes and percussion notes. */
+void synth_set_timb(const uint8_t *pairs, int count);
+
 /* Host master volume 0..100 percent (host CLI --volume, default 100 = the
  * game's own level). Multiplied with synth_set_sequence_volume() when each
  * slice is rendered; the --midi-dump WAV and the render stats stay at full

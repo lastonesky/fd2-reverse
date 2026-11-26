@@ -59,7 +59,7 @@ $inc    = "/I `"$hostd`" /I `"$src`" /I `"$src\game`" /I `"$src\include`" /I `"$
 $hostSrcs = @(
     "host_args.c", "platform_win32.c", "keys.c", "keys_win32.c",
     "render_sokol.c", "sokol_impl.c",
-    "audio_sokol.c", "synth.c", "xmidi.c",
+    "audio_sokol.c", "synth.c", "ail_timbres.c", "xmidi.c",
     "opl3/nukedopl3.c", "opl3/opl3_emu.c",
     "fd2_audio.c", "fd2_video.c", "fd2_platform.c", "fd2_kernel.c",
     "main_sokol.c"

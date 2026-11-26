@@ -22,7 +22,7 @@
 | | `dseg03` 0x60000..0x64000（16384 B，vsize 0x34D2） |
 | 函数总数 | **1369**（IDA 库 `E:\FD2\FD2.EXE.i64`，已含本次全部修复并保存） |
 | 分区 | 游戏本体 0x10000..0x37000（约 569+）；Watcom CRT 0x37000+；Miles AIL V3.02 0x37D3E..0x4D000；游戏工具库 0x4DED4..0x4F000 |
-| 资源 | FDTXT/FDOTHER/FDFIELD/FDSHAP/DATO/FDMUS/BG/FIGANI/TAI/ANI.DAT、FDICON.B24、FD2.SAV/TMP（格式见 `E:\FD2\FD2_analysis.md`） |
+| 资源 | FDTXT/FDOTHER/FDFIELD/FDSHAP/DATO/FDMUS/BG/FIGANI/TAI/ANI.DAT、FDICON.B24、FD2.SAV/TMP、`SAMPLE.OPL`/`SAMPLE.AD`（AIL 音色库，格式见 `docs/opl2-music-fidelity.md` §17） |
 
 历史资产（前人多轮分析，本阶段复用其**结论**，地址一律以本 IDA 库复核）：
 `port/re/RE_MAP.md`（函数分区/核心档案/分派表）、`port/re/funcmap.csv`、
@@ -133,6 +133,7 @@ src/
 | `--volume=N` | `FD2_VOLUME` | 主音量 0..100（默认 100） |
 | `--midi-backend=sbpro2` | `FD2_MIDI_BACKEND` | 内置 OPL3 合成器（默认；也接受 `opl3`/`synth`）。`winmidi` 仅 Win32 |
 | `--opl-channels=N` | `FD2_OPL_CHANNELS` | FM 声部数，默认 18（SBPRO2.MDI） |
+| `--ail-timbres=FILE` | `FD2_AIL_TIMBRES` | AIL 音色库路径；默认依次尝试 `SAMPLE.OPL`、`SAMPLE.AD`（游戏数据自带） |
 | `--upscale=nearest\|linear\|sharp\|bicubic` | `FD2_UPSCALE` | 呈现层放大算法（默认 nearest） |
 | `--aspect=off` | `FD2_ASPECT` | 关掉 4:3 保持，铺满窗口 |
 | `--log=FILE` | `FD2_LOG` | 日志文件（默认 `fd2engine.log`） |

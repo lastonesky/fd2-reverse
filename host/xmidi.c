@@ -268,12 +268,13 @@ static int parse_evnt(const uint8_t *ev, uint32_t len, int *out_skips)
 }
 
 
-static const uint8_t *find_evnt(const uint8_t *p, uint32_t len, uint32_t *out_len)
+static const uint8_t *find_chunk(const uint8_t *p, uint32_t len,
+                                 const char *id, uint32_t *out_len)
 {
     uint32_t i;
 
     for (i = 0; i + 8 <= len; i++) {
-        if (!memcmp(p + i, "EVNT", 4)) {
+        if (!memcmp(p + i, id, 4)) {
             uint32_t l = rd_be32(p + i + 4);
             if (l && i + 8 + l <= len) {
                 *out_len = l;
@@ -282,6 +283,35 @@ static const uint8_t *find_evnt(const uint8_t *p, uint32_t len, uint32_t *out_le
         }
     }
     return NULL;
+}
+
+static const uint8_t *find_evnt(const uint8_t *p, uint32_t len, uint32_t *out_len)
+{
+    return find_chunk(p, len, "EVNT", out_len);
+}
+
+/* AIL's TIMB chunk: [u16 LE count][patchId, bankId]...  It tells the MDI
+ * driver which bank a program (or a percussion note) must use.  FD2's bank is
+ * bank 0 for melody and bank 127 for channel-9 notes; parsing it still closes
+ * the mechanism gap instead of hard-coding both banks in synth.c. */
+static uint8_t  g_timb[256 * 2];
+static int      g_timb_count;
+
+static void parse_timb(const uint8_t *p, uint32_t len)
+{
+    uint32_t n, i;
+
+    g_timb_count = 0;
+    if (len < 2)
+        return;
+    n = (uint32_t)p[0] | ((uint32_t)p[1] << 8);
+    if (n > 256)
+        n = 256;
+    for (i = 0; i < n && 2 + 2 * i + 1 < len; ++i) {
+        g_timb[2 * i]     = p[2 + 2 * i];
+        g_timb[2 * i + 1] = p[3 + 2 * i];
+    }
+    g_timb_count = (int)i;
 }
 
 /* ------------------------------------------------------------ playback -- */
@@ -429,7 +459,9 @@ static int winmidi_open(void)
 int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
 {
     const uint8_t *evnt;
+    const uint8_t *timb;
     uint32_t evnt_len = 0;
+    uint32_t timb_len = 0;
     int skips = 0;
 
     xmidi_stop();
@@ -439,6 +471,16 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
     if (!evnt) {
         printf("xmidi: no EVNT chunk in %u bytes\n", (unsigned)len);
         return 0;
+    }
+    timb = find_chunk(blob, len, "TIMB", &timb_len);
+    if (timb) {
+        int perc = 0;
+        parse_timb(timb, timb_len);
+        for (int i = 0; i < g_timb_count; ++i)
+            if (g_timb[2 * i + 1] == 127) ++perc;
+        printf("xmidi: TIMB %d entries (%d percussion bank 127)\n",
+               g_timb_count, perc);
+        synth_set_timb(g_timb, g_timb_count);
     }
     if (!parse_evnt(evnt, evnt_len, &skips)) {
         printf("xmidi: failed to parse EVNT (%u bytes)\n", (unsigned)evnt_len);
@@ -557,6 +599,7 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
 
 void xmidi_stop(void)
 {
+    synth_set_timb(NULL, 0);
     synth_stop();
     if (plat_atomic_read(&g_playing)) {
         int waited = 0;

@@ -17,7 +17,8 @@
 #include "platform.h"
 #include "audio.h"
 #include "opl3/opl3_emu.h"      /* one YMF262, two register banks (SB Pro 2) */
-#include "opl2_patches.h"
+#include "ail_timbres.h"        /* SAMPLE.OPL: the game's real AIL timbre bank */
+#include "opl2_patches.h"       /* fallback only when SAMPLE.OPL is unavailable */
 #include "opl2_drumkey.h"
 #include "ail_freq.h"
 
@@ -71,6 +72,8 @@ typedef struct {
     uint8_t  vel;
     double   tone;          /* 未加弯音/颤音的基础音高（鼓为固定音高） */
     const opl2_patch *patch;
+    const ail_timbre *timbre; /* non-NULL when the AIL bank supplied the patch */
+    uint16_t priority;      /* Miles currentPriority, 32767 on note-on */
 } voice_t;
 
 static voice_t          g_voice[MAX_CH];
@@ -92,6 +95,13 @@ static double g_vibpos[16];
 static uint64_t         g_notes;
 static uint64_t         g_peak_voices;
 static uint64_t         g_steals;        /* notes cut while still sounding */
+static int              g_timbres_auto_tried;
+static uint8_t          g_timb[256 * 2]; /* XMIDI TIMB: (patchId, bankId) pairs */
+static int              g_timb_count;
+static uint8_t          g_voice_protect[16]; /* Miles CC112 per MIDI channel */
+static uint8_t          g_active_voices[16];
+static uint8_t          g_pan[16];           /* CC10, 64 = centre */
+static int              g_circular_phys = -1;
 
 /* ---------------- Nuked-style buffered register queue ---------------- */
 
@@ -371,7 +381,13 @@ static void ail_fnum(double tone, int *fnum, int *block)
 
 /* ---------------- Patch / voice control ---------------- */
 
-static void opl_patch(int ch, const opl2_patch *p, int mv)
+static uint8_t pan_bits(int midi_ch)
+{
+    int val = g_pan[midi_ch] & 0x7F;
+    return (uint8_t)(val < 60 ? 0x10 : (val > 67 ? 0x20 : 0x30));
+}
+
+static void opl_patch(int ch, const opl2_patch *p, int mv, uint8_t pan)
 {
     g_opl = chip_of(ch);
     int m = OP_OFF[ch % 9], c = OP_OFF[ch % 9] + 3;
@@ -380,7 +396,7 @@ static void opl_patch(int ch, const opl2_patch *p, int mv)
     int am = p->rC0 & 1;
     uint8_t tl_m = (uint8_t)((mod->r40 & 0xC0) | ail_scale_tl(mod->r40 & 0x3F, mv, am));
     uint8_t tl_c = (uint8_t)((car->r40 & 0xC0) | ail_scale_tl(car->r40 & 0x3F, mv, 1));
-    uint8_t c0 = (uint8_t)(p->rC0 | 0x30);
+    uint8_t c0 = (uint8_t)((p->rC0 & 0x0F) | pan);
 
     if (g_patch_cache[ch] != p) {
         opl_write(0x20 + m, mod->r20);
@@ -451,6 +467,20 @@ static void voice_update_volume(int ch)
                                   ail_scale_tl(p->op[0].r40 & 0x3F, mv, 1)));
 }
 
+/* AIL drivers implement MIDI CC10 by rewriting OPL3 C0 panning bits.  FD2's
+ * XMI barely uses CC10, but the path is kept so explicit pan events behave
+ * like the MDI driver rather than being silently forced to centre. */
+static void voice_update_pan(int ch)
+{
+    voice_t *v = &g_voice[ch];
+
+    if (!v->used || !v->patch)
+        return;
+    g_opl = chip_of(ch);
+    opl_write(0xC0 + ch % 9,
+              (uint8_t)((v->patch->rC0 & 0x0F) | pan_bits(v->midi_ch)));
+}
+
 static void opl_off(int ch)
 {
     g_opl = chip_of(ch);
@@ -458,8 +488,36 @@ static void opl_off(int ch)
     opl_write(0xB0 + ch % 9, g_voice[ch].b0);
 }
 
+/* YM3812 envelope rate (0..15) -> approximate milliseconds.  These values
+ * only drive voice-allocation aging, never the OPL registers themselves. */
+static const uint16_t OPL_ENV_MS[16] = {
+    40000, 4096, 3277, 2621, 2097, 1678, 1341, 1073,
+      858,  686,  549,  439,  351,  281,  225,  180
+};
+
+static int ail_env_on_ms(const ail_timbre *t)
+{
+    /* t->data.op[0] is the carrier (AIL op2). */
+    const opl2_op *car = &t->data.op[0];
+    int ar = car->r60 >> 4, dr = car->r60 & 15, sl = car->r80 >> 4;
+    int on;
+
+    if (sl >= 15)              /* sustains at full level: AIL keeps the voice */
+        return 40000;
+    on = OPL_ENV_MS[ar] + (OPL_ENV_MS[dr] * (15 - sl)) / 15;
+    return on > 40000 ? 40000 : on;
+}
+
+static int ail_env_off_ms(const ail_timbre *t)
+{
+    int rr = t->data.op[0].r80 & 15;
+    return OPL_ENV_MS[rr];
+}
+
 static int voice_off_ms(const voice_t *v)
 {
+    if (v->timbre)
+        return ail_env_off_ms(v->timbre);
     if (v->ins >= 128) {
         int k = v->ins - 128;
         if (k < 0) k = 0;
@@ -469,96 +527,123 @@ static int voice_off_ms(const voice_t *v)
     return opl2_melodic_off_ms[v->ins & 127];
 }
 
-static int voice_on_ms(int ins)
+static int voice_on_ms(const voice_t *v)
 {
-    if (ins >= 128) {
-        int k = ins - 128;
+    if (v->timbre)
+        return ail_env_on_ms(v->timbre);
+    if (v->ins >= 128) {
+        int k = v->ins - 128;
         if (k < 0) k = 0;
         if (k > 52) k = 52;
         return opl2_percussion_on_ms[k];
     }
-    return opl2_melodic_on_ms[ins & 127];
+    return opl2_melodic_on_ms[v->ins & 127];
 }
 
-/* libADLMIDI MIDIplay::calculateChipChannelGoodness（默认 OffDelay 策略）。
- * 单位与上游一致：koff/kon 都是微秒截断到毫秒，只有"没有活动音符"的
- * 声道才走 Release 分支。 */
-static int64_t channel_goodness(int c, int ins)
+/* Miles "newer" physical allocator: ring search from the last assigned
+ * voice, then prioritySort() when all voices are busy.  The real driver has
+ * 20 virtual voices over 18 physical ones; this engine keeps the 18 physical
+ * voices as the only layer, so an incoming note always steals immediately
+ * (with CC112 protection and per-channel active counts matching Miles). */
+static int find_voice(int midi_ch)
 {
-    const voice_t *v = &g_voice[c];
-    int64_t koff_ms = v->used ? 0 : v->koff_us / 1000;
-    int64_t s = -koff_ms;
+    int start = 0, n, ch;
 
-    if (s < 0 && !v->used) {
-        int is_same = (v->ever_used && v->ins == ins);
-        s -= 40000;
-        if (is_same)
-            s = -koff_ms;          /* 同音色的 Release 声道优先复用 */
-        return s;
-    }
-
-    if (v->used) {
-        /* 活动音符：ADL 用 -4e6 - kon_ms 强烈压低，只有全忙时才会被偷。
-         * 踏板保持中的音符权重小得多（-5e5 - kon/2）：上游 AdlChannel 对
-         * sustained 的处理就是"先拿踏板音开刀"（9 声道时这一步很常见）。*/
-        s -= v->sustained ? (500000 + v->kon_us / 2000)
-                          : (4000000 + v->kon_us / 1000);
-        if (v->ins == ins) {
-            s += 300;
-            if (v->vibdelay_us < 70000 || v->kon_us > 20000000LL)
-                s += 10;           /* 琶音候选 */
+    if (g_circular_phys >= 0 && g_circular_phys < g_num_ch)
+        start = (g_circular_phys + 1) % g_num_ch;
+    for (n = 0; n < g_num_ch; ++n) {
+        ch = (start + n) % g_num_ch;
+        if (!g_voice[ch].used) {
+            g_circular_phys = ch;
+            return ch;
         }
-        if (v->ins >= 128)
-            s += 50;               /* 打击乐比旋律更适合被偷 */
     }
 
-    /* 空闲"疏散站"：别处还有同音色、可转移的音符时略微加分 */
-    if (v->used) {
-        unsigned n = 0;
-        for (int c2 = 0; c2 < g_num_ch; ++c2) {
-            if (c2 == c || !g_voice[c2].used)
-                continue;
-            if (g_voice[c2].vibdelay_us >= 200000)
-                continue;
-            if (g_voice[c2].ins != v->ins)
-                continue;
-            ++n;
+    {
+        uint16_t lowest = 0xFFFF;
+        int victim = 0;
+
+        for (ch = 0; ch < g_num_ch; ++ch) {
+            int mc = g_voice[ch].midi_ch;
+            uint16_t p = (g_voice_protect[mc] >= 64)
+                ? 0xFFFF : g_voice[ch].priority;
+
+            if (p >= g_active_voices[mc])
+                p = (uint16_t)(p - g_active_voices[mc]);
+            else
+                p = 0;
+            if (p <= lowest) {      /* Miles uses <= for voicedLowest */
+                lowest = p;
+                victim = ch;
+            }
         }
-        s += (int64_t)n * 4;
+        return victim;
     }
-    return s;
 }
 
-static int find_voice(int ins)
+/* Resolve the bank AIL would use for this program/percussion note from the
+ * song's TIMB chunk.  Bank 127 entries belong to channel 9; all other entries
+ * are melodic programs.  Defaults match FD2's SAMPLE.OPL (0 / 127). */
+static int timb_bank_for(int is_drum, int pid)
 {
-    int best = 0;
-    int64_t best_score = -0x7FFFFFFFFFFFFFFFLL;
+    int default_bank = is_drum ? 127 : 0;
 
-    for (int i = 0; i < g_num_ch; ++i) {
-        int64_t score = channel_goodness(i, ins);
-        if (score > best_score) {
-            best_score = score;
-            best = i;
-        }
+    for (int i = 0; i < g_timb_count; ++i) {
+        uint8_t p = g_timb[2 * i];
+        uint8_t b = g_timb[2 * i + 1];
+        if ((int)p != pid)
+            continue;
+        if (is_drum && b == 127)
+            return 127;
+        if (!is_drum && b != 127)
+            return (int)b;
     }
-    return best;
+    return default_bank;
 }
 
 static void note_on(int midi_ch, int note, int vel, uint32_t tick)
 {
     int is_drum = (midi_ch == 9 && note >= 35 && note <= 87);
     int ins = is_drum ? 128 + note - 35 : g_prog[midi_ch] & 127;
-    const opl2_patch *p = is_drum ? &opl2_bank_percussion[note - 35]
-                                  : &opl2_bank_melodic[ins];
-    double tone = is_drum ? (double)opl2_drum_key[note - 35] : (double)note;
-    int mv = ail_midi_volume(vel, g_chvol[midi_ch], g_chexpr[midi_ch], g_master_vol);
-    int ch = find_voice(ins);
+    const ail_timbre *t = NULL;
+    const opl2_patch *p;
 
-    if (g_voice[ch].used) {
-        opl_off(ch);              /* 偷声前先放音，避免爆音 */
-        ++g_steals;
+    if (ail_timbres_loaded()) {
+        int pid  = is_drum ? (note & 0x7F) : (g_prog[midi_ch] & 127);
+        int bank = timb_bank_for(is_drum, pid);
+
+        t = ail_timbre_find(bank, pid);
+    }
+    if (t) {
+        p = &t->data;
+    } else {
+        /* SAMPLE.OPL missing: keep the old generic bank as a safe fallback. */
+        p = is_drum ? &opl2_bank_percussion[note - 35]
+                    : &opl2_bank_melodic[ins];
     }
 
+    /* AIL gives percussion a fixed pitch via the instrument's transposition
+     * field; melodic transposition is zero in FD2's bank.  ScummVM's
+     * MilesAdlibDriver does exactly this (channel 9: note = transposition). */
+    double trans = t ? (double)t->trans : 0.0;
+    double tone  = is_drum
+        ? (t ? trans : (double)opl2_drum_key[note - 35])
+        : (double)note + trans;
+    int mv = ail_midi_volume(vel, g_chvol[midi_ch], g_chexpr[midi_ch], g_master_vol);
+    int ch = find_voice(midi_ch);
+
+    if (g_voice[ch].used) {
+        int old_ch = g_voice[ch].midi_ch;
+
+        opl_off(ch);              /* 偷声前先放音，避免爆音 */
+        if (g_active_voices[old_ch])
+            --g_active_voices[old_ch];
+        ++g_steals;
+    }
+    ++g_active_voices[midi_ch];
+    g_circular_phys = ch;         /* ring advances on reassignment too */
+
+    g_voice[ch].priority = 32767; /* Miles: currentPriority at note-on */
     g_voice[ch].used = 1;
     g_voice[ch].ever_used = 1;
     g_voice[ch].ins = ins;
@@ -567,15 +652,16 @@ static void note_on(int midi_ch, int note, int vel, uint32_t tick)
     g_voice[ch].start_tick = tick;
     g_voice[ch].end_tick = tick + 60;
     g_voice[ch].koff_us = 0;
-    g_voice[ch].kon_us = 1000LL * voice_on_ms(ins);
-    g_voice[ch].fixed_sustain = (voice_on_ms(ins) == 40000);
+    g_voice[ch].timbre = t;
+    g_voice[ch].kon_us = 1000LL * voice_on_ms(&g_voice[ch]);
+    g_voice[ch].fixed_sustain = (voice_on_ms(&g_voice[ch]) == 40000);
     g_voice[ch].vibdelay_us = 0;
     g_voice[ch].sustained = 0;
     g_voice[ch].vel = (uint8_t)vel;
     g_voice[ch].tone = tone;
     g_voice[ch].patch = p;
 
-    opl_patch(ch, p, mv);
+    opl_patch(ch, p, mv, pan_bits(midi_ch));
     opl_note(ch, voice_tone(&g_voice[ch]));
     ++g_notes;
 }
@@ -591,6 +677,8 @@ static void note_off(int midi_ch, int note)
                 g_voice[v].koff_us = 0;
             } else {
                 opl_off(v);
+                if (g_active_voices[midi_ch])
+                    --g_active_voices[midi_ch];
                 g_voice[v].used = 0;
                 g_voice[v].koff_us = 1000LL * voice_off_ms(&g_voice[v]);
             }
@@ -667,6 +755,9 @@ static void opl_panic(void)
         opl_off(ch);
     memset(g_voice, 0, sizeof g_voice);
     memset(g_patch_cache, 0, sizeof g_patch_cache);
+    memset(g_active_voices, 0, sizeof g_active_voices);
+    memset(g_voice_protect, 0, sizeof g_voice_protect);
+    g_circular_phys = -1;
 }
 
 static void reset_sequence_state(void)
@@ -705,6 +796,9 @@ static void stream_init(const synth_event *ev, int count, double tick_rate,
 
     memset(g_voice, 0, sizeof g_voice);
     memset(g_patch_cache, 0, sizeof g_patch_cache);
+    memset(g_active_voices, 0, sizeof g_active_voices);
+    memset(g_voice_protect, 0, sizeof g_voice_protect);
+    g_circular_phys = -1;
     g_notes = 0;
     g_peak_voices = 0;
     g_steals = 0;
@@ -713,6 +807,7 @@ static void stream_init(const synth_event *ev, int count, double tick_rate,
         g_prog[i] = 0;
         g_chvol[i] = 100;
         g_chexpr[i] = 127;
+        g_pan[i] = 64;
         g_bend[i] = 0.0;
         g_bendsense[i] = 2.0 * 128.0 / (128.0 * 8192.0);
         g_vibrato[i] = 0;
@@ -745,6 +840,12 @@ static void apply_event(const synth_event *e, uint32_t t)
             for (int v = 0; v < g_num_ch; ++v)
                 if (g_voice[v].used && g_voice[v].midi_ch == ch)
                     voice_update_volume(v);
+        } else if (e->msg[1] == 10) {
+            printf("synth: CC10 pan ch=%d val=%d\n", ch, e->msg[2]);
+            g_pan[ch] = e->msg[2];
+            for (int v = 0; v < g_num_ch; ++v)
+                if (g_voice[v].used && g_voice[v].midi_ch == ch)
+                    voice_update_pan(v);
         } else if (e->msg[1] == 1) {
             g_vibrato[ch] = e->msg[2];
             if (g_vibrato[ch] == 0)
@@ -758,11 +859,16 @@ static void apply_event(const synth_event *e, uint32_t t)
                     if (g_voice[v].used && g_voice[v].sustained &&
                         g_voice[v].midi_ch == ch) {
                         opl_off(v);
+                        if (g_active_voices[ch])
+                            --g_active_voices[ch];
                         g_voice[v].used = 0;
                         g_voice[v].sustained = 0;
                         g_voice[v].koff_us = 0;  /* 上游此路径不设 Release 时间 */
                     }
             }
+        } else if (e->msg[1] == 112) {
+            /* Miles MILES_CONTROLLER_PROTECT_VOICE */
+            g_voice_protect[ch] = e->msg[2];
         }
     } else if (hi == 0xE0) {
         g_bend[ch] = (double)((e->msg[1] & 0x7F) | ((e->msg[2] & 0x7F) << 7)) - 8192.0;
@@ -1016,6 +1122,15 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
     if (!ev || count <= 0)
         return 0;
 
+    /* The game data directory is the process CWD.  Load the AIL bank lazily
+     * so offline harnesses that compile synth.c get the same timbres without
+     * needing an explicit init call. */
+    if (!ail_timbres_loaded() && !g_timbres_auto_tried) {
+        g_timbres_auto_tried = 1;
+        if (!ail_timbres_load("SAMPLE.OPL"))
+            ail_timbres_load("SAMPLE.AD");
+    }
+
     g_loop = loop ? 1 : 0;
     t0 = plat_now_ms();
     if (!render(ev, count, tick_rate, rate, &pcm, &samples))
@@ -1064,4 +1179,21 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
 void synth_set_bank_path(const char *path)
 {
     (void)path;
+}
+
+int synth_load_ail_timbres(const char *path)
+{
+    g_timbres_auto_tried = 1;
+    return ail_timbres_load(path);
+}
+
+void synth_set_timb(const uint8_t *pairs, int count)
+{
+    int n = count > 256 ? 256 : (count > 0 ? count : 0);
+
+    g_timb_count = 0;
+    if (!pairs || n <= 0)
+        return;
+    memcpy(g_timb, pairs, (size_t)n * 2);
+    g_timb_count = n;
 }

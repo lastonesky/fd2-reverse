@@ -807,3 +807,83 @@ OPL3/OPL2 逐样本不同（平均绝对差 6214/32768），说明切换确实�
   现行单一 OPL3 后端不再满足该口径；它仍可作为方法学参考。
 - Windows 侧只改了 `build.ps1`，本机没有 MSVC，**未做实机构建验证**。
 - emu8950、libADLMIDI 两个后端及其构建开关/参数/接线均已从仓库移除。
+
+---
+
+## 17. 2026-11-26：方案 E 第一步——改用游戏自带的 AIL 音色库
+
+### 17.1 根因：此前 128 个旋律音色全部是错的
+
+`host/opl2_patches.h` 来自通用 `fatman-2op-ail-default.woplx`，而 FD2 数据目录里
+**本来就带着自己的 AIL Global Timbre Library**：`SAMPLE.OPL` 与 `SAMPLE.AD`
+（两者 md5 相同，`b04ce567e1fb40e8c1a2002b23027dfd`）。解析格式（与 ScummVM
+`audio/miles_adlib.cpp` 一致）后得到 162 个音色：bank 0 的 128 个旋律音色、
+bank 127 的 34 个打击乐音色。逐条比对结果：**128/128 个旋律音色与通用库不同**。
+
+“咚咚咚”是通道 9 的 note 36/35（bass drum）。原版音色为
+`bank127 patch36: r20/r40/r60/r80/E0 = op1(1,11,168,76,0), op2(1,0,214,79,0), C0=0, trans=41`，
+当前通用库则是 `op(17,0,243,6,0)/(16,68,248,119,2), C0=8`（波形 2、固定键 35）。
+音色本身（正弦 vs 锯齿）、固定音高（trans=41 → AIL 归一化后约 note 29，≈44 Hz，
+而非 note 35 的 ≈62 Hz）都不同，这就是“薄、没有厚重感”的直接原因。
+
+### 17.2 实现
+
+- 新增 `host/ail_timbres.c/.h`：解析 Global Timbre Library 头
+  `[patch:u8][bank:u8][offset:u32 LE]` 与 14 字节 instrument 记录；把 AIL 的
+  op1=modulator / op2=carrier 映射到 `opl2_patch`（synth.c 的 `op[1]`=mod、
+  `op[0]`=car）。
+- `host/synth.c`：`note_on()` 优先查 `ail_timbres`（bank 0 = 程序号，bank 127 = 鼓音符号）；
+  打击乐音高改用 instrument 的 `trans` 字段（ScummVM `MilesAdlibDriver` 的
+  `channel 9: currentNote = transposition`），旋律保持 MIDI note（FD2 bank 0 的
+  trans 全为 0）。文件缺失时回退到旧的通用库。
+- `synth_play()` 会尝试从 CWD 自动加载 `SAMPLE.OPL` / `SAMPLE.AD`，离线 harness 无需改接线。
+- `host/fd2_kernel.c` 启动时按 `--ail-timbres=FILE` / `SAMPLE.OPL` / `SAMPLE.AD` 顺序加载并打印数量；
+  `build.ps1` 与 `host/Makefile` 均编入新文件。
+
+### 17.3 验证
+
+- Windows x64 MSVC 重建通过（`pwsh` 不可用，用 Windows PowerShell + `tools/msvc_env.ps1` 调 `cl.exe`）。
+- 离线 `engine_check` harness（新编译 `engine_check_ail.exe`，资源 1 = song01，`FD2_RATE=49716`）：
+  日志出现 `ail_timbres: 162 instruments from SAMPLE.OPL`；寄存器日志首个 bass drum 写入为
+  `W 020 01 / W 023 01 / W 060 A8 / W 063 D6 / W 080 4C / W 083 4F / W 0E0 00 / W 0E3 00`
+  ——与 SAMPLE.OPL 的 op1/op2 字节逐项一致。
+- 前 0.5 s（正好是“咚咚咚”段）的低频/高频能量比由 **3.03 → 5.46**，过零率 609 → 596，
+  说明鼓声确实变厚、变低。整体 RMS 2334 → 1077（AIL 原始 bank 电平更低），
+  **听感仍须用户在真机/DOSBox-X 上确认**。本机没有 DOSBox(-X)，无法抓基准录音。
+
+### 17.4 方案 E 后续项（2026-11-26 完成）
+
+**（1）TIMB 块接入音色 bank 选择。** `host/xmidi.c` 现在用通用 `find_chunk()` 同时取
+`EVNT` 和 `TIMB`，解析 `[u16 LE count][patchId, bankId]...`，通过
+`synth_set_timb()` 下发给合成器；切歌/停止时清空。`synth.c` 的 `note_on()` 改为按
+TIMB 决定 bank（bank 127 条目给通道 9，其余给旋律程序号），默认仍是 0/127。
+实测资源 1 的 TIMB 为 8 条（4 条 bank 127），资源 18 为 9 条（2 条 bank 127）。
+
+**（2）on/off 时长改为 AIL 包络驱动。** `voice_on_ms()` / `voice_off_ms()` 不再读
+`opl2_*_on_ms/off_ms` 静态表，而是从当前 AIL timbre 的 carrier（AIL op2）寄存器
+`r60`(AR/DR)、`r80`(SL/RR) 按 YM3812 速率→毫秒表推导；SL=15 视为固定延音（40000 ms）。
+这些值只影响声部分配/老化，不写 OPL 寄存器。
+
+**（3）Miles 风格声部分配。** `find_voice()` 改为从上次分配位置开始的环形物理分配
+（对应 SBPRO2 的 18 声部），全忙时按 `prioritySort` 思路选优先级最低者偷声：
+`priority = 32767`（note-on 时赋值，CC112>=64 时为 0xFFFF），再减去该 MIDI 通道的
+当前活跃声部数；`<=` 取最低。新增 CC112（Miles `MILES_CONTROLLER_PROTECT_VOICE`）
+与 CC10（声像）处理；CC10 通过统一的一次性 C0 写入生效，避免多余寄存器写改变时序。
+FD2 曲库里 CC112 未出现、CC10 实际上不改变默认居中声像，因此该路径对现有 WAV 是行为中性的。
+
+**验证**：Windows x64 MSVC 重建通过；离线 harness 资源 18 的偷声数由 **66 → 54**
+（2256 个 note-on、峰值 18 声部、RMS 2417 → 2222.5），资源 1 仍是 0 偷声。
+加入 CC10 路径并改成单次 C0 写入后，资源 1/18 的 WAV 与仅做 (1)(2)(3) 的版本
+**逐字节相同**（md5 `dd621958…` / `0b1a72a5…`），确认声像改动无回归。
+仅替换 (1)(2)(3) 时因环形分配把音符从“几乎全压在 chip0”改为两颗 YMF262 均衡承载，
+资源 1 RMS 由 1077 → 1319、峰值 4526 → 6343（测量版本 `s01_timb.wav`）。
+
+### 17.5 明确不改的项（附理由）
+
+- **4-op**：`SAMPLE.OPL` 的 instrument 记录固定 14 字节（仅 2-op），`SBPRO2.MDI` 也没有
+  4-op 音色；没有需要复刻的 4-op 数据。
+- **精确 AIL 定时器/DMA 路径**：那属于“跑真正的 MDI 驱动”，需要 x86 实时模式、8253/8259、
+  DMA 与驱动代码执行，本质上是 DOSBox 方案（上一轮结论里的 B/C 档），不是原生移植的
+  合理范围。当前固定 ~120 ticks/s 的音序时钟已经过事件数/时长验证。
+- **立体声输出**：合成器层面已支持 CC10 → OPL3 pan 位；FD2 现有曲库没有有效声像事件，
+  且宿主混音器仍折 mono，因此再改输出总线没有可听收益。

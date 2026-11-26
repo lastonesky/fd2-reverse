@@ -16,7 +16,8 @@ port 里与“运行原始机器码”强耦合的部分（LE 加载、repl 热�
 | `synth.h/.c` | 软件 MIDI 合成器（Fat Man/AIL 音色库 + AIL 音量/偷声模型，序列渲染成 PCM；18 声部，可用 `--opl-channels` 覆盖） | audio/opl3/opl2_patches |
 | `xmidi.h/.c` | XMIDI 解析（AIL 的曲目格式；≠标准 SMF） | synth/audio |
 | `opl3/` | **FM 核心**：Nuked OPL3 v1.8（LGPL-2.1）+ `opl3_emu.c/.h` 适配器；一颗 YMF262 双寄存器 bank、newmode 开，对应 `MDI.INI` 选中的 `SBPRO2.MDI` | 无外部依赖 |
-| `opl2_patches.h` `opl2_drumkey.h` `ail_freq.h` | Fat Man/AIL 两段式音色库、打击乐键映射、AIL 频率表（OPL3 的 2-op 模式同样使用） | — |
+| `ail_timbres.c/.h` | **AIL 音色库**：从游戏数据 `SAMPLE.OPL`/`SAMPLE.AD` 读取 162 个 timbre（bank 0 旋律、bank 127 鼓，含 transposition），替代通用 Fat Man bank | `opl2_patches.h` |
+| `opl2_patches.h` `opl2_drumkey.h` `ail_freq.h` | 前者的**回退**音色库、旧打击乐键映射、AIL 频率表；只在 `SAMPLE.OPL`/`SAMPLE.AD` 缺失时使用 | — |
 | `keys.h`、`keys.c`、`keys_win32.c` | 便携键词汇 `fr_key` ↔ BIOS 扫描码 | 平台 |
 | `platform_posix.c`、`platform_win32.c` | `src/platform.h` 的 OS 实现（内存/文件/线程/时钟） | 平台系统头 |
 | `sokol_impl.c` + `vendor/sokol/` | sokol 单编译单元实现 + 头（47k 行，随仓库） | 系统 GL/ALSA 等 |

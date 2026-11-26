@@ -706,6 +706,20 @@ int fd2_engine_init(int argc, char **argv)
     fd2_video_init();
     synth_set_bank_path(NULL);           /* default timbre until a DLS is set */
     {
+        /* FD2 ships its AIL timbre bank as SAMPLE.OPL (identical to
+         * SAMPLE.AD).  This is the single biggest source of "thin" BGM: the
+         * old generic Fat Man bank did not match any of the game's patches. */
+        const char *tb = host_arg("AIL_TIMBRES");
+        int n = tb && *tb ? synth_load_ail_timbres(tb) : 0;
+
+        if (!n) {
+            n = synth_load_ail_timbres("SAMPLE.OPL");
+            if (!n)
+                n = synth_load_ail_timbres("SAMPLE.AD");
+        }
+        printf("fd2: AIL timbres = %d%s\n", n, n ? "" : " (built-in fallback)");
+    }
+    {
         /* Music backend: the built-in OPL3 renderer (default) or the Windows
          * MIDI Mapper.  MIDI_BACKEND is the CLI spelling --midi-backend=... */
         const char *mb = host_arg("MIDI_BACKEND");

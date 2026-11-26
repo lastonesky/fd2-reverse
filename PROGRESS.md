@@ -4401,3 +4401,46 @@ Linux 已重建；**Windows 侧只改了 `build.ps1`，本机无 MSVC，未实�
 偷声 66、RMS 2417、3,428,655 样本非静音；日志核心名为
 `Nuked OPL3 (SB Pro 2 / YMF262, newmode)`。全仓 grep 无 `emu8950`/`adl_backend`/
 `FD2_WITH_ADLMIDI`/`ADL_CHIPS` 残留。**Windows 仍未实测**（无 MSVC）。
+
+### 7.62 方案 E 第一步：加载 FD2 自带 AIL 音色库，修复开场“咚咚咚”过薄
+
+用户反馈开场鼓声与 DOSBox 差异很大、音色薄、没有厚重感。定位结果：
+`host/opl2_patches.h` 的通用 Fat Man WOPL 音色与游戏数据目录自带的
+`SAMPLE.OPL`/`SAMPLE.AD`（md5 相同）**128/128 个旋律音色全不一致**；鼓音色也不同，
+且 AIL 打击乐用 instrument 的 `trans` 字段作固定音高（patch 36 的 trans=41，
+AIL 归一化后约 note 29 ≈ 44 Hz），旧实现用通用库固定键 35（≈62 Hz）且 carrier 波形为 2。
+
+实现：新增 `host/ail_timbres.c/.h` 解析 Global Timbre Library（162 条：
+bank 0 ×128 + bank 127 ×34），`synth.c` 的 `note_on()` 优先用它并把鼓音高切到 `trans`；
+文件缺失时回退旧库。`synth_play()` 自动从 CWD 尝试 `SAMPLE.OPL`/`SAMPLE.AD`；
+`fd2_kernel.c` 启动时按 `--ail-timbres` 显式加载并打印数量；`build.ps1` 与
+`host/Makefile` 均编入新文件。
+
+验证：Windows x64 MSVC（`cl.exe` via `tools/msvc_env.ps1`）重建 `build/fd2engine.exe` 通过；
+新编译的 `build/oplbench/engine_check_ail.exe` 离线渲染 song01（资源 1，49716 Hz）
+日志出现 `ail_timbres: 162 instruments from SAMPLE.OPL`；寄存器日志首个 bass drum 的
+`20/40/60/80/E0/C0` 字节与 SAMPLE.OPL 逐项对应。前 0.5 s 低频/高频能量比 3.03 → 5.46，
+过零率 609 → 596（更厚、更低）；整体 RMS 2334 → 1077（AIL 原始电平更低）。
+本机无 DOSBox(-X)，**听感仍待用户 A/B**；Linux 侧本轮未重建（本机无 WSL），需在 Linux 跑 `make engine`。
+
+### 7.63 方案 E 后续项：TIMB、AIL 包络时长、Miles 声部分配
+
+在 7.62 基础上继续补齐 AIL 驱动机制：
+
+- `xmidi.c` 解析 XMIDI 的 `TIMB` 块（`[u16 count][patchId, bankId]...`）并经
+  `synth_set_timb()` 下发给 `synth.c`；`note_on()` 按 TIMB 决定 bank（127 给通道 9，
+  其余给旋律程序），切歌时清空。实测资源 1 有 8 条 TIMB（4 条 bank 127），
+  资源 18 有 9 条（2 条 bank 127）。
+- `voice_on_ms()` / `voice_off_ms()` 改由当前 AIL timbre 的 carrier AR/DR/SL/RR
+  推导（只影响声部分配/老化，不写 OPL 寄存器），不再依赖通用库静态表。
+- `find_voice()` 改为 Miles 式环形物理分配 + `prioritySort` 抢占：note-on 优先级
+  32767、CC112>=64 保护、减去每通道活跃声部数、取最低者偷声；新增 CC112/CC10 处理。
+  CC10 合并进一次性 C0 写入，避免多余寄存器写造成样本时序偏移。
+
+验证：Windows x64 MSVC 重建 `build/fd2engine.exe` 与离线 harness 均通过（仅两条既有 C4090 警告）。
+资源 18 偷声数 66 → 54（2256 note-on、峰值 18、RMS 2417 → 2222.5）；资源 1 仍 0 偷声，
+RMS 1077 → 1319（环形分配让两颗 YMF262 均衡承载，不再几乎全压在 chip0）。
+CC10 路径改为单次写入后，资源 1/18 的 WAV 与未加 CC10 时逐字节一致（md5
+`dd621958…` / `0b1a72a5…`），确认无回归。4-op（SAMPLE.OPL 只有 2-op）、精确 AIL
+定时器/DMA（属 DOSBox 方案）、宿主立体声输出（曲库无有效 CC10）均明确不改，理由见
+`docs/opl2-music-fidelity.md` §17.5。Linux 侧仍需在 Linux 环境跑 `make engine`。
