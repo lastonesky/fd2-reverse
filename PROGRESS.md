@@ -4508,3 +4508,18 @@ Linux 侧已于 2026-11-26 重建 `make engine`（`host/build/fd2engine`，md5
 `build/fd2engine.exe` 11:22（晚于 `map_units.c` 11:21 最终修复，PROGRESS 7.65
 记有重建通过）；tag `v1.0-playable` + `fd2engine-1.0-linux-x86_64.tar.gz`
 （sha256 `90ca6fb99a14835db748f9a3a1fe7bcf6bc563a9e89f66b2f970ca0001b35b74`）。
+
+### 7.67 统一资源提取器（2026-11-28）
+
+新增 `tools/fd2_extract.py`：一条命令把原版数据导成 PNG/TXT/JSON/XMI/MIDI，
+覆盖文字与字库、FDOTHER/UI/ANI 图片、FDICON 头像、BG/TAI/FIGANI 战斗资源、
+FDFIELD 地图与 FDMUS 音乐/SAMPLE.OPL 音色。纯标准库，输出写到独立目录，
+不读也不写 `FD2.SAV`。按 `src/game/{res,rle,rle2,sprite24,map_shape,ani}.c`
+与 `host/xmidi.c` 的已还原算法实现；XMI→SMF 保留 AIL delta 求和与补 Note-Off
+语义。地图只做静态 base tile 渲染，运行期换色/闪烁与脚本事件仅写入 JSON。
+
+真实数据全量跑通（约 8 秒）：926 条文本流、1824 字形、140 头像、56 背景、
+264 组战斗动画、33 张地图、73 组 FDOTHER 图集、136 组 DATO 图集、9 段 ANI、
+20 个音乐条目（15 首转 MIDI）、161 个音色；导出图人工抽查（地图/战斗动画/
+DATO 头像/ANI 帧）正常。用法与边界记在 `docs/resource-extraction.md`，工具速查
+同步到 `tools/README.md`、`README.md`。本轮只改 Python 工具与文档，引擎二进制未动。

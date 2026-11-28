@@ -43,7 +43,7 @@
 | `src/lib/` | CRT / AIL 边界头（`crt.h`、`ail.h`）——映射到平台层，不逐条还原库实现 |
 | `src/fd2_image.c`、`fd2_dispatch.c`、`fd2_relocate.c` | 数据段镜像初始化；7 张分派表（真实宿主数组）；生成的空 relocate（历史职责见 `PROGRESS.md`） |
 | `host/` | 现代宿主：sokol 入口/视频/音频、OPL3 合成（`opl3/`）、AIL 音色（`ail_timbres.c`）、输入/看门狗/启动（`fd2_kernel.c`）→ 详见 `host/README.md` |
-| `tools/` | 构建与维护工具：`prepare_image.py`、存档工具 `fd2sav*`、字形/对白导出等 → 详见 `tools/README.md` |
+| `tools/` | 构建与维护工具：`prepare_image.py`、存档工具 `fd2sav*`、字形/对白导出、`fd2_extract.py`（图片/文字/头像/战斗/地图/音乐统一提取）→ 详见 `tools/README.md` |
 | `analysis/` | 段镜像 `seg_dseg0{2,3}.bin` 与原型/数据类型覆盖表；大批量导出已移出 git，见 `EXTERNAL_ARTIFACTS.md` |
 | `docs/` | 机制 / 隐藏事件 / 对白 / 结局 / 音乐保真 / 启动调用链（见下「文档索引」） |
 
@@ -150,5 +150,6 @@ fd2engine.exe --unfocus=none            # 不需要失焦处理（= sound）
 | `docs/opl2-music-fidelity.md` | 音乐还原与音质保真 |
 | `docs/STARTUP-CALLCHAIN.md`、`docs/STARTUP-LATENCY.md` | 启动调用链与首启延迟 |
 | `host/README.md`、`tools/README.md` | 宿主后端说明 / 工具速查 |
+| `docs/resource-extraction.md` | 统一资源提取器的输出结构、解码依据与边界 |
 | `BRANCHING.md` | 分支模型（`main` 还原源码权威版 vs `modern-platform` 原生引擎） |
 | `HD_REMASTER.md` | 高清化方案讨论稿（未实施） |

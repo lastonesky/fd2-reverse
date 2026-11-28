@@ -35,6 +35,16 @@
 
 字形表改动流程：改 `_rebuild.py` → 跑 `_rebuild.py` → `fd2_fonttool.py text` 导出全文 grep 复核 → `glyph_view.py` 目检 → `glyph_atlas.py` 重建对照图。详见 `tools/fd2data/README.md`。
 
+### 2.1 统一资源提取器
+
+| 工具 | 作用 | 用法 |
+|---|---|---|
+| `fd2_extract.py` | 一次导出文字/字库/图片/头像/战斗背景/地图/音乐；纯标准库，PNG/XMI/MIDI/JSON | `python tools/fd2_extract.py --data E:/FD2 --out E:/fd2-extracted`<br>`… --data E:/FD2 --out E:/out music`<br>`… --split`（额外逐帧）/ `--raw`（未识别资源保留 .bin） |
+
+不指定子命令时执行 `all`；`--data` 省略时自动在 cwd 与仓库上级找 `FDTXT.DAT`。
+输出目录独立，不写回游戏数据，更不会碰 `FD2.SAV`。格式与限制见
+`docs/resource-extraction.md`。
+
 ## 3. 隐藏内容
 
 | 工具 | 作用 | 用法 |
